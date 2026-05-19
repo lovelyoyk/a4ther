@@ -1,5 +1,5 @@
 // ============================================================
-//  A4ther Systems v2.0.0 | LS Aluguel
+//  A4ther Systems v2.4.0 | LS Aluguel
 //  iOS Free Fire Anti-Cheat Scanner (Scriptable)
 //  Roda em iPhone SEM jailbreak via app Scriptable (gratuito App Store).
 //
@@ -1665,7 +1665,7 @@ async function scanSysdiagnoseNetwork(folder, fm) {
     }
 
     // 4. Procura cheat infra em todos os arquivos network coletados
-    const allNetRaw = (ne?.raw || "") + (prefs?.raw || "");
+    const allNetRaw = (ne && ne.raw ? ne.raw : "") + (prefs && prefs.raw ? prefs.raw : "");
     for (const [indicator, desc] of Object.entries(KNOWN_CHEAT_INFRA)) {
         if (allNetRaw.toLowerCase().includes(indicator.toLowerCase())) {
             alerts.push(`[sysdiag/net] CHEAT INFRA em network config: ${indicator} — ${desc}`);
