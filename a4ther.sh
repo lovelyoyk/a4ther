@@ -2778,38 +2778,36 @@ fi
 
 # 3) Free Fire especificamente: pegar Team ID dele e comparar com Garena oficial
 if [ -d /var/containers/Bundle/Application ]; then
-    FF_EMBED=$(find /var/containers/Bundle/Application -maxdepth 4 -name 'embedded.mobileprovision' 2>/dev/null \
-        | while IFS= read -r EP; do
-            APP_DIR=$(dirname "$EP")
-            INFO="$APP_DIR/Info.plist"
-            if [ -f "$INFO" ]; then
-                BID=$(grep -A1 'CFBundleIdentifier' "$INFO" 2>/dev/null | tail -n1 | sed -E 's/.*<string>([^<]+)<.*/\1/')
-                case "$BID" in
-                    com.dts.freefireth|com.dts.freefiremax|com.garena.global.freefire|com.garena.global.ffmax|com.garena.freefire.br|com.garena.freefire.kr)
-                        echo "$EP|$BID" ;;
-                esac
-            fi
-        done)
-    if [ -n "$FF_EMBED" ]; then
-        echo "$FF_EMBED" | while IFS=\| read -r EP BID; do
-            [ -z "$EP" ] && continue
-            info "Free Fire ($BID) cert:"
-            CONTENT=""
-            if have security; then
-                CONTENT=$(security cms -D -i "$EP" 2>/dev/null)
-            fi
-            [ -z "$CONTENT" ] && have strings && CONTENT=$(strings "$EP" 2>/dev/null)
-            TEAM_NAME=$(echo "$CONTENT" | grep -A1 -i 'TeamName' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
-            TEAM_ID=$(echo "$CONTENT" | grep -A1 -i 'TeamIdentifier' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
-            info "  Team: $TEAM_NAME ($TEAM_ID)"
-            if [ "$TEAM_ID" = "H99WFFB59J" ]; then
-                ok "  Free Fire assinado por GARENA OFICIAL"
-            else
-                alert "  Free Fire assinado por OUTRO team ($TEAM_NAME) - sideload/re-sign confirmado"
-                PROV_HITS=$((PROV_HITS+1))
-            fi
-        done
-    fi
+    FF_BIDS_LIST=" com.dts.freefireth com.dts.freefiremax com.garena.global.freefire com.garena.global.ffmax com.garena.freefire.br com.garena.freefire.kr "
+    EMBEDS=$(find /var/containers/Bundle/Application -maxdepth 4 -name 'embedded.mobileprovision' 2>/dev/null)
+    for EP in $EMBEDS; do
+        [ -f "$EP" ] || continue
+        APP_DIR=$(dirname "$EP")
+        INFO="$APP_DIR/Info.plist"
+        [ -f "$INFO" ] || continue
+        BID=$(grep -A1 'CFBundleIdentifier' "$INFO" 2>/dev/null | tail -n1 | sed -E 's/.*<string>([^<]+)<.*/\1/')
+        # checar se BID é Free Fire oficial
+        IS_FF=0
+        case "$FF_BIDS_LIST" in
+            *" $BID "*) IS_FF=1 ;;
+        esac
+        [ "$IS_FF" = "0" ] && continue
+        info "Free Fire ($BID) cert:"
+        CONTENT=""
+        if have security; then
+            CONTENT=$(security cms -D -i "$EP" 2>/dev/null)
+        fi
+        [ -z "$CONTENT" ] && have strings && CONTENT=$(strings "$EP" 2>/dev/null)
+        TEAM_NAME=$(echo "$CONTENT" | grep -A1 -i 'TeamName' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
+        TEAM_ID=$(echo "$CONTENT" | grep -A1 -i 'TeamIdentifier' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
+        info "  Team: $TEAM_NAME ($TEAM_ID)"
+        if [ "$TEAM_ID" = "H99WFFB59J" ]; then
+            ok "  Free Fire assinado por GARENA OFICIAL"
+        else
+            alert "  Free Fire assinado por OUTRO team ($TEAM_NAME) - sideload/re-sign confirmado"
+            PROV_HITS=$((PROV_HITS+1))
+        fi
+    done
 fi
 
 [ "$PROV_HITS" = "0" ] && ok "Sem provisioning profile suspeito"
