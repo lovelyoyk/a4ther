@@ -22,7 +22,7 @@
 #     chmod +x FFScanner.sh && sh FFScanner.sh
 # ============================================================
 
-VERSION="3.4.0"
+VERSION="3.5.0"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -109,6 +109,12 @@ FF_IOS_BUNDLES="com.garena.global.freefire com.garena.global.ffmax com.garena.fr
 #  DETECÇÃO DE PLATAFORMA (Android / iOS / outro)
 # ============================================================
 detect_platform() {
+    # Override via env var: FORCE_PLATFORM=ios sh a4ther.sh  (modo teste)
+    if [ -n "$FORCE_PLATFORM" ]; then
+        PLATFORM="$FORCE_PLATFORM"
+        OS_NAME="(forced=$FORCE_PLATFORM)"
+        return
+    fi
     OS_NAME=$(uname -s 2>/dev/null)
     case "$OS_NAME" in
         Linux*)
@@ -2322,6 +2328,94 @@ done
 [ "$TWK_HITS" = "0" ] && ok "Sem tweak framework"
 
 # ============================================================
+#  iOS-3b. SUBSTRATE TWEAK FILTERS (quais tweaks miram o FREE FIRE)
+# ============================================================
+header "iOS - TWEAK FILTERS (que miram Free Fire)"
+
+FILTER_HITS=0
+# Tweaks .dylib têm .plist companion com Filter.Bundles array
+# Se algum .plist filtra com.dts.freefireth ou similar → tweak alvo ao FF!
+for TWKDIR in /Library/MobileSubstrate/DynamicLibraries \
+              /var/jb/Library/MobileSubstrate/DynamicLibraries \
+              /var/jb/usr/lib/TweakInject; do
+    [ -d "$TWKDIR" ] || continue
+    PLISTS=$(ls "$TWKDIR" 2>/dev/null | grep '\.plist$')
+    [ -z "$PLISTS" ] && continue
+    echo "$PLISTS" | while IFS= read -r PL; do
+        [ -z "$PL" ] && continue
+        FULL="$TWKDIR/$PL"
+        # ler conteúdo (plist binário ou XML)
+        CONTENT=""
+        if have plutil; then
+            CONTENT=$(plutil -p "$FULL" 2>/dev/null)
+        fi
+        [ -z "$CONTENT" ] && have strings && CONTENT=$(strings "$FULL" 2>/dev/null)
+        [ -z "$CONTENT" ] && continue
+        # Mira FF?
+        FF_TARGET=$(echo "$CONTENT" | grep -iE 'com\.dts\.freefire|com\.garena\.freefire|com\.garena\.global\.freefire|com\.garena\.global\.ffmax')
+        if [ -n "$FF_TARGET" ]; then
+            DYLIB="${FULL%.plist}.dylib"
+            alert "TWEAK MIRA FREE FIRE: $FULL"
+            [ -f "$DYLIB" ] && alert "  → dylib: $DYLIB"
+            FILTER_HITS=$((FILTER_HITS+1))
+        fi
+        # Também flag se .plist menciona qualquer string suspeita
+        SUSP=$(echo "$CONTENT" | grep -iE 'cheat|hack|aimbot|wallhack|esp|menu.*ff|ff.*menu|injection|mod')
+        [ -n "$SUSP" ] && warn "  Tweak $PL com strings suspeitas (cheat/hack/etc)"
+    done
+done
+[ "$FILTER_HITS" = "0" ] && ok "Nenhum tweak iOS mirando Free Fire"
+
+# ============================================================
+#  iOS-3c. LAUNCHD SERVICES (daemons/agents persistentes)
+# ============================================================
+header "iOS - LAUNCHD SERVICES"
+
+LD_HITS=0
+for LDDIR in /Library/LaunchDaemons /Library/LaunchAgents \
+             /var/jb/Library/LaunchDaemons /var/jb/Library/LaunchAgents \
+             /System/Library/LaunchDaemons; do
+    [ -d "$LDDIR" ] || continue
+    info "LaunchDir: $LDDIR"
+    FILES=$(ls "$LDDIR" 2>/dev/null | grep '\.plist$' | head -n 50)
+    [ -z "$FILES" ] && continue
+    echo "$FILES" | while IFS= read -r F; do
+        [ -z "$F" ] && continue
+        # Filtra Apple/sistema legítimos
+        case "$F" in
+            com.apple.*) ;;
+            *cheat*|*hack*|*mod*|*aim*|*esp*|*ff.*|*freefire*|*frida*|*injector*|*menu*)
+                alert "Launch suspeito: $LDDIR/$F" ;;
+            org.lsposed.*|org.coolstar.*|com.opa334.*|com.saurik.*|com.tigisoftware.*)
+                warn "Launch JB/tweak: $LDDIR/$F" ;;
+            *)
+                # Check content for FF references
+                if [ -r "$LDDIR/$F" ]; then
+                    FF_REF=$(strings "$LDDIR/$F" 2>/dev/null | grep -iE 'freefire|dts\.freefire|cheat|hack' | head -n 1)
+                    if [ -n "$FF_REF" ]; then
+                        alert "Launch $F referencia FF/cheat: $(echo "$FF_REF" | head -c 100)"
+                    else
+                        info "  $F"
+                    fi
+                fi ;;
+        esac
+    done
+    LD_HITS=$((LD_HITS+1))
+done
+
+# launchctl list (serviços ativos no momento)
+if have launchctl; then
+    ACTIVE=$(launchctl list 2>/dev/null | head -n 80 | grep -iE 'cheat|hack|mod|aim|esp|freefire|frida|injector|substrate' | head -n 15)
+    if [ -n "$ACTIVE" ]; then
+        echo "$ACTIVE" | while IFS= read -r L; do
+            [ -n "$L" ] && alert "Service ativo (launchctl): $(echo "$L" | head -c 160)"
+        done
+    fi
+fi
+
+[ "$LD_HITS" = "0" ] && ok "Sem launchd services suspeitos"
+
+# ============================================================
 #  iOS-4. FRIDA / LLDB / DEBUGGERS
 # ============================================================
 header "iOS - FRIDA / DEBUGGERS"
@@ -2426,12 +2520,129 @@ for BID in $FF_IOS_BUNDLES; do
                 else
                     alert "  Assinatura NAO-AppStore (sideload/modded)"
                 fi
+            else
+                alert "  embedded.mobileprovision AUSENTE (TrollStore/sideload sem assinatura)"
+            fi
+
+            # FAIRPLAY DRM — apps legítimos da App Store têm encriptação FairPlay
+            # Mods/sideloads PERDEM o FairPlay segment do executável
+            BINARY=$(plutil -p "$MATCH" 2>/dev/null | grep -m1 'CFBundleExecutable' | sed -E 's/.*=> "([^"]+)".*/\1/')
+            [ -z "$BINARY" ] && BINARY=$(basename "$APP_DIR" .app)
+            EXEC_PATH="$APP_DIR/$BINARY"
+            if [ -f "$EXEC_PATH" ]; then
+                if have otool; then
+                    FAIRPLAY=$(otool -l "$EXEC_PATH" 2>/dev/null | grep -E 'LC_ENCRYPTION_INFO|cryptid' | head -n 2)
+                    CRYPTID=$(echo "$FAIRPLAY" | grep -m1 cryptid | awk '{print $2}')
+                    case "$CRYPTID" in
+                        1) ok "  FairPlay DRM: ATIVO (cryptid=1, app oficial criptografada)" ;;
+                        0) alert "  FairPlay DRM: REMOVIDO (cryptid=0, decriptado/modded)" ;;
+                        "") warn "  FairPlay: indeterminado (sem otool ou binário stripped)" ;;
+                    esac
+                elif have strings; then
+                    # fallback: procurar marker FairPlay no binário
+                    HAS_FP=$(strings "$EXEC_PATH" 2>/dev/null | grep -c 'FairPlay')
+                    [ "$HAS_FP" -gt 0 ] 2>/dev/null && info "  FairPlay strings presentes ($HAS_FP)" || warn "  Sem strings FairPlay (possível decrypt)"
+                fi
+            fi
+
+            # _CodeSignature dir deve existir
+            if [ -d "$APP_DIR/_CodeSignature" ]; then
+                ok "  _CodeSignature/: presente"
+            else
+                alert "  _CodeSignature/ AUSENTE - app não assinado"
+            fi
+
+            # PlugIns/AppExtensions suspeitas (mods às vezes adicionam extension)
+            if [ -d "$APP_DIR/PlugIns" ]; then
+                PLUGINS=$(ls "$APP_DIR/PlugIns" 2>/dev/null)
+                [ -n "$PLUGINS" ] && echo "$PLUGINS" | while IFS= read -r P; do
+                    [ -n "$P" ] && warn "  PlugIn em FF.app: $P (verificar)"
+                done
             fi
         fi
     fi
 done
 
+# Caça mais ampla: qualquer Info.plist com bundle ID contendo "freefire" mesmo se NÃO está na lista FF_IOS_BUNDLES
+if [ -d /var/containers/Bundle/Application ]; then
+    SUSP_FF=$(find /var/containers/Bundle/Application -maxdepth 4 -name 'Info.plist' 2>/dev/null \
+        | xargs grep -lE 'freefire|ffmod|ffh4x|aimkill\.ff|esp\.ff' 2>/dev/null | head -n 10)
+    if [ -n "$SUSP_FF" ]; then
+        echo "$SUSP_FF" | while IFS= read -r M; do
+            [ -z "$M" ] && continue
+            BID=$(grep -A1 'CFBundleIdentifier' "$M" 2>/dev/null | tail -n1 | sed -E 's/.*<string>([^<]+)<.*/\1/')
+            case "$BID" in
+                com.dts.freefireth|com.dts.freefiremax|com.garena.freefire.br|com.garena.freefire.kr|com.garena.global.freefire|com.garena.global.ffmax) ;;
+                *) alert "Bundle FF SUSPEITO (não-oficial): $BID (em $M)" ;;
+            esac
+        done
+    fi
+fi
+
 [ "$FF_IOS_FOUND" = "0" ] && warn "Free Fire iOS não encontrado"
+
+# ============================================================
+#  iOS-6b. CHEAT BUNDLES iOS CONHECIDOS
+# ============================================================
+header "iOS - CHEAT BUNDLES CONHECIDOS"
+
+CHEAT_BUNDLES_IOS="
+com.34306.espff
+com.touchingapp.potatso
+com.touchingapp.potatsolite
+com.monite.proxyff
+com.nssurge.inc.surge-ios
+com.luo.quantumultx
+com.shadowrocket.Shadowrocket
+com.liguangming.Shadowrocket
+com.github.shadowsocks
+com.netease.trojan
+com.hiddify.app
+com.karing.app
+com.metacubex.ClashX
+com.ssrss.Ssrss
+com.opa334.TrollStore
+com.opa334.TrollStoreHelper
+com.opa334.trolldecrypt
+com.opa334.trollfools
+com.opa334.dopamine
+xyz.palera1n.palera1n
+com.electrateam.unc0ver
+com.tihmstar.checkra1n
+org.taurine.jailbreak
+org.coolstar.odyssey
+org.coolstar.sileo
+xyz.willy.Zebra
+com.cydia.Cydia
+com.rileytestut.AltStore
+com.altstore.altstoreclassic
+com.sideloadly.sideloadly
+com.esign.ios
+com.iosgods.iosgods
+com.gbox.pubg
+live.cclerc.geranium
+com.tigisoftware.Filza
+com.tigisoftware.FilzaFree
+com.ifunbox.ifunbox
+app.ish.iSH
+com.septudio.SSHClientLite
+com.shpion.cleaner
+"
+
+CB_HITS=0
+if [ -d /var/containers/Bundle/Application ]; then
+    INSTALLED_BIDS=$(find /var/containers/Bundle/Application -maxdepth 4 -name 'Info.plist' 2>/dev/null \
+        | xargs grep -hA1 'CFBundleIdentifier' 2>/dev/null \
+        | grep -oE '<string>[^<]+</string>' | sed -E 's|</?string>||g' \
+        | grep -E '^[a-z]+\.' | sort -u)
+    for BID in $CHEAT_BUNDLES_IOS; do
+        if echo "$INSTALLED_BIDS" | grep -q "^${BID}$"; then
+            alert "Cheat bundle iOS: $BID"
+            CB_HITS=$((CB_HITS+1))
+        fi
+    done
+fi
+[ "$CB_HITS" = "0" ] && ok "Sem cheat bundle iOS conhecido"
 
 # ============================================================
 #  iOS-7. PROCESSOS SUSPEITOS

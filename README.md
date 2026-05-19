@@ -53,6 +53,18 @@ O script auto-detecta `Darwin` + paths de JB (`/var/jb`, `/Applications/Cydia.ap
 
 Não trabalhamos esses cenários aqui — usa as ferramentas existentes da comunidade.
 
+### 🧪 Modo de teste (forçar plataforma)
+
+Pra testar a lógica iOS no seu Mac/Linux antes de rodar no iPhone real:
+
+```bash
+FORCE_PLATFORM=ios sh a4ther.sh
+```
+
+Forca o script a rodar o branch iOS independente do `uname`. Útil pra validar sintaxe e ver formato da saída. No Mac vai marcar como "device jailbroken" (porque o Mac tem `/usr/sbin/sshd` etc.) — comportamento esperado.
+
+Também funciona com `FORCE_PLATFORM=android` (rodando bash com sudo + paths fake).
+
 ### Saída
 
 Console colorido com banner FIGlet, section headers e dots coloridos. Relatório em texto puro salvo em `~/FFScanner_reports/scan_AAAAMMDD_HHMMSS.txt`. Exit code:
