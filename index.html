@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0e1a" />
+<meta name="description" content="A4ther Systems - Free Fire Anti-Cheat Scanner. Análise de sysdiagnose, App Privacy Report e Configuration Profiles iOS." />
+<title>A4ther Systems · FF Anti-Cheat Scanner</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+/* ============================================================
+   THEME · A4ther Systems
+   ============================================================ */
+:root {
+    --bg:           #07090f;
+    --bg-elev:      #0d111d;
+    --bg-card:      #131826;
+    --bg-card-hi:   #1a2033;
+    --border:       #1f2937;
+    --border-hi:    #2d3748;
+
+    --text:         #f3f4f6;
+    --text-dim:     #9ca3af;
+    --text-faint:   #6b7280;
+
+    --cyan:         #00e5e5;
+    --cyan-soft:    #00b8b8;
+    --cyan-glow:    rgba(0, 229, 229, 0.25);
+
+    --red:          #ef4444;
+    --red-bg:       rgba(239, 68, 68, 0.08);
+    --red-border:   rgba(239, 68, 68, 0.3);
+
+    --orange:       #f59e0b;
+    --orange-bg:    rgba(245, 158, 11, 0.08);
+    --orange-border:rgba(245, 158, 11, 0.3);
+
+    --green:        #10b981;
+    --green-bg:     rgba(16, 185, 129, 0.08);
+    --green-border: rgba(16, 185, 129, 0.3);
+
+    --blue:         #3b82f6;
+    --purple:       #8b5cf6;
+
+    --radius:       12px;
+    --radius-lg:    20px;
+    --shadow:       0 4px 20px rgba(0, 0, 0, 0.4);
+    --shadow-lg:    0 10px 40px rgba(0, 0, 0, 0.6);
+
+    --transition:   200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    background-image:
+        radial-gradient(circle at 20% 0%, rgba(0, 229, 229, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 80% 100%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+code, pre, .mono {
+    font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    font-size: 0.85em;
+}
+
+a { color: var(--cyan); text-decoration: none; transition: var(--transition); }
+a:hover { color: var(--text); }
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+}
+@media (max-width: 640px) {
+    .container { padding: 1rem 1rem 3rem; }
+}
+
+/* ============================================================
+   HEADER
+   ============================================================ */
+.hero {
+    text-align: center;
+    padding: 2rem 0 3rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 3rem;
+    position: relative;
+}
+.hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%;
+    width: 60%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan) 50%, transparent);
+    transform: translateX(-50%);
+}
+
+.logo-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(1.5rem, 6vw, 3rem);
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    color: var(--cyan);
+    text-shadow: 0 0 30px var(--cyan-glow);
+    margin-bottom: 0.5rem;
+    line-height: 1;
+}
+
+.logo-art {
+    color: var(--cyan);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(0.4rem, 1.2vw, 0.7rem);
+    line-height: 1.1;
+    white-space: pre;
+    text-shadow: 0 0 20px var(--cyan-glow);
+    overflow-x: auto;
+    margin: 0 auto;
+    display: inline-block;
+    text-align: left;
+}
+@media (max-width: 640px) {
+    .logo-art { display: none; }
+}
+
+.tagline {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    margin-top: 1rem;
+    letter-spacing: 0.05em;
+}
+.tagline .sep { color: var(--cyan-soft); margin: 0 0.6em; }
+.tagline strong { color: var(--text); font-weight: 600; }
+
+.subtitle {
+    margin-top: 0.8rem;
+    font-size: 1rem;
+    color: var(--text-dim);
+}
+
+/* ============================================================
+   UPLOAD AREA
+   ============================================================ */
+.upload-section {
+    margin-bottom: 3rem;
+}
+
+.tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.tab {
+    padding: 0.75rem 1.25rem;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    transition: var(--transition);
+    white-space: nowrap;
+    margin-bottom: -1px;
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+    color: var(--cyan);
+    border-bottom-color: var(--cyan);
+}
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.dropzone {
+    border: 2px dashed var(--border-hi);
+    border-radius: var(--radius-lg);
+    padding: 3rem 2rem;
+    text-align: center;
+    background: var(--bg-elev);
+    transition: var(--transition);
+    cursor: pointer;
+    position: relative;
+}
+.dropzone:hover, .dropzone.dragging {
+    border-color: var(--cyan);
+    background: var(--bg-card);
+    box-shadow: 0 0 40px var(--cyan-glow);
+}
+.dropzone-icon {
+    font-size: 3rem;
+    color: var(--cyan);
+    margin-bottom: 1rem;
+    display: block;
+    line-height: 1;
+}
+.dropzone-text {
+    font-size: 1.1rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+.dropzone-hint {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+}
+.dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.help-box {
+    margin-top: 1rem;
+    padding: 1rem 1.25rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+}
+.help-box strong { color: var(--cyan); font-weight: 600; }
+.help-box ol { padding-left: 1.2rem; margin-top: 0.5rem; }
+.help-box li { margin-bottom: 0.3rem; }
+.help-box code {
+    background: var(--bg-elev);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    color: var(--cyan);
+}
+
+/* ============================================================
+   LOADING
+   ============================================================ */
+.loading {
+    text-align: center;
+    padding: 4rem 2rem;
+}
+.spinner {
+    display: inline-block;
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--border-hi);
+    border-top-color: var(--cyan);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text {
+    margin-top: 1rem;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+}
+
+/* ============================================================
+   RESULTS
+   ============================================================ */
+.results { animation: fadeIn 500ms ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.verdict {
+    text-align: center;
+    padding: 2.5rem 2rem;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+}
+.verdict::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.04;
+    pointer-events: none;
+    background-image: radial-gradient(circle at 50% 50%, currentColor 0%, transparent 50%);
+}
+.verdict.red    { color: var(--red);    background: var(--red-bg);    border-color: var(--red-border); }
+.verdict.orange { color: var(--orange); background: var(--orange-bg); border-color: var(--orange-border); }
+.verdict.green  { color: var(--green);  background: var(--green-bg);  border-color: var(--green-border); }
+
+.verdict-icon {
+    font-size: 3rem;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+}
+.verdict-title {
+    font-size: clamp(1.5rem, 5vw, 2.25rem);
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+}
+.verdict-subtitle {
+    font-size: 1rem;
+    color: var(--text-dim);
+    font-weight: 400;
+}
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+.stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1rem;
+    text-align: center;
+}
+.stat-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+.stat-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.stat.alerts .stat-num  { color: var(--red); }
+.stat.warns .stat-num   { color: var(--orange); }
+.stat.oks .stat-num     { color: var(--green); }
+
+.section {
+    margin-bottom: 2rem;
+}
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border-left: 4px solid var(--border-hi);
+}
+.section-header.red    { border-left-color: var(--red); }
+.section-header.orange { border-left-color: var(--orange); }
+.section-header.green  { border-left-color: var(--green); }
+.section-header.cyan   { border-left-color: var(--cyan); }
+
+.section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    flex: 1;
+}
+.section-title.red    { color: var(--red); }
+.section-title.orange { color: var(--orange); }
+.section-title.green  { color: var(--green); }
+.section-title.cyan   { color: var(--cyan); }
+
+.section-count {
+    background: var(--bg-elev);
+    color: var(--text-dim);
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.item-list { display: grid; gap: 0.5rem; }
+.item {
+    padding: 1rem 1.25rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: var(--radius);
+    transition: var(--transition);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    word-break: break-word;
+}
+.item:hover { background: var(--bg-card-hi); border-color: var(--border-hi); }
+.item.red    { border-left-color: var(--red); }
+.item.orange { border-left-color: var(--orange); }
+.item.green  { border-left-color: var(--green); }
+.item.cyan   { border-left-color: var(--cyan); }
+
+.severity-tag {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    margin-right: 0.5rem;
+    vertical-align: middle;
+    text-transform: uppercase;
+}
+.severity-tag.critical { background: var(--red);    color: white; }
+.severity-tag.high     { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.severity-tag.medium   { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-border); }
+.severity-tag.low      { background: var(--bg-elev); color: var(--text-dim); border: 1px solid var(--border); }
+
+.item code, .item .mono {
+    background: var(--bg-elev);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    color: var(--cyan-soft);
+    font-size: 0.8em;
+}
+.item-detail {
+    margin-top: 0.4rem;
+    font-size: 0.85em;
+    color: var(--text-dim);
+    padding-left: 0.5rem;
+    border-left: 2px solid var(--border);
+}
+
+.actions {
+    display: flex;
+    gap: 0.75rem;
+    margin: 2rem 0;
+    flex-wrap: wrap;
+}
+.btn {
+    padding: 0.75rem 1.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-hi);
+    color: var(--text);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: var(--transition);
+}
+.btn:hover { background: var(--bg-card-hi); border-color: var(--cyan); }
+.btn.primary {
+    background: var(--cyan);
+    color: var(--bg);
+    border-color: var(--cyan);
+    font-weight: 600;
+}
+.btn.primary:hover {
+    background: var(--cyan-soft);
+    box-shadow: 0 0 30px var(--cyan-glow);
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+footer {
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+    line-height: 1.7;
+}
+footer a { color: var(--text-dim); }
+footer a:hover { color: var(--cyan); }
+.footer-brand {
+    color: var(--cyan);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-elev); }
+::-webkit-scrollbar-thumb {
+    background: var(--border-hi);
+    border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--cyan-soft); }
+
+/* Utility */
+.hidden { display: none !important; }
+.text-dim { color: var(--text-dim); }
+.text-faint { color: var(--text-faint); }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- ─── HERO ─── -->
+<header class="hero">
+    <pre class="logo-art" aria-hidden="true">  █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗
+ ██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗
+ ███████║███████║   ██║   ███████║█████╗  ██████╔╝
+ ██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗
+ ██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║
+ ╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</pre>
+    <h1 class="logo-text" style="display: none;">A4THER</h1>
+    <div class="tagline">
+        <strong>S Y S T E M S</strong>
+        <span class="sep">▪</span>
+        <strong id="version">v2.5.0</strong>
+        <span class="sep">▪</span>
+        <strong>LS Aluguel</strong>
+    </div>
+    <p class="subtitle">Free Fire Anti-Cheat Scanner · Análise client-side, sem servidor</p>
+</header>
+
+<!-- ─── UPLOAD ─── -->
+<section class="upload-section" id="uploadSection">
+    <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="ndjson"  role="tab">Privacy Report (.ndjson)</button>
+        <button class="tab"        data-tab="sysdiag" role="tab">Sysdiagnose (pasta)</button>
+        <button class="tab"        data-tab="profile" role="tab">Profile (.mobileconfig)</button>
+    </div>
+
+    <!-- NDJSON -->
+    <div class="tab-panel active" data-panel="ndjson">
+        <label class="dropzone" id="dz-ndjson">
+            <span class="dropzone-icon">⬆</span>
+            <div class="dropzone-text">Arraste ou clique para enviar o <code>.ndjson</code></div>
+            <div class="dropzone-hint">App Privacy Report exportado do iPhone</div>
+            <input type="file" id="file-ndjson" accept=".ndjson,application/json,text/plain" />
+        </label>
+        <div class="help-box">
+            <strong>Como gerar:</strong>
+            <ol>
+                <li>iPhone: <code>Settings → Privacy &amp; Security → App Privacy Report → ON</code></li>
+                <li>Joga FF por 5-10 minutos pra popular o log</li>
+                <li>Em <code>App Privacy Report</code> toque em <code>Save App Privacy Report</code></li>
+                <li>Compartilha o arquivo <code>.ndjson</code> pra cá (AirDrop, iCloud, etc.)</li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Sysdiagnose -->
+    <div class="tab-panel" data-panel="sysdiag">
+        <label class="dropzone" id="dz-sysdiag">
+            <span class="dropzone-icon">📁</span>
+            <div class="dropzone-text">Clique para selecionar a pasta sysdiagnose extraída</div>
+            <div class="dropzone-hint">Pasta deve conter <code>logs/</code>, <code>summaries/</code>, <code>ps.txt</code>, etc.</div>
+            <input type="file" id="file-sysdiag" webkitdirectory directory multiple />
+        </label>
+        <div class="help-box">
+            <strong>Como gerar:</strong>
+            <ol>
+                <li>iPhone: aperte <code>Vol+ + Vol- + Side</code> simultaneamente por 1 segundo</li>
+                <li>Aguarde ~5min (continue usando normalmente)</li>
+                <li><code>Settings → Privacy → Analytics &amp; Improvements → Analytics Data</code></li>
+                <li>Procure <code>sysdiagnose_AAAA.MM.DD_*.tar.gz</code>, compartilhe para Files</li>
+                <li>No Files: toque e segure → <code>Uncompress</code> (vira pasta)</li>
+                <li>Exporte a <strong>pasta inteira</strong> pra cá (AirDrop ou ZIP)</li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Profile -->
+    <div class="tab-panel" data-panel="profile">
+        <label class="dropzone" id="dz-profile">
+            <span class="dropzone-icon">🔐</span>
+            <div class="dropzone-text">Arraste ou clique para enviar o <code>.mobileconfig</code></div>
+            <div class="dropzone-hint">Configuration Profile baixado ou exportado</div>
+            <input type="file" id="file-profile" accept=".mobileconfig,application/x-apple-aspen-config" />
+        </label>
+        <div class="help-box">
+            <strong>Quando usar:</strong>
+            <ol>
+                <li>Recebeu link de profile (alguém mandou "instala isso")</li>
+                <li>Quer verificar ANTES de instalar — abre a URL no Safari, faz <code>Share → Save to Files</code></li>
+                <li>Envia o arquivo <code>.mobileconfig</code> pra cá pra ver os payloads críticos</li>
+            </ol>
+        </div>
+    </div>
+</section>
+
+<!-- ─── LOADING ─── -->
+<div class="loading hidden" id="loading">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText">Analisando…</div>
+</div>
+
+<!-- ─── RESULTS ─── -->
+<section class="results hidden" id="results"></section>
+
+<!-- ─── ACTIONS ─── -->
+<div class="actions hidden" id="actions">
+    <button class="btn" id="btn-back">← Nova análise</button>
+    <button class="btn" id="btn-export">Exportar relatório TXT</button>
+    <button class="btn primary" id="btn-share">Compartilhar</button>
+</div>
+
+<!-- ─── FOOTER ─── -->
+<footer>
+    <p>
+        <span class="footer-brand">A4THER SYSTEMS</span>
+        <span class="sep">▪</span>
+        <strong>LS Aluguel</strong>
+    </p>
+    <p>
+        <a href="https://github.com/lovelyoyk/a4ther" target="_blank" rel="noopener">GitHub</a>
+        <span class="sep">·</span>
+        Análise <strong>100% client-side</strong> · seus arquivos nunca saem do navegador
+    </p>
+    <p class="text-faint" style="margin-top: 0.8rem;">
+        Síntese de KellerSS · PantherSS · CardozoSS · TiziXit · 50+ sources<br />
+        ~115 bundles catalogados · 12 cheat servers · 27 payload types · UUID opaco detection
+    </p>
+</footer>
+
+</div>
+
+<!-- ============================================================
+     SCRIPT
+     ============================================================ -->
+<script>
+const VERSION = "2.5.0";
+document.getElementById('version').textContent = `v${VERSION}`;
+
+/* ============================================================
+   DETECTION DATA (sincronizado com a4ther-ios.js)
+   ============================================================ */
+const CHEAT_APPS = {
+    // FF iOS cheats
+    "com.34306.espff":                  { sev: "CRITICAL", desc: "ESP Free Fire - tweak iOS" },
+    "com.dts.freefireth.externalesp":   { sev: "CRITICAL", desc: "External ESP FF tweak" },
+    "com.quyhoang.fxy":                 { sev: "CRITICAL", desc: "Elite Luxury / Nextor mod menu" },
+    "com.phuc.aimlock":                 { sev: "CRITICAL", desc: "Aim Lock tweak FF" },
+    "com.checkboxcus.hhn":              { sev: "CRITICAL", desc: "Checkbox Custom HHN mod menu" },
+    "com.hhnios.pubgvngatena":          { sev: "CRITICAL", desc: "iGG by HHNiOS FF/PUBG menu" },
+    "com.dts.freefirethack":            { sev: "CRITICAL", desc: "Free Fire IPA re-pack (bundle modificado)" },
+    "com.dts.freefireth2":              { sev: "CRITICAL", desc: "Free Fire IPA re-sign variant" },
+    "com.nextor.app":                   { sev: "CRITICAL", desc: "Nextor menu carrier app" },
+
+    // Proxy / VPN / MITM
+    "com.touchingapp.potatsolite":      { sev: "HIGH", desc: "PotatsoLite proxy iOS (mitmproxy)" },
+    "com.touchingapp.potatso":          { sev: "HIGH", desc: "Potatso proxy iOS" },
+    "com.monite.proxyff":               { sev: "CRITICAL", desc: "ProxyFF cheat confirmado" },
+    "com.nssurge.inc.surge-ios":        { sev: "HIGH", desc: "Surge proxy/MITM" },
+    "com.luo.quantumultx":              { sev: "HIGH", desc: "Quantumult X proxy" },
+    "group.com.luo.quantumult":         { sev: "HIGH", desc: "Quantumult proxy" },
+    "com.shadowrocket.Shadowrocket":    { sev: "HIGH", desc: "Shadowrocket proxy" },
+    "com.liguangming.Shadowrocket":     { sev: "HIGH", desc: "Shadowrocket alt" },
+    "com.github.shadowsocks":           { sev: "HIGH", desc: "Shadowsocks" },
+    "com.netease.trojan":               { sev: "HIGH", desc: "Trojan proxy" },
+    "com.hiddify.app":                  { sev: "HIGH", desc: "Hiddify proxy" },
+    "com.karing.app":                   { sev: "HIGH", desc: "Karing proxy" },
+    "com.metacubex.ClashX":             { sev: "HIGH", desc: "ClashX proxy" },
+    "com.ssrss.Ssrss":                  { sev: "HIGH", desc: "SSR iOS proxy" },
+    "com.adguard.ios.AdguardPro":       { sev: "MEDIUM", desc: "AdGuard Pro (MITM)" },
+    "com.privateinternetaccess.ios":    { sev: "MEDIUM", desc: "PIA VPN" },
+    "com.futureland.vpnmaster":         { sev: "MEDIUM", desc: "VPN Master" },
+    "com.cloudflare.1dot1dot1dot1":     { sev: "MEDIUM", desc: "Cloudflare WARP" },
+    "com.Nord.VPN":                     { sev: "MEDIUM", desc: "NordVPN" },
+    "com.expressvpn.ExpressVPN":        { sev: "MEDIUM", desc: "ExpressVPN" },
+    "com.protonvpn.ios":                { sev: "MEDIUM", desc: "ProtonVPN" },
+    "com.surfshark.vpnclient.ios":      { sev: "MEDIUM", desc: "Surfshark VPN" },
+    "com.windscribe.vpn":               { sev: "MEDIUM", desc: "Windscribe VPN" },
+    "com.celeritasdesign.GoodVPN":      { sev: "MEDIUM", desc: "GoodVPN" },
+    "com.getlantern.lantern":           { sev: "MEDIUM", desc: "Lantern VPN/proxy" },
+    "com.psiphon3.PsiphonForIOS":       { sev: "MEDIUM", desc: "Psiphon proxy" },
+    "com.v2box.ios":                    { sev: "HIGH", desc: "V2Box (V2Ray)" },
+    "com.streisand.Streisand":          { sev: "MEDIUM", desc: "Streisand proxy" },
+    "io.nextdns.NextDNS":               { sev: "HIGH", desc: "NextDNS app (DNS filter)" },
+
+    // DNS profile patterns
+    "com.ascent.nextdns.profile":       { sev: "CRITICAL", desc: "NextDNS profile (Ascent) - DNS sequester" },
+    "io.nextdns.profile":               { sev: "CRITICAL", desc: "NextDNS profile direto" },
+    "com.controld.config-profile":      { sev: "CRITICAL", desc: "Control-D DNS profile" },
+    "com.adguard.dns.config-profile":   { sev: "CRITICAL", desc: "AdGuard DNS profile" },
+    "com.cloudflare.warp.profile":      { sev: "CRITICAL", desc: "Cloudflare WARP profile" },
+    "com.opendns.config-profile":       { sev: "CRITICAL", desc: "OpenDNS profile" },
+    "com.quad9.config-profile":         { sev: "CRITICAL", desc: "Quad9 DNS profile" },
+    "com.nextdns.ios.profile":          { sev: "CRITICAL", desc: "NextDNS iOS profile" },
+    "com.nextdns.nextdns.profile":      { sev: "CRITICAL", desc: "NextDNS profile alt" },
+
+    // Jailbreak
+    "com.opa334.dopamine":              { sev: "CRITICAL", desc: "Dopamine JB iOS 15-16" },
+    "xyz.palera1n.palera1n":            { sev: "CRITICAL", desc: "palera1n JB rootless" },
+    "com.electrateam.unc0ver":          { sev: "CRITICAL", desc: "unc0ver JB" },
+    "com.tihmstar.checkra1n":           { sev: "CRITICAL", desc: "checkra1n JB" },
+    "org.taurine.jailbreak":            { sev: "CRITICAL", desc: "Taurine JB" },
+    "org.coolstar.odyssey":             { sev: "CRITICAL", desc: "Odyssey JB" },
+    "org.coolstar.sileo":               { sev: "CRITICAL", desc: "Sileo package manager JB" },
+    "xyz.willy.Zebra":                  { sev: "CRITICAL", desc: "Zebra package manager JB" },
+    "com.cydia.Cydia":                  { sev: "CRITICAL", desc: "Cydia package manager JB" },
+
+    // Sideload (TrollStore family + AltStore)
+    "com.opa334.TrollStore":            { sev: "CRITICAL", desc: "TrollStore - sideload sem JB" },
+    "com.opa334.TrollStoreHelper":      { sev: "CRITICAL", desc: "TrollStoreHelper" },
+    "com.opa334.trolldecrypt":          { sev: "CRITICAL", desc: "TrollDecrypt - decifrar IPAs" },
+    "com.opa334.trollfools":            { sev: "CRITICAL", desc: "TrollFools - injetor de tweaks" },
+    "com.rileytestut.AltStore":         { sev: "HIGH", desc: "AltStore sideload" },
+    "com.altstore.altstoreclassic":     { sev: "HIGH", desc: "AltStore Classic" },
+    "com.sideloadly.sideloadly":        { sev: "HIGH", desc: "Sideloadly" },
+
+    // Cert sideloaders
+    "com.esign.ios":                    { sev: "HIGH", desc: "ESign sideload/IPA installer" },
+    "com.esign.esign":                  { sev: "HIGH", desc: "ESign alt" },
+    "app.esign.esign":                  { sev: "HIGH", desc: "ESign (app prefix)" },
+    "com.esignapp.esign":               { sev: "HIGH", desc: "ESign alt 2" },
+    "io.esign.esign":                   { sev: "HIGH", desc: "ESign (io)" },
+    "kh.crysalis.feather":              { sev: "HIGH", desc: "Feather sideloader (khcrysalis)" },
+    "xn.crysalis.feather":              { sev: "HIGH", desc: "Feather alt" },
+    "com.crysalis.feather":             { sev: "HIGH", desc: "Feather (com)" },
+    "io.feather.feather":               { sev: "HIGH", desc: "Feather (io)" },
+    "app.feather.feather":              { sev: "HIGH", desc: "Feather (app)" },
+    "com.ksign.app":                    { sev: "HIGH", desc: "Ksign sideloader cert-based" },
+    "io.ksign.ksign":                   { sev: "HIGH", desc: "Ksign (io)" },
+    "app.ksign.ksign":                  { sev: "HIGH", desc: "Ksign (app)" },
+    "com.ksign.ksign":                  { sev: "HIGH", desc: "Ksign (com)" },
+    "pkr.appwhitelist.ksign":           { sev: "HIGH", desc: "Ksign whitelist variant" },
+    "com.gbox.gbox":                    { sev: "HIGH", desc: "GBox sideloader iOS" },
+    "com.gboxapp.gbox":                 { sev: "HIGH", desc: "GBox alt" },
+    "io.gbox.gbox":                     { sev: "HIGH", desc: "GBox (io)" },
+    "app.gbox.io":                      { sev: "HIGH", desc: "GBox (io 2)" },
+    "com.itools.gbox":                  { sev: "HIGH", desc: "GBox (itools)" },
+    "com.usescarlet.scarlet":           { sev: "HIGH", desc: "Scarlet sideloader" },
+    "com.scarletapp.scarlet":           { sev: "HIGH", desc: "Scarlet alt" },
+    "com.scarletios.scarlet":           { sev: "HIGH", desc: "Scarlet (ios)" },
+    "com.appdb.appdb":                  { sev: "MEDIUM", desc: "AppDB sideload store" },
+    "io.appdb.appdb":                   { sev: "MEDIUM", desc: "AppDB (io)" },
+    "com.tutuapp.tutuapp":              { sev: "MEDIUM", desc: "TutuApp" },
+    "com.appcake.appcake":              { sev: "MEDIUM", desc: "AppCake" },
+    "com.appvalley.appvalley":          { sev: "MEDIUM", desc: "AppValley" },
+    "com.buildstore.buildstore":        { sev: "MEDIUM", desc: "BuildStore" },
+    "com.ignition.ignition":            { sev: "MEDIUM", desc: "Ignition" },
+    "com.signtools.signtools":          { sev: "MEDIUM", desc: "SignTools" },
+    "io.itrustteam.itrust":             { sev: "MEDIUM", desc: "iTrust" },
+
+    // Cheat stores
+    "com.iosgods.iosgods":              { sev: "CRITICAL", desc: "iOSGods cheat app store" },
+    "com.gbox.pubg":                    { sev: "CRITICAL", desc: "GBox PUBG/FF cheat" },
+
+    // File managers / shells (root access)
+    "com.tigisoftware.Filza":           { sev: "CRITICAL", desc: "Filza file manager root" },
+    "com.tigisoftware.FilzaFree":       { sev: "CRITICAL", desc: "Filza Free" },
+    "com.ifunbox.ifunbox":              { sev: "HIGH", desc: "iFunBox" },
+    "app.ish.iSH":                      { sev: "HIGH", desc: "iSH shell Linux" },
+    "com.septudio.SSHClientLite":       { sev: "HIGH", desc: "SSH Client Lite" },
+    "live.cclerc.geranium":             { sev: "HIGH", desc: "Geranium tweak manager JB" },
+
+    // Developer profile (suspeito em FF)
+    "com.apple.dt.Xcode":               { sev: "MEDIUM", desc: "Xcode IDE" },
+    "com.apple.Preferences.Developer":  { sev: "MEDIUM", desc: "Preferências de Desenvolvedor" },
+    "com.apple.TestFlight":             { sev: "MEDIUM", desc: "TestFlight" },
+
+    // Anti-detect
+    "com.shpion.cleaner":               { sev: "HIGH", desc: "Spion Cleaner - limpeza rastros" },
+    "com.limneos.adprivacy":            { sev: "MEDIUM", desc: "AdPrivacy" },
+    "com.jjcm.nomoread":                { sev: "MEDIUM", desc: "NoMoreAd" },
+};
+
+const FF_OFFICIAL = new Set([
+    "com.dts.freefireth", "com.dts.freefiremax",
+    "com.garena.global.freefire", "com.garena.global.ffmax",
+    "com.garena.freefire.br", "com.garena.freefire.kr",
+]);
+
+const FF_PROXY_LOGIN_DOMAINS = new Set([
+    "version.ffmax.purplevioleto.com",
+    "version.ggwhitehawk.com",
+    "loginbp.ggpolarbear.com",
+    "gin.freefiremobile.com",
+    "100067.connect.garena.com",
+    "100067.msdk.garena.com",
+    "client.us.freefiremobile.com",
+    "client.sea.freefiremobile.com",
+    "sacnetwork.ggblueshark.com",
+    "sacevent.ggblueshark.com",
+]);
+
+const KNOWN_CHEAT_INFRA = {
+    "46.202.145.85":                          "Fatality Cheats — servidor",
+    "fatalitycheats.xyz":                     "Fatality Cheats — domínio",
+    "anubisw.online":                         "Anubis cheat server — FF",
+    "api.baontq.xyz":                         "Baontq cheat API — FF",
+    "version.ffmax.purplevioleto.com":        "Purple Violeto — FF MAX modded",
+    "version.ggwhitehawk.com":                "White Hawk cheat",
+    "loginbp.ggpolarbear.com":                "Polar Bear cheat",
+    "ggwhitehawk.com":                        "White Hawk parent",
+    "ggpolarbear.com":                        "Polar Bear parent",
+    "ggblueshark.com":                        "Blue Shark parent",
+    "ipasign.cc":                             "IPA Sign service",
+    "ipa.aspy.dev":                           "IPA hosting TrollStore",
+};
+
+const FALSE_POSITIVE_IPS = new Set([
+    "104.29.135.227","104.29.137.112","104.29.137.125","104.29.137.146",
+    "104.29.137.16","104.29.137.203","104.29.137.53","104.29.152.107",
+    "104.29.152.157","104.29.152.164","104.29.152.189","104.29.152.27",
+    "104.29.152.79","104.29.152.95","104.29.153.53","104.29.154.91",
+    "104.29.155.129","104.29.155.27","104.29.155.56","104.29.156.120",
+    "104.29.156.174","104.29.156.24","104.29.157.107","104.29.157.123",
+    "104.29.158.139","104.29.158.97","104.29.159.185",
+    "23.192.36.217","23.221.214.168","54.69.69.125","92.223.118.254",
+    "1.1.1.1",
+]);
+
+const TELEMETRY_DOMAINS = [
+    "sentry.io", "ingest.sentry.io",
+    "appsflyer.com", "t.appsflyer.com", "api2.appsflyer.com",
+    "amplitude.com", "api.amplitude.com",
+    "mixpanel.com", "api.mixpanel.com",
+    "segment.io", "api.segment.io",
+    "firebase.io", "firebaseio.com",
+    "bugsnag.com", "notify.bugsnag.com",
+    "crashlytics.com",
+    "adjust.com", "app.adjust.com",
+    "branch.io", "api2.branch.io",
+];
+
+const SIDELOAD_DOMAINS = [
+    "ppsspp.org", "altstore.io", "api.altstore.io", "sideloadly.io",
+    "ipa.store", "signulous.com", "udid.io", "diawi.com",
+    "testflight.apple.com",
+    "esign.yyyue.xyz", "esign.kichik.com", "esign.app", "api.esign.app",
+    "feathertweak.com", "feather.appsmash.com", "khcrysalis.com", "feather.app",
+    "ksign.app", "ksign.click", "api.ksign.app",
+    "gbox.global", "gboxapp.io", "api.gbox.io",
+    "scarlet.usescarlet.com", "api.scarletapp.com",
+    "appdb.to", "appdb.win", "tutuapp.com", "panda.tools",
+    "ignition.fun", "appvalley.vip", "buildstore.us", "itrustteam.com",
+    "iosgods.com",
+];
+
+const APP_STORE_OFFICIAL = new Set([
+    "apple.com", "icloud.com", "mzstatic.com", "phobos.apple.com",
+    "apps.apple.com", "itunes.apple.com",
+]);
+
+const SCRIPT_URL_PATTERNS = [
+    { regex: /raw\.githubusercontent\.com/i, label: "GitHub Raw" },
+    { regex: /gist\.github(usercontent)?\.com/i, label: "GitHub Gist" },
+    { regex: /pastebin\.com/i, label: "Pastebin" },
+    { regex: /pastecode\.io/i, label: "PasteCode" },
+    { regex: /hastebin\.com/i, label: "Hastebin" },
+    { regex: /cdn\.jsdelivr\.net/i, label: "jsDelivr" },
+    { regex: /unpkg\.com/i, label: "UNPKG" },
+    { regex: /cdnjs\.cloudflare\.com/i, label: "CDNJS" },
+    { regex: /\.workers\.dev/i, label: "Cloudflare Workers" },
+    { regex: /\.vercel\.app/i, label: "Vercel" },
+    { regex: /\.netlify\.app/i, label: "Netlify" },
+];
+
+const SUSPICIOUS_TLDS = [
+    ".site", ".store", ".netlify.app", ".netlify", ".xyz", ".pw",
+    ".top", ".click", ".bid", ".win", ".stream", ".download",
+    ".icu", ".gq", ".cf", ".ml", ".ga", ".tk",
+    ".monster", ".fun", ".rest", ".bar", ".lol",
+];
+
+const SUSPECT_KEYWORDS = [
+    "cheat", "hack", "aimbot", "wallhack", "esp",
+    "modmenu", "injector", "tweak", "substrate", "frida",
+    "filza", "esign", "feather", "ksign", "gbox", "scarlet",
+    "dopamine", "sileo", "trollstore", "spoofer",
+    "cleaner", "unc0ver", "checkra1n", "jailbreak", "cydia",
+    "zebra", "altstore", "iosgods", "geranium", "potatso",
+    "shadowrocket", "surge", "quantumult", "hiddify", "shadowsocks",
+    "trojan", "bypass", "inject", "libhooker",
+    "sideload", "appdb", "tutuapp", "appvalley", "ignition",
+    "appcake", "buildstore", "ifunbox",
+];
+
+const PROFILE_PAYLOADS = {
+    "com.apple.vpn.managed":                            { sev: "CRITICAL", cat: "VPN", desc: "VPN configurada - roteia TODO tráfego" },
+    "com.apple.vpn.managed.applayer":                   { sev: "CRITICAL", cat: "VPN", desc: "Per-app VPN" },
+    "com.apple.proxy.http.global":                      { sev: "CRITICAL", cat: "PROXY", desc: "HTTP Proxy global (MITM clássico)" },
+    "com.apple.security.root":                          { sev: "CRITICAL", cat: "CA", desc: "CA Root cert (MITM completo)" },
+    "com.apple.security.pkcs1":                         { sev: "CRITICAL", cat: "CA", desc: "PKCS#1 cert" },
+    "com.apple.security.pkcs12":                        { sev: "CRITICAL", cat: "CA", desc: "PKCS#12 cert" },
+    "com.apple.security.scep":                          { sev: "CRITICAL", cat: "CA", desc: "SCEP cert enrollment" },
+    "com.apple.webcontent-filter":                      { sev: "CRITICAL", cat: "FILTER", desc: "Web Content Filter" },
+    "com.apple.dnsSettings.managed":                    { sev: "CRITICAL", cat: "DNS", desc: "DNS custom (sequester FF)" },
+    "com.apple.dnsProxy.managed":                       { sev: "CRITICAL", cat: "DNS", desc: "DNS Proxy" },
+    "com.apple.relay.managed":                          { sev: "HIGH", cat: "RELAY", desc: "iCloud Relay managed" },
+    "com.apple.applicationaccess":                      { sev: "CRITICAL", cat: "RESTRICT", desc: "App Restrictions" },
+    "com.apple.applicationaccess.new":                  { sev: "CRITICAL", cat: "RESTRICT", desc: "App Restrictions (iOS 13+)" },
+    "com.apple.screentimepolicy":                       { sev: "CRITICAL", cat: "RESTRICT", desc: "Screen Time policy" },
+    "com.apple.passwordpolicy":                         { sev: "HIGH", cat: "RESTRICT", desc: "Password policy" },
+    "com.apple.systempolicy.kernel-extension-policy":   { sev: "HIGH", cat: "RESTRICT", desc: "Kext policy" },
+    "com.apple.systempolicy.system-extension-policy":   { sev: "HIGH", cat: "RESTRICT", desc: "System extension policy" },
+    "com.apple.familyControls":                         { sev: "HIGH", cat: "RESTRICT", desc: "Family Controls" },
+    "com.apple.mdm":                                    { sev: "HIGH", cat: "MDM", desc: "MDM - controle remoto" },
+    "com.apple.iTunesStoreAccount":                     { sev: "MEDIUM", cat: "ACCOUNT", desc: "iTunes Account managed" },
+    "com.apple.activation":                             { sev: "MEDIUM", cat: "ACTIVATION", desc: "Device activation managed" },
+    "com.apple.wifi.managed":                           { sev: "MEDIUM", cat: "WIFI", desc: "Wi-Fi forçado" },
+    "com.apple.airplay.security":                       { sev: "LOW", cat: "AIRPLAY", desc: "AirPlay policy" },
+    "com.apple.mail.managed":                           { sev: "LOW", cat: "EMAIL", desc: "Email managed" },
+    "com.apple.eas.account":                            { sev: "LOW", cat: "EMAIL", desc: "Exchange Account" },
+    "com.apple.caldav.account":                         { sev: "LOW", cat: "CALENDAR", desc: "CalDAV" },
+    "com.apple.carddav.account":                        { sev: "LOW", cat: "CONTACTS", desc: "CardDAV" },
+};
+
+/* ============================================================
+   STATE & UI HELPERS
+   ============================================================ */
+let alerts = [], warnings = [], okItems = [];
+let lastStats = null;
+let lastReportText = "";
+
+function alertF(msg, detail) { alerts.push({ msg, detail }); }
+function warn(msg, detail)   { warnings.push({ msg, detail }); }
+function ok(msg, detail)     { okItems.push({ msg, detail }); }
+function reset() { alerts = []; warnings = []; okItems = []; }
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+}
+
+function severityFromMsg(msg) {
+    if (typeof msg !== 'string') return '';
+    const m = msg.match(/^\[(CRITICAL|HIGH|MEDIUM|LOW)\]/i);
+    return m ? m[1].toLowerCase() : '';
+}
+
+function renderItem(item, color) {
+    const msg = typeof item === 'string' ? item : item.msg;
+    const detail = typeof item === 'object' ? item.detail : null;
+    const sev = severityFromMsg(msg);
+    let body = escapeHTML(msg);
+    // Highlight bundle IDs
+    body = body.replace(/\b([a-zA-Z][a-zA-Z0-9_-]+\.[a-zA-Z0-9_.-]+)\b/g,
+        (full, id) => id.split('.').length >= 3 ? `<code>${id}</code>` : full);
+    // Severity tag
+    if (sev) {
+        body = body.replace(/^\[(CRITICAL|HIGH|MEDIUM|LOW)\]\s*/i,
+            `<span class="severity-tag ${sev}">${sev.toUpperCase()}</span>`);
+    }
+    const detailHTML = detail ? `<div class="item-detail">${escapeHTML(detail)}</div>` : '';
+    return `<div class="item ${color}">${body}${detailHTML}</div>`;
+}
+
+function showLoading(text) {
+    $('#loading').classList.remove('hidden');
+    $('#loadingText').textContent = text || 'Analisando…';
+    $('#results').classList.add('hidden');
+    $('#actions').classList.add('hidden');
+}
+function hideLoading() {
+    $('#loading').classList.add('hidden');
+}
+
+function renderResults(stats) {
+    hideLoading();
+    lastStats = stats;
+    let verdict, color, icon, subtitle;
+    if (alerts.length > 0) {
+        verdict = 'SUSPEITO'; color = 'red'; icon = '✗';
+        subtitle = `${alerts.length} alerta${alerts.length !== 1 ? 's' : ''} crítico${alerts.length !== 1 ? 's' : ''} detectado${alerts.length !== 1 ? 's' : ''}`;
+    } else if (warnings.length > 0) {
+        verdict = 'REVISAR'; color = 'orange'; icon = '⚠';
+        subtitle = `${warnings.length} aviso${warnings.length !== 1 ? 's' : ''} a checar manualmente`;
+    } else {
+        verdict = 'LIMPO'; color = 'green'; icon = '✓';
+        subtitle = 'Device aprovado · nenhum indicador suspeito';
+    }
+
+    let html = `
+        <div class="verdict ${color}">
+            <div class="verdict-icon">${icon}</div>
+            <div class="verdict-title">${verdict}</div>
+            <div class="verdict-subtitle">${subtitle}</div>
+        </div>
+
+        <div class="stats">
+            <div class="stat alerts"><div class="stat-num">${alerts.length}</div><div class="stat-label">Alertas</div></div>
+            <div class="stat warns"><div class="stat-num">${warnings.length}</div><div class="stat-label">Avisos</div></div>
+            <div class="stat oks"><div class="stat-num">${okItems.length}</div><div class="stat-label">OKs</div></div>`;
+    if (stats) {
+        if (stats.events !== undefined)  html += `<div class="stat"><div class="stat-num">${stats.events}</div><div class="stat-label">Eventos</div></div>`;
+        if (stats.bundles !== undefined) html += `<div class="stat"><div class="stat-num">${stats.bundles}</div><div class="stat-label">Bundles</div></div>`;
+        if (stats.domains !== undefined) html += `<div class="stat"><div class="stat-num">${stats.domains}</div><div class="stat-label">Domínios</div></div>`;
+        if (stats.ips !== undefined)     html += `<div class="stat"><div class="stat-num">${stats.ips}</div><div class="stat-label">IPs</div></div>`;
+    }
+    html += `</div>`;
+
+    function section(title, items, color) {
+        if (items.length === 0) return '';
+        let s = `<div class="section">
+            <div class="section-header ${color}">
+                <span class="section-title ${color}">◆ ${title}</span>
+                <span class="section-count">${items.length}</span>
+            </div>
+            <div class="item-list">`;
+        for (const it of items) s += renderItem(it, color);
+        s += `</div></div>`;
+        return s;
+    }
+    html += section('Alertas', alerts, 'red');
+    html += section('Avisos', warnings, 'orange');
+    html += section('Informações', okItems, 'green');
+
+    $('#results').innerHTML = html;
+    $('#results').classList.remove('hidden');
+    $('#actions').classList.remove('hidden');
+    $('#uploadSection').classList.add('hidden');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // Build text report for export
+    buildTextReport(stats);
+}
+
+function buildTextReport(stats) {
+    const lines = [];
+    lines.push('========================================');
+    lines.push(`  A4ther Systems v${VERSION} | LS Aluguel`);
+    lines.push('  Free Fire Anti-Cheat Scanner');
+    lines.push(`  ${new Date().toISOString()}`);
+    lines.push('========================================');
+    lines.push('');
+    if (alerts.length > 0) lines.push(`*** SUSPEITO - ${alerts.length} alertas ***`);
+    else if (warnings.length > 0) lines.push(`*** REVISAR - ${warnings.length} avisos ***`);
+    else lines.push(`*** LIMPO ***`);
+    lines.push('');
+    lines.push(`Alertas: ${alerts.length}`);
+    lines.push(`Avisos:  ${warnings.length}`);
+    lines.push(`OKs:     ${okItems.length}`);
+    if (stats) {
+        if (stats.events !== undefined)  lines.push(`Eventos: ${stats.events}`);
+        if (stats.bundles !== undefined) lines.push(`Bundles: ${stats.bundles}`);
+        if (stats.domains !== undefined) lines.push(`Domínios: ${stats.domains}`);
+        if (stats.ips !== undefined)     lines.push(`IPs: ${stats.ips}`);
+    }
+    lines.push('');
+    if (alerts.length > 0) {
+        lines.push('--- ALERTAS ---');
+        for (const a of alerts) {
+            const m = typeof a === 'string' ? a : a.msg;
+            lines.push('  [!] ' + m);
+            if (a.detail) lines.push('      ' + a.detail);
+        }
+        lines.push('');
+    }
+    if (warnings.length > 0) {
+        lines.push('--- AVISOS ---');
+        for (const w of warnings) {
+            const m = typeof w === 'string' ? w : w.msg;
+            lines.push('  [?] ' + m);
+        }
+        lines.push('');
+    }
+    if (okItems.length > 0) {
+        lines.push('--- INFO ---');
+        for (const o of okItems) {
+            const m = typeof o === 'string' ? o : o.msg;
+            lines.push('  [+] ' + m);
+        }
+    }
+    lastReportText = lines.join('\n');
+}
+
+/* ============================================================
+   NDJSON / PRIVACY REPORT ANALYZER
+   ============================================================ */
+function parseNDJSON(raw) {
+    const events = [];
+    for (const line of raw.split('\n')) {
+        const t = line.trim();
+        if (!t) continue;
+        try { events.push(JSON.parse(t)); } catch (e) {}
+    }
+    return events;
+}
+
+function analyzeEvents(events) {
+    const bundlesSeen = new Set(), domainsSeen = new Set(), ipsSeen = new Set();
+    const networkByBundle = {};
+    for (const ev of events) {
+        const b = ev.bundleID || ev.bundle || (ev.networkActivity && ev.networkActivity.bundleID) ||
+                  ev.accessor || (ev.access && ev.access.identifier);
+        const d = ev.domain || ev.domainName || (ev.networkActivity && ev.networkActivity.domain);
+        const ip = ev.firstHop || ev.ipAddress;
+        if (b) bundlesSeen.add(b);
+        if (d) {
+            domainsSeen.add(d);
+            if (b) {
+                if (!networkByBundle[b]) networkByBundle[b] = { domains: new Set(), ips: new Set(), hits: 0 };
+                networkByBundle[b].domains.add(d.toLowerCase());
+                networkByBundle[b].hits += (ev.hits || 1);
+            }
+        }
+        if (ip) {
+            ipsSeen.add(ip);
+            if (b && networkByBundle[b]) networkByBundle[b].ips.add(ip);
+        }
+    }
+    return { bundlesSeen, domainsSeen, ipsSeen, networkByBundle };
+}
+
+function detectPrivacyReport(a) {
+    const { bundlesSeen, domainsSeen, ipsSeen, networkByBundle } = a;
+
+    // 0. OPAQUE-ID PROFILE / DNS RESELLER patterns
+    const opaqueRegex = /^[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+    const dnsResellerRegex = /(nextdns|controld|control-d|cloudflare.*warp|adguard.*dns|opendns|quad9)/i;
+    for (const b of bundlesSeen) {
+        if (opaqueRegex.test(b)) {
+            alertF(`[CRITICAL] Profile com UUID opaco: ${b}`, "Profile dinâmico (MDM/reseller) - DNS sequester");
+        }
+        if (dnsResellerRegex.test(b) && !FF_OFFICIAL.has(b) && !CHEAT_APPS[b]) {
+            alertF(`[HIGH] DNS reseller bundle: ${b}`, "DNS sequester possível");
+        }
+    }
+
+    // 1. CHEAT_APPS
+    for (const b of bundlesSeen) {
+        if (CHEAT_APPS[b]) {
+            const info = CHEAT_APPS[b];
+            alertF(`[${info.sev}] ${b}`, info.desc);
+        }
+    }
+
+    // 2. FF oficial
+    let ffFound = false;
+    for (const b of FF_OFFICIAL) {
+        if (bundlesSeen.has(b)) { ok(`Free Fire oficial: ${b}`); ffFound = true; }
+    }
+    if (!ffFound) warn("Free Fire oficial NÃO apareceu no log");
+
+    // 3. FF não oficial
+    for (const b of bundlesSeen) {
+        if (b.toLowerCase().includes("freefire") && !FF_OFFICIAL.has(b)) {
+            alertF(`[CRITICAL] Bundle FF NÃO oficial (re-sign): ${b}`);
+        }
+    }
+
+    // 4. KNOWN_CHEAT_INFRA
+    for (const [indicator, desc] of Object.entries(KNOWN_CHEAT_INFRA)) {
+        const isIP = /^\d+\.\d+\.\d+\.\d+$/.test(indicator);
+        if (isIP) {
+            if (ipsSeen.has(indicator)) alertF(`[CRITICAL] IP de cheat: ${indicator}`, desc);
+        } else {
+            for (const seen of domainsSeen) {
+                if (seen.toLowerCase() === indicator.toLowerCase() ||
+                    seen.toLowerCase().endsWith("." + indicator.toLowerCase())) {
+                    if (FF_PROXY_LOGIN_DOMAINS.has(indicator.toLowerCase())) {
+                        const callers = Object.entries(networkByBundle)
+                            .filter(([b, d]) => d.domains.has(seen.toLowerCase()))
+                            .map(([b]) => b);
+                        if (callers.every(b => FF_OFFICIAL.has(b))) {
+                            ok(`FF login domain ${seen} OK (chamado só pelo FF)`);
+                            continue;
+                        }
+                    }
+                    alertF(`[CRITICAL] Domínio de cheat: ${seen}`, desc);
+                }
+            }
+        }
+    }
+
+    // 5. FF_PROXY_LOGIN bypass
+    for (const [bundle, info] of Object.entries(networkByBundle)) {
+        if (FF_OFFICIAL.has(bundle)) continue;
+        for (const d of info.domains) {
+            if (FF_PROXY_LOGIN_DOMAINS.has(d)) {
+                alertF(`[CRITICAL] PROXY BYPASS: ${bundle} → ${d}`,
+                    "Domínio só do FF acessado por outro bundle = MITM");
+            }
+        }
+    }
+
+    // 6. Telemetry + Sideload
+    for (const [bundle, info] of Object.entries(networkByBundle)) {
+        if (bundle.startsWith("com.apple.") || FF_OFFICIAL.has(bundle)) continue;
+        const domains = [...info.domains];
+        const hasOfficial = domains.some(d => [...APP_STORE_OFFICIAL].some(o => d === o || d.endsWith("." + o)));
+        const sideloadHits = SIDELOAD_DOMAINS.filter(sd => domains.some(d => d === sd || d.endsWith("." + sd)));
+        const telHits = TELEMETRY_DOMAINS.filter(td => domains.some(d => d === td || d.endsWith("." + td)));
+        if (sideloadHits.length > 0) {
+            alertF(`[HIGH] Sideload indicator: ${bundle}`, sideloadHits.slice(0, 3).join(", "));
+        } else if (telHits.length > 0 && !hasOfficial) {
+            warn(`[MEDIUM] App não-AppStore com telemetria: ${bundle}`, telHits.slice(0, 2).join(", "));
+        }
+    }
+
+    // 7. Suspicious TLDs
+    for (const d of domainsSeen) {
+        for (const tld of SUSPICIOUS_TLDS) {
+            if (d.toLowerCase().endsWith(tld)) {
+                const callers = Object.entries(networkByBundle).filter(([_, x]) => x.domains.has(d.toLowerCase()));
+                if (callers.every(([b]) => b.startsWith("com.apple.") || b.startsWith("com.google."))) continue;
+                warn(`[MEDIUM] TLD suspeito '${tld}': ${d}`);
+                break;
+            }
+        }
+    }
+
+    // 8. Keyword heuristic
+    for (const b of bundlesSeen) {
+        if (CHEAT_APPS[b]) continue;
+        if (b.startsWith("com.apple.") || b.startsWith("com.google.") ||
+            b.startsWith("com.facebook.") || b.startsWith("com.microsoft.") ||
+            FF_OFFICIAL.has(b)) continue;
+        const bl = b.toLowerCase();
+        for (const kw of SUSPECT_KEYWORDS) {
+            if (bl.includes(kw)) { warn(`[LOW] Bundle por padrão [${kw}]: ${b}`); break; }
+        }
+    }
+}
+
+async function handleNDJSON(file) {
+    showLoading(`Lendo ${file.name}…`);
+    const text = await file.text();
+    reset();
+    const events = parseNDJSON(text);
+    if (events.length === 0) {
+        warn("Arquivo NDJSON vazio ou inválido");
+        renderResults({});
+        return;
+    }
+    const analysis = analyzeEvents(events);
+    detectPrivacyReport(analysis);
+    renderResults({
+        events: events.length,
+        bundles: analysis.bundlesSeen.size,
+        domains: analysis.domainsSeen.size,
+        ips: analysis.ipsSeen.size,
+    });
+}
+
+/* ============================================================
+   PROFILE ANALYZER
+   ============================================================ */
+function analyzeProfileText(raw) {
+    const payloadTypes = [];
+    const re = /<key>\s*PayloadType\s*<\/key>\s*<string>([^<]+)<\/string>/gi;
+    let m;
+    while ((m = re.exec(raw)) !== null) payloadTypes.push(m[1].trim());
+    if (payloadTypes.length === 0) {
+        for (const pt of Object.keys(PROFILE_PAYLOADS)) {
+            if (raw.includes(pt)) payloadTypes.push(pt);
+        }
+    }
+    function extract(key) {
+        const r = new RegExp(`<key>\\s*${key}\\s*<\\/key>\\s*<string>([^<]+)<\\/string>`, "i");
+        const mm = raw.match(r);
+        return mm ? mm[1].trim() : null;
+    }
+    const displayName  = extract("PayloadDisplayName");
+    const identifier   = extract("PayloadIdentifier");
+    const organization = extract("PayloadOrganization");
+    const uuid         = extract("PayloadUUID");
+
+    if (displayName)  ok(`Display Name: ${displayName}`);
+    if (identifier)   ok(`Identifier:   ${identifier}`);
+    if (organization) ok(`Organization: ${organization}`);
+    if (uuid)         ok(`UUID:         ${uuid}`);
+
+    const unique = [...new Set(payloadTypes)];
+    for (const pt of unique) {
+        const info = PROFILE_PAYLOADS[pt];
+        if (info) {
+            const msg = `[${info.sev}] ${info.cat} - ${pt}`;
+            if (info.sev === "CRITICAL" || info.sev === "HIGH") alertF(msg, info.desc);
+            else warn(msg, info.desc);
+        } else {
+            ok(`PayloadType desconhecido: ${pt}`);
+        }
+    }
+
+    // HostName / ProxyServer / PAC
+    const hostNames = [];
+    const hnRe = /<key>\s*HostName\s*<\/key>\s*<string>([^<]+)<\/string>/gi;
+    while ((m = hnRe.exec(raw)) !== null) hostNames.push(m[1].trim());
+    const proxyServers = [];
+    const psRe = /<key>\s*ProxyServer\s*<\/key>\s*<string>([^<]+)<\/string>/gi;
+    while ((m = psRe.exec(raw)) !== null) proxyServers.push(m[1].trim());
+    const proxyPACs = [];
+    const pacRe = /<key>\s*ProxyAutoConfigURLString\s*<\/key>\s*<string>([^<]+)<\/string>/gi;
+    while ((m = pacRe.exec(raw)) !== null) proxyPACs.push(m[1].trim());
+    for (const h of hostNames)    alertF(`HostName: ${h}`);
+    for (const p of proxyServers) alertF(`ProxyServer: ${p}`);
+    for (const u of proxyPACs)    alertF(`PAC URL: ${u}`);
+
+    // UUID opaco no identifier
+    if (identifier) {
+        if (/[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/.test(identifier)) {
+            alertF(`[CRITICAL] UUID OPACO no identifier`, identifier);
+        }
+        if (/(nextdns|controld|adguard|cloudflare.*warp|opendns|quad9)/i.test(identifier)) {
+            alertF(`[CRITICAL] DNS reseller profile`, identifier);
+        }
+    }
+
+    // Cheat keywords
+    const cheatRegex = /(esign|feather|ksign|gbox|scarlet|sideload|trollstore|cheat|hack|aimbot|wallhack|ffh4x|mod\.menu|injector|cracked|mitmproxy)/i;
+    if (organization && cheatRegex.test(organization)) alertF(`Organization tem keyword cheat: ${organization}`);
+    if (displayName && cheatRegex.test(displayName))   alertF(`Display Name tem keyword cheat: ${displayName}`);
+    if (identifier && cheatRegex.test(identifier))     alertF(`Identifier tem keyword cheat: ${identifier}`);
+
+    return { payloadTypes: unique, hostNames, proxyServers, proxyPACs };
+}
+
+async function handleProfile(file) {
+    showLoading(`Lendo ${file.name}…`);
+    let raw = await file.text();
+    reset();
+    analyzeProfileText(raw);
+    renderResults({});
+}
+
+/* ============================================================
+   SYSDIAGNOSE FOLDER ANALYZER
+   ============================================================ */
+function findFileByPath(files, suffixOrName) {
+    // files is FileList; webkitRelativePath shows folder structure
+    const suffix = suffixOrName.toLowerCase();
+    for (const f of files) {
+        const rel = (f.webkitRelativePath || f.name).toLowerCase();
+        if (rel.endsWith('/' + suffix) || rel.endsWith(suffix) || rel.includes('/' + suffix + '/') || rel.endsWith(suffix)) {
+            return f;
+        }
+    }
+    return null;
+}
+function findAllByPathSubstr(files, substr) {
+    const sub = substr.toLowerCase();
+    return Array.from(files).filter(f => (f.webkitRelativePath || f.name).toLowerCase().includes(sub));
+}
+
+async function readFileAsText(file) {
+    try { return await file.text(); }
+    catch (e) { return ""; }
+}
+
+async function handleSysdiagnose(filesList) {
+    showLoading('Lendo pasta sysdiagnose…');
+    reset();
+
+    const files = Array.from(filesList);
+    ok(`Pasta selecionada: ${files.length} arquivos`);
+
+    // 1. mobile_installation.log
+    const installLogs = findAllByPathSubstr(files, 'mobileinstallation/mobile_installation.log');
+    if (installLogs.length === 0) {
+        warn("logs/MobileInstallation/mobile_installation.log não encontrado");
+    } else {
+        ok(`mobile_installation logs: ${installLogs.length}`);
+        let combinedLog = "";
+        for (const f of installLogs) combinedLog += await readFileAsText(f) + "\n";
+
+        const bundles = new Set();
+        let installCount = 0, uninstallCount = 0;
+        for (const line of combinedLog.split('\n')) {
+            let m = line.match(/Install succeeded for ([a-zA-Z0-9._-]+)/i);
+            if (m) { bundles.add(m[1]); installCount++; continue; }
+            m = line.match(/Uninstall succeeded for ([a-zA-Z0-9._-]+)/i);
+            if (m) { bundles.add(m[1]); uninstallCount++; continue; }
+            const bm = line.match(/\b([a-z][a-z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,})\b/i);
+            if (bm && !bm[1].includes('/')) bundles.add(bm[1]);
+        }
+        ok(`${bundles.size} bundles distintos · ${installCount} install · ${uninstallCount} uninstall`);
+
+        const opaqueRegex = /^[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+        const dnsResellerRegex = /(nextdns|controld|control-d|cloudflare.*warp|adguard.*dns|opendns|quad9)/i;
+        for (const b of bundles) {
+            if (CHEAT_APPS[b]) {
+                const info = CHEAT_APPS[b];
+                alertF(`[${info.sev}] ${b}`, info.desc);
+            } else if (opaqueRegex.test(b)) {
+                alertF(`[CRITICAL] Profile com UUID opaco: ${b}`);
+            } else if (dnsResellerRegex.test(b)) {
+                alertF(`[HIGH] DNS reseller: ${b}`);
+            } else if (b.toLowerCase().includes("freefire") && !FF_OFFICIAL.has(b)) {
+                alertF(`[CRITICAL] FF não oficial: ${b}`);
+            }
+        }
+    }
+
+    // 2. MCState profiles
+    const mcStubs = findAllByPathSubstr(files, 'mcstate/shared/profile-');
+    const mcEvents = findFileByPath(files, 'MCSettingsEvents.plist');
+    if (mcStubs.length === 0 && !mcEvents) {
+        ok("Nenhum profile no MCState (device sem profiles)");
+    } else {
+        ok(`MCState: ${mcStubs.length} profile stubs ${mcEvents ? '+ MCSettingsEvents.plist' : ''}`);
+        for (const f of mcStubs) {
+            const raw = await readFileAsText(f);
+            if (raw.length > 30) analyzeProfileText(raw);
+        }
+        if (mcEvents) {
+            const raw = await readFileAsText(mcEvents);
+            const profileIds = new Set();
+            const re = /(com\.[a-zA-Z][a-zA-Z0-9._-]+(?:profile)?(?:-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})?)/gi;
+            let m;
+            while ((m = re.exec(raw)) !== null) {
+                const pid = m[1];
+                if (pid.startsWith("com.apple.") && !pid.includes("profile") && !pid.includes("mdm")) continue;
+                profileIds.add(pid);
+            }
+            for (const pid of profileIds) {
+                const hasUUID = /[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/.test(pid);
+                const isDNS = /nextdns|controld|control-d|adguard.*dns|cloudflare.*warp/i.test(pid);
+                if (hasUUID && isDNS) alertF(`[CRITICAL] DNS profile UUID opaco: ${pid}`, "Sequestra DNS = MITM em FF login");
+                else if (hasUUID) alertF(`[HIGH] Profile UUID opaco: ${pid}`);
+                else if (isDNS) alertF(`[HIGH] DNS reseller profile: ${pid}`);
+                else if (CHEAT_APPS[pid]) alertF(`[CRITICAL] Profile catalogado: ${pid}`);
+                else if (/(esign|feather|ksign|gbox|scarlet|sideload|trollstore)/i.test(pid)) alertF(`[CRITICAL] Cert sideloader profile: ${pid}`);
+                else if (!pid.startsWith("com.apple.")) warn(`[MEDIUM] Profile não-Apple: ${pid}`);
+            }
+        }
+    }
+
+    // 3. NetworkExtension
+    const ne = findFileByPath(files, 'com.apple.networkextension.plist');
+    if (ne) {
+        const raw = await readFileAsText(ne);
+        ok(`NetworkExtension.plist (${raw.length} bytes)`);
+        const re = /\b[a-zA-Z][a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,}\b/g;
+        const neBundles = new Set();
+        let m;
+        while ((m = re.exec(raw)) !== null) {
+            const b = m[0];
+            if (b.startsWith("com.apple.") && !b.includes("vpn")) continue;
+            neBundles.add(b);
+        }
+        for (const b of neBundles) {
+            if (CHEAT_APPS[b]) alertF(`[${CHEAT_APPS[b].sev}] VPN/NE ATIVA: ${b}`, CHEAT_APPS[b].desc);
+            else if (b.toLowerCase().includes("vpn") || b.toLowerCase().includes("proxy")) warn(`VPN/Proxy NE: ${b}`);
+        }
+    }
+
+    // 4. ps.txt / taskinfo.txt
+    const psFile = findFileByPath(files, 'ps.txt') || findFileByPath(files, 'taskinfo.txt');
+    if (psFile) {
+        const raw = await readFileAsText(psFile);
+        ok(`${psFile.name} (${raw.length} bytes)`);
+        const patterns = ["frida", "frida-server", "frida-gadget", "cycript", "gdb", "lldb",
+                          "debugserver", "substrated", "Substrate", "MobileSubstrate",
+                          "cheat", "hack", "aimbot", "injector",
+                          "trollstore", "iSH", "Cydia", "Sileo", "Zebra"];
+        const lines = raw.split('\n');
+        for (const p of patterns) {
+            const hits = lines.filter(l => l.toLowerCase().includes(p.toLowerCase())).slice(0, 2);
+            for (const l of hits) alertF(`Processo (${p})`, l.substring(0, 200));
+        }
+    } else {
+        warn("ps.txt / taskinfo.txt não encontrado");
+    }
+
+    // 5. Crashes
+    const crashes = findAllByPathSubstr(files, 'crashes_and_spins/');
+    if (crashes.length === 0) {
+        warn("Pasta crashes_and_spins não encontrada");
+    } else {
+        ok(`${crashes.length} arquivos em crashes_and_spins/`);
+        for (const f of crashes.slice(0, 20)) {
+            const name = (f.webkitRelativePath || f.name).toLowerCase();
+            if (name.match(/freefire|frida|cheat|dts\.freefire|dopamine|trollstore/)) {
+                alertF(`Crash suspeito: ${f.webkitRelativePath || f.name}`);
+            }
+        }
+    }
+
+    // 6. Lockdown / MobileActivation
+    const ldFile = findFileByPath(files, 'lockdownd.log');
+    if (ldFile) {
+        const raw = await readFileAsText(ldFile);
+        const susp = raw.split('\n').filter(l =>
+            /jailbreak|tweakloader|substitute|substrate|trollstore|dopamine|amfid|bypass/i.test(l)
+        ).slice(0, 5);
+        for (const l of susp) alertF(`lockdownd`, l.substring(0, 200));
+    }
+
+    // 7. SystemVersion
+    const sv = findFileByPath(files, 'SystemVersion.plist');
+    if (sv) {
+        const raw = await readFileAsText(sv);
+        const verMatch = raw.match(/ProductVersion[\s\S]{0,100}<string>([^<]+)/);
+        if (verMatch) ok(`iOS version: ${verMatch[1]}`);
+    }
+
+    renderResults({});
+}
+
+/* ============================================================
+   UI WIRING
+   ============================================================ */
+// Tab switching
+$$('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+        $$('.tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        $$('.tab-panel').forEach(p => p.classList.remove('active'));
+        $(`.tab-panel[data-panel="${t.dataset.tab}"]`).classList.add('active');
+    });
+});
+
+// File pickers
+$('#file-ndjson').addEventListener('change', e => {
+    if (e.target.files.length) handleNDJSON(e.target.files[0]);
+});
+$('#file-profile').addEventListener('change', e => {
+    if (e.target.files.length) handleProfile(e.target.files[0]);
+});
+$('#file-sysdiag').addEventListener('change', e => {
+    if (e.target.files.length) handleSysdiagnose(e.target.files);
+});
+
+// Drag & drop on each dropzone
+function wireDrop(dzId, handler, isFolder) {
+    const dz = $(dzId);
+    if (!dz) return;
+    ['dragenter','dragover'].forEach(ev =>
+        dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('dragging'); }));
+    ['dragleave','drop'].forEach(ev =>
+        dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('dragging'); }));
+    dz.addEventListener('drop', e => {
+        e.preventDefault();
+        if (isFolder) {
+            handler(e.dataTransfer.files);
+        } else if (e.dataTransfer.files.length) {
+            handler(e.dataTransfer.files[0]);
+        }
+    });
+}
+wireDrop('#dz-ndjson',  handleNDJSON, false);
+wireDrop('#dz-profile', handleProfile, false);
+wireDrop('#dz-sysdiag', handleSysdiagnose, true);
+
+// Actions
+$('#btn-back').addEventListener('click', () => {
+    $('#results').classList.add('hidden');
+    $('#actions').classList.add('hidden');
+    $('#uploadSection').classList.remove('hidden');
+    reset();
+});
+$('#btn-export').addEventListener('click', () => {
+    const blob = new Blob([lastReportText], { type: 'text/plain; charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `a4ther_scan_${new Date().toISOString().replace(/[:.]/g,'-').substring(0,19)}.txt`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+});
+$('#btn-share').addEventListener('click', async () => {
+    const text = lastReportText;
+    if (navigator.share) {
+        try { await navigator.share({ title: 'A4ther Scan', text }); } catch (e) {}
+    } else {
+        await navigator.clipboard.writeText(text);
+        alert('Relatório copiado pra clipboard');
+    }
+});
+</script>
+
+</body>
+</html>
