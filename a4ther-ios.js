@@ -20,7 +20,7 @@
 //    6. Vê o resultado
 // ============================================================
 
-const VERSION = "2.3.0";
+const VERSION = "2.4.0";
 
 // ============================================================
 //  DATA — bundles, domínios, IPs, TLDs, ASNs (109+ entries)
@@ -1259,17 +1259,19 @@ async function runSysdiagnoseAnalyzer() {
         fm = FileManager.local();
     }
 
-    // 1. Apps instalados
+    // 1. Apps instalados + install history (via mobile_installation.log)
     await scanSysdiagnoseApplications(folderPath, fm);
-    // 2. Configuration profiles
+    // 2. Configuration profiles (logs/MCState/Shared/profile-*.stub)
     await scanSysdiagnoseProfiles(folderPath, fm);
-    // 3. Install / uninstall history
-    await scanSysdiagnoseInstallLogs(folderPath, fm);
-    // 4. Network state (VPN, proxy, DNS)
+    // 3. Network state (NetworkExtension + Prefs + WiFi)
     await scanSysdiagnoseNetwork(folderPath, fm);
-    // 5. Process listing
+    // 4. Lockdown + MobileActivation (jailbreak indicators)
+    await scanSysdiagnoseLockdownAndActivation(folderPath, fm);
+    // 5. System info (iOS version + swcutil + remotectl)
+    await scanSysdiagnoseSystemInfo(folderPath, fm);
+    // 6. Process listing (ps.txt + taskinfo.txt)
     await scanSysdiagnoseProcesses(folderPath, fm);
-    // 6. Crash logs
+    // 7. Crash logs
     await scanSysdiagnoseCrashes(folderPath, fm);
 
     // Build UI
@@ -1325,32 +1327,81 @@ function tryListDir(folder, sub, fm) {
 }
 
 async function scanSysdiagnoseApplications(folder, fm) {
-    okItems.push("── Apps instalados ──");
-    const r = tryReadFile(folder, [
-        "summaries/Applications.txt",
-        "summary/Applications.txt",
-        "Applications.txt",
-        "mobile_installation/MobileInstallation.txt",
-        "MobileInstallation.txt",
-    ], fm);
-    if (!r) {
-        warnings.push("Lista de aplicações não encontrada no sysdiagnose");
+    okItems.push("── Apps instalados (mobile_installation.log) ──");
+    // PATH CORRETO confirmado: logs/MobileInstallation/mobile_installation.log[.0|.1|...]
+    // (não tem "summaries/Applications.txt" canônico em sysdiagnose puro)
+    let combinedRaw = "";
+    const logCandidates = [
+        "logs/MobileInstallation/mobile_installation.log",
+        "logs/MobileInstallation/mobile_installation.log.0",
+        "logs/MobileInstallation/mobile_installation.log.1",
+        "logs/MobileInstallation/mobile_installation.log.2",
+        "logs/MobileInstallation/mobile_installation.log.3",
+    ];
+    let logsFound = [];
+    for (const c of logCandidates) {
+        const p = joinFolderPath(folder, c, fm);
+        try {
+            if (fm.fileExists(p)) {
+                const raw = fm.readString(p);
+                if (raw) {
+                    combinedRaw += raw + "\n";
+                    logsFound.push(c.split("/").pop());
+                }
+            }
+        } catch (e) {}
+    }
+    // Fallback: tenta nomes de pasta variantes
+    if (!combinedRaw) {
+        for (const subdir of ["logs/MobileInstallation", "MobileInstallation", "mobile_installation"]) {
+            const lr = tryListDir(folder, subdir, fm);
+            if (lr) {
+                for (const f of lr.files) {
+                    if (!f.match(/^mobile_installation\.log/)) continue;
+                    const p = fm.joinPath(lr.path, f);
+                    try {
+                        const raw = fm.readString(p);
+                        if (raw) { combinedRaw += raw + "\n"; logsFound.push(f); }
+                    } catch (e) {}
+                }
+                if (combinedRaw) break;
+            }
+        }
+    }
+    if (!combinedRaw) {
+        warnings.push("logs/MobileInstallation/mobile_installation.log não encontrado");
         return;
     }
-    okItems.push(`Arquivo: ${r.path.split("/").pop()}`);
+    okItems.push(`Logs lidos: ${logsFound.join(", ")}`);
 
-    // Extrai bundle IDs (formato com.foo.bar)
-    const bundleRegex = /\b[a-zA-Z][a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,}\b/g;
+    // Extrai bundle IDs de eventos "Install succeeded for <bundle>" ou "Uninstall succeeded for <bundle>"
+    const installEvents = [];
+    const uninstallEvents = [];
     const bundles = new Set();
-    let m;
-    while ((m = bundleRegex.exec(r.raw)) !== null) {
-        const b = m[0];
-        // Filtra falsos positivos (versões tipo "1.2.3" e paths)
-        if (/^\d/.test(b)) continue;
-        if (b.includes("/")) continue;
-        bundles.add(b);
+    const lines = combinedRaw.split("\n");
+    for (const line of lines) {
+        // Padrão típico: "Install succeeded for com.dts.freefireth at ..."
+        let m = line.match(/Install succeeded for ([a-zA-Z0-9._-]+)/i);
+        if (m) {
+            bundles.add(m[1]);
+            installEvents.push(line);
+            continue;
+        }
+        m = line.match(/Uninstall succeeded for ([a-zA-Z0-9._-]+)/i);
+        if (m) {
+            bundles.add(m[1]);
+            uninstallEvents.push(line);
+            continue;
+        }
+        // Fallback: qualquer bundle ID na linha
+        const bm = line.match(/\b([a-z][a-z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,})\b/i);
+        if (bm) {
+            const b = bm[1];
+            if (!b.includes("/") && !/^\d/.test(b)) bundles.add(b);
+        }
     }
-    okItems.push(`${bundles.size} bundle IDs únicos extraídos`);
+    okItems.push(`${bundles.size} bundle IDs distintos no log`);
+    okItems.push(`${installEvents.length} eventos install, ${uninstallEvents.length} eventos uninstall`);
 
     // CHEAT_APPS check
     let cheatHits = 0;
@@ -1397,12 +1448,16 @@ async function scanSysdiagnoseApplications(folder, fm) {
 }
 
 async function scanSysdiagnoseProfiles(folder, fm) {
-    okItems.push("── Configuration Profiles ──");
+    okItems.push("── Configuration Profiles (MCState) ──");
+    // PATH CORRETO confirmado: logs/MCState/Shared/profile-*.stub (binary plists)
+    // + logs/MCState/Shared/MCSettingsEvents.plist (eventos)
     const candidates = [
+        "logs/MCState/Shared",
+        "logs/MCState",
+        "MCState/Shared",
+        // fallbacks legados (caso o sysdiagnose seja extraído de FFS)
         "Managed_Configuration_Profiles",
         "managed_configuration_profiles",
-        "configuration_profiles",
-        "ConfigurationProfiles",
     ];
     let dirInfo = null;
     for (const c of candidates) {
@@ -1410,16 +1465,16 @@ async function scanSysdiagnoseProfiles(folder, fm) {
         if (r) { dirInfo = r; break; }
     }
     if (!dirInfo) {
-        okItems.push("Nenhuma pasta de profiles (device sem profiles)");
+        okItems.push("logs/MCState/Shared não encontrado (device sem profiles)");
         return;
     }
     okItems.push(`Pasta: ${dirInfo.path.split("/").slice(-2).join("/")}`);
-    okItems.push(`${dirInfo.files.length} arquivos`);
 
     let profileCount = 0;
+    let stubsFound = 0;
     for (const f of dirInfo.files) {
+        // profile-*.stub são os profiles instalados (binary plists)
         if (!f.match(/\.(mobileconfig|plist|stub)$/i)) continue;
-        profileCount++;
         const full = fm.joinPath(dirInfo.path, f);
         let raw = "";
         try { raw = fm.readString(full); } catch (e) {}
@@ -1429,12 +1484,31 @@ async function scanSysdiagnoseProfiles(folder, fm) {
                 raw = data.toRawString();
             } catch (e) {}
         }
-        if (!raw || raw.length < 50) continue;
+        if (!raw || raw.length < 30) continue;
+        profileCount++;
+        if (f.endsWith(".stub")) stubsFound++;
         // Use analyzeProfile com noReset + prefix
-        analyzeProfile(raw, { noReset: true, filePrefix: `profile/${f}` });
+        analyzeProfile(raw, { noReset: true, filePrefix: `MCState/${f}` });
     }
-    if (profileCount === 0) okItems.push("Pasta vazia ou sem .mobileconfig");
-    else okItems.push(`${profileCount} profiles analisados`);
+    okItems.push(`${profileCount} profiles analisados (${stubsFound} stubs)`);
+
+    // MCSettingsEvents.plist tem o histórico de install/remove de profiles
+    const eventsCandidates = [
+        "logs/MCState/Shared/MCSettingsEvents.plist",
+        "MCState/Shared/MCSettingsEvents.plist",
+    ];
+    const er = tryReadFile(folder, eventsCandidates, fm);
+    if (er) {
+        okItems.push(`MCSettingsEvents.plist presente (${er.raw.length} bytes)`);
+        // Heurística: procura strings tipo "InstallProfile", "RemoveProfile" + identifier
+        const installCount = (er.raw.match(/InstallProfile|installProfile/gi) || []).length;
+        const removeCount = (er.raw.match(/RemoveProfile|removeProfile/gi) || []).length;
+        if (installCount > 0) okItems.push(`MCSettingsEvents: ${installCount} install events de profile`);
+        if (removeCount > 0) warnings.push(`MCSettingsEvents: ${removeCount} remove events de profile (possível limpeza)`);
+        // Cheat strings em events
+        const cheatHit = er.raw.match(/esign|feather|ksign|gbox|scarlet|sideload|trollstore|cheat|hack/i);
+        if (cheatHit) alerts.push(`[sysdiag/MCState] MCSettingsEvents contém keyword cheat: ${cheatHit[0]}`);
+    }
 }
 
 async function scanSysdiagnoseInstallLogs(folder, fm) {
@@ -1505,44 +1579,180 @@ function parseInstallLog(raw) {
 }
 
 async function scanSysdiagnoseNetwork(folder, fm) {
-    okItems.push("── Network state ──");
-    const candidates = [
-        "summaries/network_state.txt",
-        "network_state.txt",
-        "network/network_state.txt",
-        "summaries/system_state.txt",
-        "system_state.txt",
+    okItems.push("── Network state (NetworkExtension + Prefs + WiFi) ──");
+
+    // 1. logs/Networking/com.apple.networkextension.plist — VPN/NE clients ativos
+    const neCandidates = [
+        "logs/Networking/com.apple.networkextension.plist",
+        "logs/Networking/com.apple.networkextension.cache.plist",
+        "Networking/com.apple.networkextension.plist",
     ];
-    const r = tryReadFile(folder, candidates, fm);
-    if (!r) {
-        warnings.push("network_state.txt não encontrado");
-        return;
+    const ne = tryReadFile(folder, neCandidates, fm);
+    if (ne) {
+        okItems.push(`NetworkExtension: ${ne.path.split("/").pop()}`);
+        // Extrai bundle IDs de NE clients
+        const neBundleRegex = /\b[a-zA-Z][a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,}\b/g;
+        const neBundles = new Set();
+        let m;
+        while ((m = neBundleRegex.exec(ne.raw)) !== null) {
+            const b = m[0];
+            if (b.includes("/") || /^\d/.test(b)) continue;
+            // Filtra Apple frameworks
+            if (b.startsWith("com.apple.") && !b.includes("vpn")) continue;
+            neBundles.add(b);
+        }
+        if (neBundles.size > 0) {
+            okItems.push(`NE clients detectados: ${neBundles.size}`);
+            for (const b of neBundles) {
+                if (CHEAT_APPS[b]) {
+                    const sev = CHEAT_SEVERITY[b] || "MEDIUM";
+                    alerts.push(`[sysdiag/NE] CHEAT VPN ATIVA: ${b} — ${CHEAT_APPS[b]}`);
+                } else if (b.toLowerCase().includes("vpn") || b.toLowerCase().includes("proxy")) {
+                    warnings.push(`[sysdiag/NE] VPN/Proxy: ${b}`);
+                }
+            }
+        }
+    } else {
+        okItems.push("Nenhum NetworkExtension ativo (sem VPN/proxy)");
     }
-    okItems.push(`Arquivo: ${r.path.split("/").pop()}`);
-    const raw = r.raw;
 
-    // VPN configurada?
-    if (/utun\d+|ppp\d+|ipsec/i.test(raw)) {
-        alerts.push("[sysdiag/net] Interface VPN ativa (utun/ppp/ipsec) presente");
+    // 2. Preferences/SystemConfiguration/preferences.plist — DNS, proxy global
+    const prefsCandidates = [
+        "Preferences/SystemConfiguration/preferences.plist",
+        "preferences/SystemConfiguration/preferences.plist",
+        "logs/preferences/SystemConfiguration/preferences.plist",
+    ];
+    const prefs = tryReadFile(folder, prefsCandidates, fm);
+    if (prefs) {
+        okItems.push(`SystemConfiguration prefs: ${prefs.path.split("/").pop()}`);
+        const proxyMatch = prefs.raw.match(/HTTPProxy[^a-zA-Z]+([0-9.]+)/i);
+        if (proxyMatch) alerts.push(`[sysdiag/prefs] HTTPProxy global: ${proxyMatch[1]}`);
+        const httpsMatch = prefs.raw.match(/HTTPSProxy[^a-zA-Z]+([0-9.]+)/i);
+        if (httpsMatch) alerts.push(`[sysdiag/prefs] HTTPSProxy global: ${httpsMatch[1]}`);
+        const pacMatch = prefs.raw.match(/ProxyAutoConfigURLString[^<]*<string>([^<]+)/i);
+        if (pacMatch) alerts.push(`[sysdiag/prefs] PAC URL: ${pacMatch[1]}`);
+        // DNS servers
+        const dnsServers = prefs.raw.match(/ServerAddresses[\s\S]{0,400}/g) || [];
+        for (const ds of dnsServers.slice(0, 3)) {
+            const ips = ds.match(/(\d+\.\d+\.\d+\.\d+)/g);
+            if (ips) {
+                for (const ip of ips) {
+                    // Whitelist DNS Apple/Google/Cloudflare comuns
+                    if (["8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1"].includes(ip)) {
+                        okItems.push(`DNS: ${ip} (público comum)`);
+                    } else {
+                        warnings.push(`[sysdiag/dns] DNS custom: ${ip}`);
+                    }
+                }
+            }
+        }
     }
 
-    // Proxy ativo?
-    const proxyMatch = raw.match(/HTTPProxy[^a-zA-Z]+([0-9.]+)/i);
-    if (proxyMatch) alerts.push(`[sysdiag/net] HTTPProxy configurado: ${proxyMatch[1]}`);
-    const httpsMatch = raw.match(/HTTPSProxy[^a-zA-Z]+([0-9.]+)/i);
-    if (httpsMatch) alerts.push(`[sysdiag/net] HTTPSProxy configurado: ${httpsMatch[1]}`);
-
-    // DNS custom?
-    const dnsLines = raw.split("\n").filter(l => /dns|nameserver/i.test(l)).slice(0, 5);
-    for (const d of dnsLines) {
-        const trimmed = d.trim();
-        if (trimmed) okItems.push(`[net/dns] ${trimmed.substring(0, 120)}`);
+    // 3. WiFi info
+    const wifiCandidates = [
+        "WiFi/com.apple.wifi.plist",
+        "WiFi/com.apple.wifi.known-networks.plist",
+    ];
+    for (const wc of wifiCandidates) {
+        const wf = tryReadFile(folder, [wc], fm);
+        if (wf) {
+            okItems.push(`WiFi: ${wc.split("/").pop()} (${wf.raw.length} bytes)`);
+            // Procura ProxyHost/ProxyPort/PacFileUrl em config Wi-Fi
+            if (/Proxy(Host|Port|Server)/.test(wf.raw)) {
+                alerts.push(`[sysdiag/wifi] Wi-Fi com proxy POR SSID em ${wc.split("/").pop()}`);
+            }
+        }
     }
 
-    // Cheat domains/IPs em network state
+    // 4. Procura cheat infra em todos os arquivos network coletados
+    const allNetRaw = (ne?.raw || "") + (prefs?.raw || "");
     for (const [indicator, desc] of Object.entries(KNOWN_CHEAT_INFRA)) {
-        if (raw.toLowerCase().includes(indicator.toLowerCase())) {
-            alerts.push(`[sysdiag/net] CHEAT INFRA em network state: ${indicator} — ${desc}`);
+        if (allNetRaw.toLowerCase().includes(indicator.toLowerCase())) {
+            alerts.push(`[sysdiag/net] CHEAT INFRA em network config: ${indicator} — ${desc}`);
+        }
+    }
+}
+
+async function scanSysdiagnoseLockdownAndActivation(folder, fm) {
+    okItems.push("── Lockdown / MobileActivation (JB detect) ──");
+
+    // lockdownd.log — anomalias indicam JB
+    const ld = tryReadFile(folder, [
+        "logs/MobileLockdown/lockdownd.log",
+        "logs/lockdownd.log",
+    ], fm);
+    if (ld) {
+        okItems.push(`lockdownd.log: ${ld.raw.length} bytes`);
+        // Procura entradas suspeitas
+        const susp = ld.raw.split("\n").filter(l =>
+            /jailbreak|jb\.|tweakloader|substitute|substrate|trollstore|dopamine|amfid|bypass/i.test(l)
+        ).slice(0, 5);
+        for (const l of susp) {
+            alerts.push(`[sysdiag/lockdownd] ${l.substring(0, 180)}`);
+        }
+    }
+
+    // mobileactivationd.log — activation
+    const ma = tryReadFile(folder, [
+        "logs/MobileActivation/mobileactivationd.log",
+        "logs/MobileActivation/mobileactivationd.log.0",
+    ], fm);
+    if (ma) {
+        okItems.push(`mobileactivationd.log: ${ma.raw.length} bytes`);
+        // Procura por activation com server não-Apple ou bypass
+        const bypass = ma.raw.split("\n").filter(l =>
+            /bypass|patched|spoofed|cracked|fake/i.test(l)
+        ).slice(0, 5);
+        for (const l of bypass) {
+            alerts.push(`[sysdiag/activation] ${l.substring(0, 180)}`);
+        }
+    }
+}
+
+async function scanSysdiagnoseSystemInfo(folder, fm) {
+    okItems.push("── System Info ──");
+
+    // iOS version
+    const sv = tryReadFile(folder, [
+        "logs/SystemVersion/SystemVersion.plist",
+        "System/Library/CoreServices/SystemVersion.plist",
+    ], fm);
+    if (sv) {
+        const verMatch = sv.raw.match(/ProductVersion[\s\S]{0,100}<string>([^<]+)/);
+        const buildMatch = sv.raw.match(/ProductBuildVersion[\s\S]{0,100}<string>([^<]+)/);
+        if (verMatch) okItems.push(`iOS: ${verMatch[1]} (build ${buildMatch ? buildMatch[1] : "?"})`);
+    }
+
+    // swcutil_show.txt — apps com associated domains (Universal Links)
+    const swc = tryReadFile(folder, ["swcutil_show.txt"], fm);
+    if (swc) {
+        okItems.push(`swcutil_show.txt: ${swc.raw.length} bytes`);
+        // Extrai bundle IDs e domínios associados
+        const swcBundles = new Set();
+        const swcBundleRegex = /App ID:\s*[A-Z0-9]+\.([a-zA-Z][a-zA-Z0-9._-]+)/g;
+        let m;
+        while ((m = swcBundleRegex.exec(swc.raw)) !== null) {
+            swcBundles.add(m[1]);
+        }
+        if (swcBundles.size > 0) {
+            okItems.push(`Apps com Universal Links: ${swcBundles.size}`);
+            for (const b of swcBundles) {
+                if (CHEAT_APPS[b]) {
+                    alerts.push(`[sysdiag/swcutil] CHEAT app com Universal Links: ${b}`);
+                }
+            }
+        }
+    }
+
+    // remotectl_dumpstate.txt — system info detalhado
+    const rd = tryReadFile(folder, ["remotectl_dumpstate.txt"], fm);
+    if (rd) {
+        // Procura JB indicators
+        const jbHints = rd.raw.split("\n").filter(l =>
+            /jailbroken|trollstore|sileo|cydia|frida|substrate|dopamine|palera1n/i.test(l)
+        ).slice(0, 3);
+        for (const l of jbHints) {
+            alerts.push(`[sysdiag/remotectl] ${l.substring(0, 180)}`);
         }
     }
 }
