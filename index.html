@@ -630,7 +630,7 @@ footer a:hover { color: var(--cyan); }
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "2.5.0";
+const VERSION = "2.6.0";
 document.getElementById('version').textContent = `v${VERSION}`;
 
 /* ============================================================
@@ -1323,27 +1323,102 @@ async function handleProfile(file) {
 }
 
 /* ============================================================
-   SYSDIAGNOSE FOLDER ANALYZER
+   SYSDIAGNOSE FOLDER ANALYZER (recursive deep-scan, KellerSS-style)
    ============================================================ */
-function findFileByPath(files, suffixOrName) {
-    // files is FileList; webkitRelativePath shows folder structure
-    const suffix = suffixOrName.toLowerCase();
-    for (const f of files) {
-        const rel = (f.webkitRelativePath || f.name).toLowerCase();
-        if (rel.endsWith('/' + suffix) || rel.endsWith(suffix) || rel.includes('/' + suffix + '/') || rel.endsWith(suffix)) {
-            return f;
+
+// Extrai strings ASCII printáveis de qualquer texto (suporta binary plists)
+function extractStrings(raw, minLen) {
+    minLen = minLen || 4;
+    const strings = [];
+    let cur = '';
+    for (let i = 0; i < raw.length; i++) {
+        const c = raw.charCodeAt(i);
+        if (c >= 32 && c < 127) {
+            cur += raw.charAt(i);
+        } else {
+            if (cur.length >= minLen) strings.push(cur);
+            cur = '';
         }
     }
-    return null;
-}
-function findAllByPathSubstr(files, substr) {
-    const sub = substr.toLowerCase();
-    return Array.from(files).filter(f => (f.webkitRelativePath || f.name).toLowerCase().includes(sub));
+    if (cur.length >= minLen) strings.push(cur);
+    return strings;
 }
 
-async function readFileAsText(file) {
+async function readSafe(file, maxBytes) {
+    maxBytes = maxBytes || 20 * 1024 * 1024;
+    if (file.size > maxBytes) return null;
     try { return await file.text(); }
     catch (e) { return ""; }
+}
+
+// Indicadores de cada categoria pra grep global
+const SCAN_PATTERNS = {
+    bundleIdRegex:     /\b([a-zA-Z][a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,})\b/g,
+    uuidOpaqueRegex:   /([a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})/g,
+    uuidStandaloneRegex: /\b([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\b/g,
+    dnsResellerRegex:  /\b(nextdns|controld|control-d|cloudflare\.warp|adguard\.dns|opendns|quad9|cleanbrowsing|mullvad\.dns)\b/gi,
+    cheatKeywordRegex: /\b(esign|feather|ksign|gbox|scarlet|sideload|trollstore|sileo|cydia|zebra|altstore|appdb|tutuapp|appcake|ignition|buildstore|iosgods|filza|ifunbox|geranium|dopamine|palera1n|unc0ver|checkra1n|frida|cycript|substrate|substitute|libhooker|tweakloader|cheat|aimbot|wallhack|injector|ffh4x|hack\.menu|mod\.menu|mitmproxy|shadowrocket|surge|potatso|quantumult|hiddify|shadowsocks|proxyff|cracked)\b/gi,
+    ffCheatDomainRegex:/\b(fatalitycheats\.xyz|anubisw\.online|api\.baontq\.xyz|ggwhitehawk\.com|ggpolarbear\.com|ggblueshark\.com|purplevioleto\.com|ipasign\.cc|ipa\.aspy\.dev)\b/gi,
+    installerRegex:    /\b(Install (succeeded|failed|started) for [a-zA-Z][a-zA-Z0-9._-]+)/gi,
+    uninstallerRegex:  /\b(Uninstall (succeeded|failed|started) for [a-zA-Z][a-zA-Z0-9._-]+)/gi,
+    profileIdRegex:    /(?:PayloadIdentifier[\s\S]{0,80}<string>|[\x00-\x1f])(com\.[a-zA-Z][a-zA-Z0-9._-]+(?:profile|mdm|config)?(?:-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})?)/gi,
+    proxyRegex:        /\b(HTTPProxy|HTTPSProxy|ProxyServer|ProxyAutoConfigURLString)\b/gi,
+};
+
+// Skipa arquivos enormes ou puramente binários sem strings úteis
+function shouldScanFile(file) {
+    const name = (file.webkitRelativePath || file.name).toLowerCase();
+    // Skipa binários grandes que não têm valor
+    if (file.size > 20 * 1024 * 1024) return false; // > 20 MB
+    if (name.endsWith('.sqlite') || name.endsWith('.sqlite-wal') || name.endsWith('.db')) return false;
+    if (name.endsWith('.jpg') || name.endsWith('.png') || name.endsWith('.heic')) return false;
+    if (name.endsWith('.mp4') || name.endsWith('.mov')) return false;
+    if (name.includes('.logarchive/')) return false; // unified log binary
+    return true;
+}
+
+// Tipo de arquivo importante (com analise específica)
+function fileType(file) {
+    const name = (file.webkitRelativePath || file.name).toLowerCase();
+    if (name.includes('mobileinstallation/mobile_installation.log')) return 'installLog';
+    if (name.includes('mcstate/shared/mcsettingsevents.plist')) return 'mcEvents';
+    if (name.includes('mcstate/shared/profile-')) return 'profileStub';
+    if (name.includes('com.apple.networkextension.plist')) return 'networkExt';
+    if (name.includes('preferences/systemconfiguration/preferences.plist')) return 'netPrefs';
+    if (name.endsWith('/ps.txt') || name.endsWith('\\ps.txt')) return 'psFile';
+    if (name.endsWith('/taskinfo.txt')) return 'taskinfo';
+    if (name.includes('lockdownd.log')) return 'lockdown';
+    if (name.includes('mobileactivationd.log')) return 'mobileActivation';
+    if (name.endsWith('systemversion.plist')) return 'systemVersion';
+    if (name.endsWith('/swcutil_show.txt')) return 'swcutil';
+    if (name.includes('crashes_and_spins/') && name.endsWith('.ips')) return 'crashIPS';
+    if (name.endsWith('.mobileconfig') || name.endsWith('.stub')) return 'profile';
+    if (name.endsWith('.plist')) return 'plist';
+    if (name.endsWith('.txt') || name.endsWith('.log') || name.endsWith('.log.0') || name.endsWith('.log.1')) return 'text';
+    if (name.endsWith('.json')) return 'json';
+    return 'other';
+}
+
+// Categoriza um bundle ID encontrado
+function classifyBundle(b, source) {
+    if (CHEAT_APPS[b]) {
+        return { sev: CHEAT_APPS[b].sev, desc: CHEAT_APPS[b].desc };
+    }
+    if (SCAN_PATTERNS.uuidOpaqueRegex.test(b)) {
+        SCAN_PATTERNS.uuidOpaqueRegex.lastIndex = 0;
+        const isDNS = /nextdns|controld|cloudflare\.warp|adguard\.dns|opendns|quad9/i.test(b);
+        return { sev: 'CRITICAL', desc: isDNS ? "DNS profile UUID opaco - sequestra DNS (MITM em FF login)" : "Profile com UUID opaco (MDM/reseller)" };
+    }
+    if (/nextdns|controld|cloudflare\.warp|adguard\.dns/i.test(b) && !FF_OFFICIAL.has(b)) {
+        return { sev: 'HIGH', desc: "DNS reseller / sequester" };
+    }
+    if (b.toLowerCase().includes('freefire') && !FF_OFFICIAL.has(b)) {
+        return { sev: 'CRITICAL', desc: "Bundle FF NÃO oficial (re-sign / IPA mod)" };
+    }
+    if (/(esign|feather|ksign|gbox|scarlet|trollstore|sideload|cydia|sileo|iosgods|filza)/i.test(b)) {
+        return { sev: 'HIGH', desc: "Cheat / sideloader (heurística)" };
+    }
+    return null;
 }
 
 async function handleSysdiagnose(filesList) {
@@ -1353,144 +1428,293 @@ async function handleSysdiagnose(filesList) {
     const files = Array.from(filesList);
     ok(`Pasta selecionada: ${files.length} arquivos`);
 
-    // 1. mobile_installation.log
-    const installLogs = findAllByPathSubstr(files, 'mobileinstallation/mobile_installation.log');
-    if (installLogs.length === 0) {
-        warn("logs/MobileInstallation/mobile_installation.log não encontrado");
-    } else {
-        ok(`mobile_installation logs: ${installLogs.length}`);
-        let combinedLog = "";
-        for (const f of installLogs) combinedLog += await readFileAsText(f) + "\n";
+    // Encontra a pasta raiz (caso usuário tenha aberto um diretório pai)
+    const allPaths = files.map(f => f.webkitRelativePath || f.name);
+    const looksLikeSysdiag = allPaths.some(p => /\/(logs\/MobileInstallation|summaries|ps\.txt|taskinfo\.txt|crashes_and_spins)/i.test(p));
+    if (!looksLikeSysdiag) {
+        warn("⚠ Pasta não parece sysdiagnose - falta logs/, ps.txt, summaries/, etc.");
+        warn("Certifique que o .tar.gz foi extraído e selecionou a pasta sysdiagnose_*");
+    }
 
-        const bundles = new Set();
-        let installCount = 0, uninstallCount = 0;
-        for (const line of combinedLog.split('\n')) {
-            let m = line.match(/Install succeeded for ([a-zA-Z0-9._-]+)/i);
-            if (m) { bundles.add(m[1]); installCount++; continue; }
-            m = line.match(/Uninstall succeeded for ([a-zA-Z0-9._-]+)/i);
-            if (m) { bundles.add(m[1]); uninstallCount++; continue; }
-            const bm = line.match(/\b([a-z][a-z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,})\b/i);
-            if (bm && !bm[1].includes('/')) bundles.add(bm[1]);
+    // ─── Mapeia arquivos por tipo ───
+    const byType = {};
+    let totalScanned = 0, totalSkipped = 0;
+    for (const f of files) {
+        const type = fileType(f);
+        if (!byType[type]) byType[type] = [];
+        byType[type].push(f);
+    }
+    ok(`Tipos: ${Object.entries(byType).map(([k,v]) => `${k}=${v.length}`).join(', ')}`);
+
+    // ─── SCAN PASS 1: install/uninstall logs (KellerSS pega bundles aqui) ───
+    if (byType.installLog) {
+        let combined = "";
+        for (const f of byType.installLog) {
+            const raw = await readSafe(f);
+            if (raw) combined += raw + "\n";
         }
-        ok(`${bundles.size} bundles distintos · ${installCount} install · ${uninstallCount} uninstall`);
-
-        const opaqueRegex = /^[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
-        const dnsResellerRegex = /(nextdns|controld|control-d|cloudflare.*warp|adguard.*dns|opendns|quad9)/i;
-        for (const b of bundles) {
-            if (CHEAT_APPS[b]) {
-                const info = CHEAT_APPS[b];
-                alertF(`[${info.sev}] ${b}`, info.desc);
-            } else if (opaqueRegex.test(b)) {
-                alertF(`[CRITICAL] Profile com UUID opaco: ${b}`);
-            } else if (dnsResellerRegex.test(b)) {
-                alertF(`[HIGH] DNS reseller: ${b}`);
-            } else if (b.toLowerCase().includes("freefire") && !FF_OFFICIAL.has(b)) {
-                alertF(`[CRITICAL] FF não oficial: ${b}`);
+        if (combined) {
+            const bundleSet = new Set();
+            let installs = 0, uninstalls = 0;
+            for (const line of combined.split('\n')) {
+                let m = line.match(/Install succeeded for ([a-zA-Z0-9._-]+)/i);
+                if (m) { bundleSet.add(m[1]); installs++; continue; }
+                m = line.match(/Uninstall succeeded for ([a-zA-Z0-9._-]+)/i);
+                if (m) { bundleSet.add(m[1]); uninstalls++; continue; }
+                const bm = line.match(/\b([a-z][a-z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,})\b/i);
+                if (bm && !bm[1].includes('/')) bundleSet.add(bm[1]);
+            }
+            ok(`mobile_installation: ${bundleSet.size} bundles · ${installs}+/${uninstalls}- events`);
+            for (const b of bundleSet) {
+                const c = classifyBundle(b);
+                if (c) alertF(`[${c.sev}] App em install log: ${b}`, c.desc);
             }
         }
     }
 
-    // 2. MCState profiles
-    const mcStubs = findAllByPathSubstr(files, 'mcstate/shared/profile-');
-    const mcEvents = findFileByPath(files, 'MCSettingsEvents.plist');
-    if (mcStubs.length === 0 && !mcEvents) {
-        ok("Nenhum profile no MCState (device sem profiles)");
-    } else {
-        ok(`MCState: ${mcStubs.length} profile stubs ${mcEvents ? '+ MCSettingsEvents.plist' : ''}`);
-        for (const f of mcStubs) {
-            const raw = await readFileAsText(f);
-            if (raw.length > 30) analyzeProfileText(raw);
+    // ─── SCAN PASS 2: profile stubs + MCSettingsEvents (PERFIS MDM) ───
+    if (byType.profileStub) {
+        ok(`${byType.profileStub.length} profile-*.stub files`);
+        for (const f of byType.profileStub) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            analyzeProfileText(raw);
         }
-        if (mcEvents) {
-            const raw = await readFileAsText(mcEvents);
+    }
+    if (byType.mcEvents) {
+        for (const f of byType.mcEvents) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            // Extrai TODOS os profile identifiers via strings ASCII
+            const strings = extractStrings(raw, 5);
             const profileIds = new Set();
-            const re = /(com\.[a-zA-Z][a-zA-Z0-9._-]+(?:profile)?(?:-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})?)/gi;
-            let m;
-            while ((m = re.exec(raw)) !== null) {
-                const pid = m[1];
-                if (pid.startsWith("com.apple.") && !pid.includes("profile") && !pid.includes("mdm")) continue;
-                profileIds.add(pid);
+            for (const s of strings) {
+                // Match anything that looks like an iOS profile identifier
+                if (s.match(/^[a-z][a-z0-9._-]+\.(profile|mdm|config|conf|payload)(-[0-9A-Fa-f-]+)?$/i)) {
+                    profileIds.add(s);
+                }
+                // Also catch com.* identifiers with UUID suffix
+                if (s.match(/^com\.[a-z][a-z0-9._-]+-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/i)) {
+                    profileIds.add(s);
+                }
             }
+            ok(`MCSettingsEvents: ${profileIds.size} profile identifiers extraídos`);
             for (const pid of profileIds) {
-                const hasUUID = /[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/.test(pid);
-                const isDNS = /nextdns|controld|control-d|adguard.*dns|cloudflare.*warp/i.test(pid);
-                if (hasUUID && isDNS) alertF(`[CRITICAL] DNS profile UUID opaco: ${pid}`, "Sequestra DNS = MITM em FF login");
-                else if (hasUUID) alertF(`[HIGH] Profile UUID opaco: ${pid}`);
-                else if (isDNS) alertF(`[HIGH] DNS reseller profile: ${pid}`);
-                else if (CHEAT_APPS[pid]) alertF(`[CRITICAL] Profile catalogado: ${pid}`);
-                else if (/(esign|feather|ksign|gbox|scarlet|sideload|trollstore)/i.test(pid)) alertF(`[CRITICAL] Cert sideloader profile: ${pid}`);
-                else if (!pid.startsWith("com.apple.")) warn(`[MEDIUM] Profile não-Apple: ${pid}`);
+                const c = classifyBundle(pid);
+                if (c) {
+                    alertF(`[${c.sev}] PROFILE MDM: ${pid}`, c.desc);
+                } else if (!pid.startsWith('com.apple.')) {
+                    warn(`[MEDIUM] Profile não-Apple no histórico: ${pid}`);
+                }
             }
         }
     }
 
-    // 3. NetworkExtension
-    const ne = findFileByPath(files, 'com.apple.networkextension.plist');
-    if (ne) {
-        const raw = await readFileAsText(ne);
-        ok(`NetworkExtension.plist (${raw.length} bytes)`);
-        const re = /\b[a-zA-Z][a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,}\b/g;
-        const neBundles = new Set();
+    // ─── SCAN PASS 3: NetworkExtension + Network Prefs ───
+    if (byType.networkExt) {
+        for (const f of byType.networkExt) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            const strings = extractStrings(raw, 5);
+            const neBundles = new Set();
+            for (const s of strings) {
+                if (s.match(/^[a-z][a-z0-9._-]+\.[a-z0-9._-]+$/i) && s.split('.').length >= 2) {
+                    neBundles.add(s);
+                }
+            }
+            ok(`NetworkExtension: ${neBundles.size} bundle IDs extraídos`);
+            for (const b of neBundles) {
+                if (b.startsWith("com.apple.") && !b.includes("vpn")) continue;
+                const c = classifyBundle(b);
+                if (c) alertF(`[${c.sev}] VPN/NE ATIVA: ${b}`, c.desc);
+                else if (b.toLowerCase().includes('vpn') || b.toLowerCase().includes('proxy')) {
+                    warn(`[MEDIUM] VPN/Proxy NE: ${b}`);
+                }
+            }
+        }
+    }
+
+    // ─── SCAN PASS 4: ps.txt / taskinfo.txt (processos suspeitos) ───
+    if (byType.psFile || byType.taskinfo) {
+        const psFiles = (byType.psFile || []).concat(byType.taskinfo || []);
+        for (const f of psFiles) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            ok(`${f.name}: ${raw.length} bytes`);
+            const patterns = [
+                "frida-server", "frida-gadget", "cycript", "gdb", "lldb",
+                "debugserver", "substrated", "MobileSubstrate", "libsubstitute",
+                "trollstore", "TrollStore", "iSH", "Cydia", "Sileo", "Zebra",
+                "Dopamine", "checkra1n", "palera1n", "unc0ver"
+            ];
+            const lines = raw.split('\n');
+            for (const p of patterns) {
+                const hits = lines.filter(l => l.toLowerCase().includes(p.toLowerCase())).slice(0, 2);
+                for (const l of hits) alertF(`Processo (${p})`, l.substring(0, 200));
+            }
+        }
+    }
+
+    // ─── SCAN PASS 5: Crashes (look for Frida/Substrate injection traces) ───
+    if (byType.crashIPS) {
+        ok(`${byType.crashIPS.length} crash logs`);
+        for (const f of byType.crashIPS.slice(0, 30)) {
+            const name = (f.webkitRelativePath || f.name);
+            if (/freefire|frida|cheat|dts\.freefire|dopamine|trollstore|substrate/i.test(name)) {
+                alertF(`[HIGH] Crash file suspeito: ${name.split('/').pop()}`);
+            }
+            // Read top crashes pra ver injection
+            const raw = await readSafe(f, 1024 * 1024); // max 1MB por crash
+            if (!raw) continue;
+            const hits = ['FridaGadget', 'frida-gadget', 'libsubstrate', 'substitute', 'DYLD_INSERT_LIBRARIES', 'Cycript', '/var/jb/'];
+            for (const h of hits) {
+                if (raw.includes(h)) {
+                    alertF(`[CRITICAL] Crash com '${h}'`, name.split('/').pop());
+                    break;
+                }
+            }
+        }
+    }
+
+    // ─── SCAN PASS 6: Lockdown / MobileActivation ───
+    if (byType.lockdown) {
+        for (const f of byType.lockdown) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            const susp = raw.split('\n').filter(l =>
+                /jailbreak|tweakloader|substitute|substrate|trollstore|dopamine|amfid|bypass/i.test(l)
+            ).slice(0, 3);
+            for (const l of susp) alertF(`lockdownd`, l.substring(0, 200));
+        }
+    }
+
+    // ─── SCAN PASS 7: SystemVersion ───
+    if (byType.systemVersion) {
+        for (const f of byType.systemVersion) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            const verMatch = raw.match(/ProductVersion[\s\S]{0,200}<string>([^<]+)/);
+            if (verMatch) ok(`iOS: ${verMatch[1]}`);
+        }
+    }
+
+    // ─── SCAN PASS 8 (KILLER): GREP EM TODOS OS ARQUIVOS ───
+    // KellerSS faz isso - varre TUDO procurando padrões conhecidos.
+    showLoading('Pass 8: scan recursivo em todos os arquivos…');
+
+    const foundProfiles = new Map();   // identifier → array de fontes
+    const foundBundles = new Map();    // bundle → array de fontes
+    const foundCheatStrings = new Map(); // string → array de fontes
+    const foundCheatDomains = new Map();
+
+    let scanCount = 0;
+    const allScanFiles = files.filter(shouldScanFile);
+
+    for (const f of allScanFiles) {
+        const raw = await readSafe(f);
+        if (!raw) { totalSkipped++; continue; }
+        totalScanned++;
+        scanCount++;
+        if (scanCount % 50 === 0) {
+            showLoading(`Pass 8: ${scanCount}/${allScanFiles.length} arquivos…`);
+        }
+
+        const sourceName = (f.webkitRelativePath || f.name).split('/').slice(-2).join('/');
+
+        // Pega strings ASCII (suporta binário)
+        const strings = raw.length > 50000 ? raw : extractStrings(raw, 6).join('\n');
+
+        // 1) Profile IDs com UUID opaco
         let m;
-        while ((m = re.exec(raw)) !== null) {
-            const b = m[0];
-            if (b.startsWith("com.apple.") && !b.includes("vpn")) continue;
-            neBundles.add(b);
+        const seenInThisFile = new Set();
+        const opaqueRe = /[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/g;
+        while ((m = opaqueRe.exec(strings)) !== null) {
+            if (seenInThisFile.has(m[0])) continue;
+            seenInThisFile.add(m[0]);
+            if (!foundProfiles.has(m[0])) foundProfiles.set(m[0], []);
+            foundProfiles.get(m[0]).push(sourceName);
         }
-        for (const b of neBundles) {
-            if (CHEAT_APPS[b]) alertF(`[${CHEAT_APPS[b].sev}] VPN/NE ATIVA: ${b}`, CHEAT_APPS[b].desc);
-            else if (b.toLowerCase().includes("vpn") || b.toLowerCase().includes("proxy")) warn(`VPN/Proxy NE: ${b}`);
-        }
-    }
 
-    // 4. ps.txt / taskinfo.txt
-    const psFile = findFileByPath(files, 'ps.txt') || findFileByPath(files, 'taskinfo.txt');
-    if (psFile) {
-        const raw = await readFileAsText(psFile);
-        ok(`${psFile.name} (${raw.length} bytes)`);
-        const patterns = ["frida", "frida-server", "frida-gadget", "cycript", "gdb", "lldb",
-                          "debugserver", "substrated", "Substrate", "MobileSubstrate",
-                          "cheat", "hack", "aimbot", "injector",
-                          "trollstore", "iSH", "Cydia", "Sileo", "Zebra"];
-        const lines = raw.split('\n');
-        for (const p of patterns) {
-            const hits = lines.filter(l => l.toLowerCase().includes(p.toLowerCase())).slice(0, 2);
-            for (const l of hits) alertF(`Processo (${p})`, l.substring(0, 200));
+        // 2) Profile IDs sem UUID mas com nome reseller
+        const dnsRe = /(?:com|io)\.[a-zA-Z0-9._-]+\.(?:nextdns|controld|adguard|cloudflare|warp|opendns|quad9)[a-zA-Z0-9._-]*/gi;
+        while ((m = dnsRe.exec(strings)) !== null) {
+            if (seenInThisFile.has(m[0])) continue;
+            seenInThisFile.add(m[0]);
+            if (!foundProfiles.has(m[0])) foundProfiles.set(m[0], []);
+            foundProfiles.get(m[0]).push(sourceName);
         }
-    } else {
-        warn("ps.txt / taskinfo.txt não encontrado");
-    }
 
-    // 5. Crashes
-    const crashes = findAllByPathSubstr(files, 'crashes_and_spins/');
-    if (crashes.length === 0) {
-        warn("Pasta crashes_and_spins não encontrada");
-    } else {
-        ok(`${crashes.length} arquivos em crashes_and_spins/`);
-        for (const f of crashes.slice(0, 20)) {
-            const name = (f.webkitRelativePath || f.name).toLowerCase();
-            if (name.match(/freefire|frida|cheat|dts\.freefire|dopamine|trollstore/)) {
-                alertF(`Crash suspeito: ${f.webkitRelativePath || f.name}`);
+        // 3) Cheat keywords (case insensitive)
+        const ckRe = /\b(esign|feather|ksign|gbox|scarlet|trollstore|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|iosgods|filza|ifunbox|geranium|frida|cycript|substrate|libhooker|ffh4x|aimbot|wallhack|cheat\.menu|mod\.menu|injector)\b/gi;
+        while ((m = ckRe.exec(strings)) !== null) {
+            const kw = m[0].toLowerCase();
+            if (seenInThisFile.has('kw:' + kw)) continue;
+            seenInThisFile.add('kw:' + kw);
+            if (!foundCheatStrings.has(kw)) foundCheatStrings.set(kw, []);
+            foundCheatStrings.get(kw).push(sourceName);
+        }
+
+        // 4) Cheat domains
+        for (const cd of Object.keys(KNOWN_CHEAT_INFRA)) {
+            if (cd.match(/^\d+\./)) continue; // skip IPs (handled separately)
+            if (strings.includes(cd)) {
+                if (!foundCheatDomains.has(cd)) foundCheatDomains.set(cd, []);
+                if (!foundCheatDomains.get(cd).includes(sourceName)) {
+                    foundCheatDomains.get(cd).push(sourceName);
+                }
+            }
+        }
+
+        // 5) CHEAT_APPS bundles
+        for (const b of Object.keys(CHEAT_APPS)) {
+            if (strings.includes(b)) {
+                if (!foundBundles.has(b)) foundBundles.set(b, []);
+                if (!foundBundles.get(b).includes(sourceName)) {
+                    foundBundles.get(b).push(sourceName);
+                }
             }
         }
     }
 
-    // 6. Lockdown / MobileActivation
-    const ldFile = findFileByPath(files, 'lockdownd.log');
-    if (ldFile) {
-        const raw = await readFileAsText(ldFile);
-        const susp = raw.split('\n').filter(l =>
-            /jailbreak|tweakloader|substitute|substrate|trollstore|dopamine|amfid|bypass/i.test(l)
-        ).slice(0, 5);
-        for (const l of susp) alertF(`lockdownd`, l.substring(0, 200));
+    ok(`Pass 8: ${totalScanned} arquivos varridos (${totalSkipped} skipados)`);
+
+    // ─── Emite alerts agregados ───
+    if (foundProfiles.size > 0) {
+        ok(`◆ ${foundProfiles.size} profile identifiers encontrados via grep recursivo`);
+        for (const [pid, sources] of foundProfiles) {
+            const c = classifyBundle(pid);
+            if (c) {
+                alertF(`[${c.sev}] PROFILE: ${pid}`, `${c.desc} · fontes: ${sources.slice(0,3).join(', ')}${sources.length>3 ? ` +${sources.length-3}` : ''}`);
+            } else if (!pid.startsWith('com.apple.')) {
+                warn(`[MEDIUM] Profile não-catalogado: ${pid}`, `fontes: ${sources.slice(0,2).join(', ')}`);
+            }
+        }
     }
 
-    // 7. SystemVersion
-    const sv = findFileByPath(files, 'SystemVersion.plist');
-    if (sv) {
-        const raw = await readFileAsText(sv);
-        const verMatch = raw.match(/ProductVersion[\s\S]{0,100}<string>([^<]+)/);
-        if (verMatch) ok(`iOS version: ${verMatch[1]}`);
+    if (foundBundles.size > 0) {
+        const newOnes = [...foundBundles.keys()].filter(b => !alerts.some(a => a.msg && a.msg.includes(b)));
+        if (newOnes.length > 0) {
+            ok(`◆ ${newOnes.length} cheat bundles encontrados via grep recursivo`);
+            for (const b of newOnes) {
+                const info = CHEAT_APPS[b];
+                const sources = foundBundles.get(b);
+                alertF(`[${info.sev}] CHEAT BUNDLE: ${b}`, `${info.desc} · fontes: ${sources.slice(0,3).join(', ')}${sources.length>3 ? ` +${sources.length-3}` : ''}`);
+            }
+        }
+    }
+
+    if (foundCheatStrings.size > 0) {
+        ok(`◆ ${foundCheatStrings.size} keywords cheat encontradas em arquivos`);
+        for (const [kw, sources] of foundCheatStrings) {
+            warn(`[MEDIUM] Keyword cheat '${kw}'`, `${sources.length} arquivo(s): ${sources.slice(0,2).join(', ')}${sources.length>2 ? ` +${sources.length-2}` : ''}`);
+        }
+    }
+
+    if (foundCheatDomains.size > 0) {
+        for (const [cd, sources] of foundCheatDomains) {
+            const desc = KNOWN_CHEAT_INFRA[cd] || "cheat infra";
+            alertF(`[CRITICAL] CHEAT DOMAIN: ${cd}`, `${desc} · fontes: ${sources.slice(0,2).join(', ')}`);
+        }
     }
 
     renderResults({});
