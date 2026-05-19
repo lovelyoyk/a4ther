@@ -22,7 +22,7 @@
 #     chmod +x FFScanner.sh && sh FFScanner.sh
 # ============================================================
 
-VERSION="3.7.0"
+VERSION="3.8.0"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -2256,16 +2256,38 @@ for PDIR in $PROFILE_DIRS; do
                 # PayloadType crítico: VPN / proxy / CA root / web filter
                 PT_VPN=$(echo "$CONTENT" | grep -iE 'com\.apple\.vpn\.managed|com\.apple\.vpn\.managed\.applayer' | head -n 1)
                 PT_PROXY=$(echo "$CONTENT" | grep -iE 'com\.apple\.proxy\.http\.global|HTTPProxy|HTTPSProxy|ProxyServer|ProxyAutoConfigURLString' | head -n 1)
-                PT_CA=$(echo "$CONTENT" | grep -iE 'com\.apple\.security\.root|com\.apple\.security\.pkcs1|com\.apple\.security\.pkcs12' | head -n 1)
+                PT_CA=$(echo "$CONTENT" | grep -iE 'com\.apple\.security\.root|com\.apple\.security\.pkcs1|com\.apple\.security\.pkcs12|com\.apple\.security\.scep' | head -n 1)
                 PT_WCF=$(echo "$CONTENT" | grep -iE 'com\.apple\.webcontent-filter' | head -n 1)
-                PT_DNS=$(echo "$CONTENT" | grep -iE 'com\.apple\.dnsSettings\.managed' | head -n 1)
+                PT_DNS=$(echo "$CONTENT" | grep -iE 'com\.apple\.dnsSettings\.managed|com\.apple\.dnsProxy\.managed|com\.apple\.relay\.managed' | head -n 1)
                 PT_MDM=$(echo "$CONTENT" | grep -iE 'com\.apple\.mdm' | head -n 1)
-                [ -n "$PT_VPN" ]   && { alert "  Profile com VPN payload: $FULL"; CFG_HITS=$((CFG_HITS+1)); }
-                [ -n "$PT_PROXY" ] && { alert "  Profile com PROXY/HTTPProxy payload: $FULL"; CFG_HITS=$((CFG_HITS+1)); }
-                [ -n "$PT_CA" ]    && { alert "  Profile com CA root (MITM-capable): $FULL"; CFG_HITS=$((CFG_HITS+1)); }
-                [ -n "$PT_WCF" ]   && { alert "  Profile com WebContentFilter (proxy): $FULL"; CFG_HITS=$((CFG_HITS+1)); }
-                [ -n "$PT_DNS" ]   && { alert "  Profile com DNS customizado: $FULL"; CFG_HITS=$((CFG_HITS+1)); }
-                [ -n "$PT_MDM" ]   && { warn  "  Profile com MDM (controle remoto)"; }
+                # SystemProfile Restrictions (Screen Time / applicationaccess / passwordpolicy)
+                PT_RESTR=$(echo "$CONTENT" | grep -iE 'com\.apple\.applicationaccess|com\.apple\.applicationaccess\.new|com\.apple\.screentimepolicy|com\.apple\.passwordpolicy|com\.apple\.systempolicy\.kernel-extension-policy|com\.apple\.systempolicy\.system-extension-policy' | head -n 1)
+                PT_AIRPLAY=$(echo "$CONTENT" | grep -iE 'com\.apple\.airplay\.security' | head -n 1)
+                PT_WIFI=$(echo "$CONTENT" | grep -iE 'com\.apple\.wifi\.managed' | head -n 1)
+                PT_CERT_PKCS=$(echo "$CONTENT" | grep -iE 'com\.apple\.security\.pkcs' | head -n 1)
+                PT_ACTIVATION=$(echo "$CONTENT" | grep -iE 'com\.apple\.iTunesStoreAccount|com\.apple\.activation' | head -n 1)
+
+                [ -n "$PT_VPN" ]      && { alert "  Profile com VPN payload: $FULL"; CFG_HITS=$((CFG_HITS+1)); }
+                [ -n "$PT_PROXY" ]    && { alert "  Profile com PROXY/HTTPProxy payload: $FULL"; CFG_HITS=$((CFG_HITS+1)); }
+                [ -n "$PT_CA" ]       && { alert "  Profile com CA root (MITM-capable): $FULL"; CFG_HITS=$((CFG_HITS+1)); }
+                [ -n "$PT_WCF" ]      && { alert "  Profile com WebContentFilter (proxy): $FULL"; CFG_HITS=$((CFG_HITS+1)); }
+                [ -n "$PT_DNS" ]      && { alert "  Profile com DNS/Relay custom: $FULL"; CFG_HITS=$((CFG_HITS+1)); }
+                [ -n "$PT_MDM" ]      && { warn  "  Profile com MDM (controle remoto): $FULL"; }
+                [ -n "$PT_RESTR" ]    && { alert "  Profile com RESTRICTIONS (applicationaccess/ScreenTime): $FULL"; CFG_HITS=$((CFG_HITS+1)); }
+                [ -n "$PT_AIRPLAY" ]  && { warn  "  Profile com AirPlay policy: $FULL"; }
+                [ -n "$PT_WIFI" ]     && { warn  "  Profile com Wi-Fi managed: $FULL"; }
+                [ -n "$PT_CERT_PKCS" ] && [ -z "$PT_CA" ] && { warn  "  Profile com PKCS cert payload: $FULL"; }
+                [ -n "$PT_ACTIVATION" ] && { warn  "  Profile com iTunes/Activation: $FULL"; }
+
+                # Strings de cheat services no payload (TeamName/Organization)
+                CHEAT_ORG=$(echo "$CONTENT" | grep -iE 'esign|feather|ksign|gbox|scarlet|trollstore|sideload|cheat|hack|aimbot|wallhack' | head -n 3)
+                if [ -n "$CHEAT_ORG" ]; then
+                    echo "$CHEAT_ORG" | while IFS= read -r L; do
+                        [ -n "$L" ] && alert "  Profile contém string de cheat/sideload: $(echo "$L" | head -c 120)"
+                    done
+                    CFG_HITS=$((CFG_HITS+1))
+                fi
+
                 # Metadata útil
                 META=$(echo "$CONTENT" | grep -iE 'PayloadDisplayName|PayloadIdentifier|PayloadOrganization|HostName|ProxyServer' | head -n 5)
                 [ -n "$META" ] && echo "$META" | while IFS= read -r L; do
