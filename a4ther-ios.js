@@ -20,7 +20,7 @@
 //    6. Vê o resultado
 // ============================================================
 
-const VERSION = "2.0.0";
+const VERSION = "2.1.0";
 
 // ============================================================
 //  DATA — bundles, domínios, IPs, TLDs, ASNs (109+ entries)
@@ -332,6 +332,49 @@ const CHEAT_PROXY_ASN = {
     "AS7203":   "Sharktech",
 };
 
+// APPLE_MDM_DOMAINS — endpoints reais Apple MDM/Activation/Push
+// Device aparecer hitando esses = enrollado em MDM (profile remoto ativo)
+const APPLE_MDM_DOMAINS = [
+    "mdmenrollment.apple.com",
+    "iprofiles.apple.com",
+    "albert.apple.com",
+    "gs.apple.com",
+    "deviceenrollment.apple.com",
+    "deviceservices-external.apple.com",
+    "identity.apple.com",
+    "init-p01st.push.apple.com",
+    "setup.icloud.com",
+    "gsa.apple.com",
+    "humb.apple.com",
+];
+
+// DNS_OVER_HTTPS_DOMAINS — endpoints DoH (profile com custom DNS aparece aqui)
+const DNS_OVER_HTTPS_DOMAINS = [
+    "cloudflare-dns.com", "one.one.one.one", "1.1.1.1",
+    "dns.google", "8.8.8.8", "8.8.4.4",
+    "dns.quad9.net", "9.9.9.9",
+    "dns.adguard.com", "dns-family.adguard.com",
+    "doh.opendns.com", "doh.cleanbrowsing.org",
+    "mozilla.cloudflare-dns.com",
+    "dns.nextdns.io",
+    "dns.controld.com",
+];
+
+// CERT_VALIDATION_DOMAINS — OCSP/CRL Apple oficiais (suspeito se OUTRA CA aparecer)
+const APPLE_CERT_DOMAINS = [
+    "ocsp.apple.com", "ocsp2.apple.com", "ocsp.digicert.com",
+    "crl.apple.com", "crl3.digicert.com", "crl4.digicert.com",
+    "valid.apple.com", "certs.apple.com",
+];
+
+// SCREEN_TIME_DOMAINS — Apple Screen Time / Family backend (presença = restrictions ativas)
+const SCREEN_TIME_DOMAINS = [
+    "familycircle.apple.com",
+    "p38-fmip.icloud.com",
+    "p38-fmf.icloud.com",
+    "screentime.apple.com",
+];
+
 // SUSPECT_KEYWORDS — heurística por padrão de nome
 const SUSPECT_KEYWORDS = [
     "cheat", "hack", "aimbot", "wallhack", "esp",
@@ -524,6 +567,139 @@ function detect(analysis) {
                 }
             }
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // PROFILE EFFECTS (DETECÇÃO INDIRETA dos profile payloads que JS
+    // sem JB não consegue ler direto do filesystem)
+    // ════════════════════════════════════════════════════════════════
+
+    // === 7b. VPN ATIVA - sintoma: muitos apps usando o mesmo IP gateway ===
+    const ipUsage = {};
+    for (const [bundle, data] of Object.entries(networkByBundle)) {
+        for (const ip of data.ips || []) {
+            if (!ipUsage[ip]) ipUsage[ip] = new Set();
+            ipUsage[ip].add(bundle);
+        }
+    }
+    for (const [ip, bundles] of Object.entries(ipUsage)) {
+        if (bundles.size >= 8) {
+            // 8+ apps no mesmo IP = sinal forte de VPN tunnel
+            alert(`[HIGH] VPN/PROXY indicador: ${bundles.size} apps roteando via ${ip}`);
+        }
+    }
+
+    // === 7c. APPLE MDM endpoints - device enrollado em MDM remoto ===
+    for (const d of APPLE_MDM_DOMAINS) {
+        for (const seen of domainsSeen) {
+            if (seen.toLowerCase() === d.toLowerCase() ||
+                seen.toLowerCase().endsWith("." + d.toLowerCase())) {
+                warn(`[MEDIUM] Apple MDM endpoint ativo: ${seen} (device MDM-enrollado)`);
+                break;
+            }
+        }
+    }
+
+    // === 7d. CUSTOM DNS / DNS-over-HTTPS - sinal de profile com DNS Settings ===
+    let dohHits = 0;
+    for (const d of DNS_OVER_HTTPS_DOMAINS) {
+        for (const seen of domainsSeen) {
+            if (seen.toLowerCase() === d.toLowerCase() ||
+                seen.toLowerCase().endsWith("." + d.toLowerCase())) {
+                warn(`[MEDIUM] DNS-over-HTTPS endpoint: ${seen} (profile DNS custom?)`);
+                dohHits++;
+                break;
+            }
+        }
+    }
+    if (dohHits >= 2) {
+        alert(`[HIGH] ${dohHits} DoH endpoints diferentes - DNS Settings profile provável`);
+    }
+
+    // === 7e. CA / CERT validation - non-Apple CA = profile com CA root ===
+    // Lista de domínios cert-related que NÃO são Apple
+    const certKeywords = ['ocsp.', 'crl.', '.crl.', 'pki.', 'certs.', '.cert.'];
+    const nonAppleCertDomains = [];
+    for (const seen of domainsSeen) {
+        const sl = seen.toLowerCase();
+        // Se domain tem padrão de cert validation
+        let hasCertPattern = certKeywords.some(k => sl.includes(k));
+        if (!hasCertPattern) continue;
+        // Se NÃO é endpoint Apple oficial
+        let isApple = APPLE_CERT_DOMAINS.some(a =>
+            sl === a.toLowerCase() || sl.endsWith("." + a.toLowerCase())
+        );
+        if (!isApple && !sl.includes("apple.com") && !sl.includes("digicert.com") &&
+            !sl.includes("godaddy.com") && !sl.includes("letsencrypt.org") &&
+            !sl.includes("comodoca.com") && !sl.includes("sectigo.com")) {
+            nonAppleCertDomains.push(seen);
+        }
+    }
+    if (nonAppleCertDomains.length > 0) {
+        alert(`[HIGH] CA root custom indicador: ${nonAppleCertDomains.length} cert endpoints não-Apple/legítimos:`);
+        for (const d of nonAppleCertDomains.slice(0, 5)) {
+            alert(`   → ${d}`);
+        }
+    }
+
+    // === 7f. SCREEN TIME / FAMILY backend - Restrictions ativas? ===
+    for (const d of SCREEN_TIME_DOMAINS) {
+        for (const seen of domainsSeen) {
+            if (seen.toLowerCase().endsWith(d.toLowerCase())) {
+                ok(`Screen Time / Family Sharing ativo (${seen}) - pode ter Restrictions`);
+                break;
+            }
+        }
+    }
+
+    // === 7g. PROXY HTTP/HTTPS indicador - patterns em domínios ===
+    // Apps que NÃO deveriam usar proxy mas têm tráfego pra "proxy.*" ou IPs em ASNs cheat
+    const proxyDomainPatterns = ['proxy.', '.proxy.', 'tunnel.', '.tunnel.', 'mitm.', '.relay.'];
+    for (const [bundle, data] of Object.entries(networkByBundle)) {
+        if (bundle.startsWith("com.apple.")) continue;
+        for (const d of data.domains) {
+            for (const pat of proxyDomainPatterns) {
+                if (d.includes(pat)) {
+                    warn(`[MEDIUM] ${bundle} → ${d} (padrão proxy/tunnel)`);
+                    break;
+                }
+            }
+        }
+    }
+
+    // === 7h. WebContentFilter indicador - apps de filter/adblock ativos ===
+    const wcfHints = ["adguard", "1blocker", "adblock", "wipr", "blockada", "snowhaze"];
+    for (const b of bundlesSeen) {
+        const bl = b.toLowerCase();
+        for (const k of wcfHints) {
+            if (bl.includes(k)) {
+                warn(`[LOW] App content filter (pode mascarar tráfego): ${b}`);
+                break;
+            }
+        }
+    }
+
+    // === 7i. PROVISIONING profile indicador (dev cert) - sem Apple endpoints ===
+    // App com telemetria mas sem domínio Apple OFICIAL = sideload provável
+    // (já parcialmente coberto em SIDELOAD_DOMAINS check, mas reforço aqui)
+    let suspectSideloadCount = 0;
+    for (const [bundle, data] of Object.entries(networkByBundle)) {
+        if (bundle.startsWith("com.apple.") || FF_OFFICIAL.has(bundle)) continue;
+        if (CHEAT_APPS[bundle]) continue; // já catalogado
+        const domains = [...data.domains];
+        const hasApple = domains.some(d => [...APP_STORE_OFFICIAL].some(o => d.endsWith(o)));
+        const hasTelemetry = TELEMETRY_DOMAINS.some(t =>
+            domains.some(d => d === t || d.endsWith("." + t))
+        );
+        if (hasTelemetry && !hasApple && data.hits > 5) {
+            suspectSideloadCount++;
+            if (suspectSideloadCount <= 5) {
+                warn(`[MEDIUM] Provisioning profile suspeito: ${bundle} (telemetria sem Apple endpoints, ${data.hits} hits)`);
+            }
+        }
+    }
+    if (suspectSideloadCount > 5) {
+        warn(`[MEDIUM] ...e mais ${suspectSideloadCount - 5} apps com padrão de sideload`);
     }
 
     // === 8. SUSPICIOUS_TLDS em domínios ===
