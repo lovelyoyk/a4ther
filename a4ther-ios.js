@@ -20,7 +20,7 @@
 //    6. Vê o resultado
 // ============================================================
 
-const VERSION = "2.4.0";
+const VERSION = "2.4.1";
 
 // ============================================================
 //  DATA — bundles, domínios, IPs, TLDs, ASNs (109+ entries)
@@ -1249,7 +1249,7 @@ async function runSysdiagnoseAnalyzer() {
     if (!folderPath) return;
 
     alerts = []; warnings = []; okItems = [];
-    okItems.push(`Sysdiagnose folder: ${folderPath}`);
+    okItems.push(`Pasta selecionada: ${folderPath}`);
 
     // Try iCloud first, fall back to local FM
     let fm = FileManager.iCloud();
@@ -1258,6 +1258,69 @@ async function runSysdiagnoseAnalyzer() {
     } catch (e) {
         fm = FileManager.local();
     }
+
+    // ─── AUTO-DETECT: a pasta selecionada é realmente sysdiagnose? ───
+    // Verifica se tem os arquivos/dirs característicos
+    function isSysdiagnoseFolder(p) {
+        const indicators = [
+            "logs/MobileInstallation",
+            "logs",
+            "summaries",
+            "ps.txt",
+            "taskinfo.txt",
+            "remotectl_dumpstate.txt",
+            "swcutil_show.txt",
+            "crashes_and_spins",
+        ];
+        let score = 0;
+        for (const ind of indicators) {
+            try {
+                if (fm.fileExists(fm.joinPath(p, ind))) score++;
+            } catch (e) {}
+        }
+        return score >= 2; // pelo menos 2 indicadores = é sysdiagnose
+    }
+
+    if (!isSysdiagnoseFolder(folderPath)) {
+        // Tenta descer um nível: lista subpastas e procura uma que pareça sysdiagnose
+        let foundChild = null;
+        try {
+            const contents = fm.listContents(folderPath);
+            okItems.push(`Pasta tem ${contents.length} itens: ${contents.slice(0, 8).join(", ")}${contents.length > 8 ? "..." : ""}`);
+            for (const item of contents) {
+                const subPath = fm.joinPath(folderPath, item);
+                let isDir = false;
+                try { isDir = fm.isDirectory(subPath); } catch (e) {}
+                if (!isDir) continue;
+                // Match sysdiagnose_AAAA.MM.DD_*
+                if (item.match(/^sysdiagnose_/i) || isSysdiagnoseFolder(subPath)) {
+                    foundChild = subPath;
+                    break;
+                }
+            }
+        } catch (e) {
+            warnings.push("Erro listando pasta: " + String(e));
+        }
+
+        if (foundChild) {
+            okItems.push(`Descendendo para sysdiagnose: ${foundChild.split("/").slice(-1)[0]}`);
+            folderPath = foundChild;
+        } else {
+            // ABORTA com mensagem clara
+            alerts.push("PASTA SELECIONADA NAO EH UM SYSDIAGNOSE");
+            alerts.push("Esperado: pasta contendo logs/, summaries/, ps.txt, etc.");
+            alerts.push("Confirme que:");
+            alerts.push("  1. O .tar.gz foi EXTRAIDO no Files app");
+            alerts.push("     (toca-segura no .tar.gz → Uncompress)");
+            alerts.push("  2. Selecionou a pasta extraida (nome: sysdiagnose_*)");
+            alerts.push("     NAO a pasta-pai do Files");
+            alerts.push("  3. Dentro da pasta tem logs/, summaries/, ps.txt etc.");
+            const stats = { events: 0, bundles: 0, domains: 0, ips: 0 };
+            await buildResultTable(stats).present(true);
+            return;
+        }
+    }
+    okItems.push(`✓ Confirmado como sysdiagnose folder`);
 
     // 1. Apps instalados + install history (via mobile_installation.log)
     await scanSysdiagnoseApplications(folderPath, fm);
