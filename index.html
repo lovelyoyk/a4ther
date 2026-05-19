@@ -526,13 +526,35 @@ footer a:hover { color: var(--cyan); }
 <!-- ─── UPLOAD ─── -->
 <section class="upload-section" id="uploadSection">
     <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="ndjson"  role="tab">Privacy Report (.ndjson)</button>
+        <button class="tab active" data-tab="targz"   role="tab">Sysdiagnose (.tar.gz)</button>
         <button class="tab"        data-tab="sysdiag" role="tab">Sysdiagnose (pasta)</button>
+        <button class="tab"        data-tab="ndjson"  role="tab">Privacy Report (.ndjson)</button>
         <button class="tab"        data-tab="profile" role="tab">Profile (.mobileconfig)</button>
     </div>
 
+    <!-- TAR.GZ (default, mais fácil) -->
+    <div class="tab-panel active" data-panel="targz">
+        <label class="dropzone" id="dz-targz">
+            <span class="dropzone-icon">📦</span>
+            <div class="dropzone-text">Arraste ou clique para enviar o <code>.tar.gz</code></div>
+            <div class="dropzone-hint">Sysdiagnose completo · sem precisar extrair</div>
+            <input type="file" id="file-targz" accept=".tar.gz,.tgz,application/gzip,application/x-gzip,application/x-tar" />
+        </label>
+        <div class="help-box">
+            <strong>Como gerar (recomendado):</strong>
+            <ol>
+                <li>iPhone: aperte <code>Vol+ + Vol- + Side</code> simultaneamente por 1 segundo</li>
+                <li>Aguarde ~5min (continue usando normalmente)</li>
+                <li><code>Settings → Privacy → Analytics &amp; Improvements → Analytics Data</code></li>
+                <li>Procure <code>sysdiagnose_AAAA.MM.DD_*.tar.gz</code></li>
+                <li>Toque → <strong>Share</strong> → envie pra cá (AirDrop / Files / iCloud)</li>
+                <li>Selecione o arquivo aqui — <strong>SEM extrair</strong>, eu descompacto no navegador</li>
+            </ol>
+        </div>
+    </div>
+
     <!-- NDJSON -->
-    <div class="tab-panel active" data-panel="ndjson">
+    <div class="tab-panel" data-panel="ndjson">
         <label class="dropzone" id="dz-ndjson">
             <span class="dropzone-icon">⬆</span>
             <div class="dropzone-text">Arraste ou clique para enviar o <code>.ndjson</code></div>
@@ -630,141 +652,169 @@ footer a:hover { color: var(--cyan); }
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "2.6.0";
+const VERSION = "2.7.0";
 document.getElementById('version').textContent = `v${VERSION}`;
 
 /* ============================================================
    DETECTION DATA (sincronizado com a4ther-ios.js)
    ============================================================ */
+// CATEGORIES (estilo KellerSS):
+//  CHEAT     = cheat ativo confirmado (mod menu, ESP, aimbot)
+//  SIDELOAD  = installer de IPA modded (cert-based)
+//  JAILBREAK = JB tool ou package manager
+//  PROXY     = proxy/MITM client
+//  VPN       = VPN cliente
+//  DNS       = DNS reseller / sequester
+//  TWEAK     = file manager root, shell, tweak manager
+//  DEV       = developer tools (Xcode, TestFlight com profile)
+//  CLEANER   = anti-detect / log cleaner
 const CHEAT_APPS = {
-    // FF iOS cheats
-    "com.34306.espff":                  { sev: "CRITICAL", desc: "ESP Free Fire - tweak iOS" },
-    "com.dts.freefireth.externalesp":   { sev: "CRITICAL", desc: "External ESP FF tweak" },
-    "com.quyhoang.fxy":                 { sev: "CRITICAL", desc: "Elite Luxury / Nextor mod menu" },
-    "com.phuc.aimlock":                 { sev: "CRITICAL", desc: "Aim Lock tweak FF" },
-    "com.checkboxcus.hhn":              { sev: "CRITICAL", desc: "Checkbox Custom HHN mod menu" },
-    "com.hhnios.pubgvngatena":          { sev: "CRITICAL", desc: "iGG by HHNiOS FF/PUBG menu" },
-    "com.dts.freefirethack":            { sev: "CRITICAL", desc: "Free Fire IPA re-pack (bundle modificado)" },
-    "com.dts.freefireth2":              { sev: "CRITICAL", desc: "Free Fire IPA re-sign variant" },
-    "com.nextor.app":                   { sev: "CRITICAL", desc: "Nextor menu carrier app" },
+    // === FF iOS cheats específicos ===
+    "com.34306.espff":                  { sev: "CRITICAL", name: "ESP Free Fire",          cat: "CHEAT",     desc: "Substrate tweak ESP" },
+    "com.dts.freefireth.externalesp":   { sev: "CRITICAL", name: "External ESP FF",        cat: "CHEAT",     desc: "External ESP tweak" },
+    "com.quyhoang.fxy":                 { sev: "CRITICAL", name: "Elite Luxury / Nextor",  cat: "CHEAT",     desc: "Mod menu hybrid FF/FFMax" },
+    "com.phuc.aimlock":                 { sev: "CRITICAL", name: "AimLock FF",             cat: "CHEAT",     desc: "Aim Lock tweak" },
+    "com.checkboxcus.hhn":              { sev: "CRITICAL", name: "Checkbox Custom HHN",    cat: "CHEAT",     desc: "HHN mod menu" },
+    "com.hhnios.pubgvngatena":          { sev: "CRITICAL", name: "iGG by HHNiOS",          cat: "CHEAT",     desc: "FF/PUBG mixed menu" },
+    "com.dts.freefirethack":            { sev: "CRITICAL", name: "Free Fire IPA Modded",   cat: "CHEAT",     desc: "Bundle modificado (re-pack)" },
+    "com.dts.freefireth2":              { sev: "CRITICAL", name: "Free Fire IPA Re-sign",  cat: "CHEAT",     desc: "Bundle modificado (re-sign)" },
+    "com.nextor.app":                   { sev: "CRITICAL", name: "Nextor Menu",            cat: "CHEAT",     desc: "Carrier app do menu Nextor" },
 
-    // Proxy / VPN / MITM
-    "com.touchingapp.potatsolite":      { sev: "HIGH", desc: "PotatsoLite proxy iOS (mitmproxy)" },
-    "com.touchingapp.potatso":          { sev: "HIGH", desc: "Potatso proxy iOS" },
-    "com.monite.proxyff":               { sev: "CRITICAL", desc: "ProxyFF cheat confirmado" },
-    "com.nssurge.inc.surge-ios":        { sev: "HIGH", desc: "Surge proxy/MITM" },
-    "com.luo.quantumultx":              { sev: "HIGH", desc: "Quantumult X proxy" },
-    "group.com.luo.quantumult":         { sev: "HIGH", desc: "Quantumult proxy" },
-    "com.shadowrocket.Shadowrocket":    { sev: "HIGH", desc: "Shadowrocket proxy" },
-    "com.liguangming.Shadowrocket":     { sev: "HIGH", desc: "Shadowrocket alt" },
-    "com.github.shadowsocks":           { sev: "HIGH", desc: "Shadowsocks" },
-    "com.netease.trojan":               { sev: "HIGH", desc: "Trojan proxy" },
-    "com.hiddify.app":                  { sev: "HIGH", desc: "Hiddify proxy" },
-    "com.karing.app":                   { sev: "HIGH", desc: "Karing proxy" },
-    "com.metacubex.ClashX":             { sev: "HIGH", desc: "ClashX proxy" },
-    "com.ssrss.Ssrss":                  { sev: "HIGH", desc: "SSR iOS proxy" },
-    "com.adguard.ios.AdguardPro":       { sev: "MEDIUM", desc: "AdGuard Pro (MITM)" },
-    "com.privateinternetaccess.ios":    { sev: "MEDIUM", desc: "PIA VPN" },
-    "com.futureland.vpnmaster":         { sev: "MEDIUM", desc: "VPN Master" },
-    "com.cloudflare.1dot1dot1dot1":     { sev: "MEDIUM", desc: "Cloudflare WARP" },
-    "com.Nord.VPN":                     { sev: "MEDIUM", desc: "NordVPN" },
-    "com.expressvpn.ExpressVPN":        { sev: "MEDIUM", desc: "ExpressVPN" },
-    "com.protonvpn.ios":                { sev: "MEDIUM", desc: "ProtonVPN" },
-    "com.surfshark.vpnclient.ios":      { sev: "MEDIUM", desc: "Surfshark VPN" },
-    "com.windscribe.vpn":               { sev: "MEDIUM", desc: "Windscribe VPN" },
-    "com.celeritasdesign.GoodVPN":      { sev: "MEDIUM", desc: "GoodVPN" },
-    "com.getlantern.lantern":           { sev: "MEDIUM", desc: "Lantern VPN/proxy" },
-    "com.psiphon3.PsiphonForIOS":       { sev: "MEDIUM", desc: "Psiphon proxy" },
-    "com.v2box.ios":                    { sev: "HIGH", desc: "V2Box (V2Ray)" },
-    "com.streisand.Streisand":          { sev: "MEDIUM", desc: "Streisand proxy" },
-    "io.nextdns.NextDNS":               { sev: "HIGH", desc: "NextDNS app (DNS filter)" },
+    // === Proxy / MITM ===
+    "com.touchingapp.potatsolite":      { sev: "HIGH",     name: "PotatsoLite",            cat: "PROXY",     desc: "mitmproxy iOS" },
+    "com.touchingapp.potatso":          { sev: "HIGH",     name: "Potatso",                cat: "PROXY",     desc: "proxy iOS" },
+    "com.monite.proxyff":               { sev: "CRITICAL", name: "ProxyFF",                cat: "CHEAT",     desc: "Proxy específico de cheat FF" },
+    "com.nssurge.inc.surge-ios":        { sev: "HIGH",     name: "Surge",                  cat: "PROXY",     desc: "Proxy/MITM iOS" },
+    "com.luo.quantumultx":              { sev: "HIGH",     name: "Quantumult X",           cat: "PROXY",     desc: "Proxy iOS" },
+    "group.com.luo.quantumult":         { sev: "HIGH",     name: "Quantumult",             cat: "PROXY",     desc: "Proxy iOS" },
+    "com.shadowrocket.Shadowrocket":    { sev: "HIGH",     name: "Shadowrocket",           cat: "PROXY",     desc: "Proxy iOS" },
+    "com.liguangming.Shadowrocket":     { sev: "HIGH",     name: "Shadowrocket (alt)",     cat: "PROXY",     desc: "Proxy iOS variant" },
+    "com.github.shadowsocks":           { sev: "HIGH",     name: "Shadowsocks",            cat: "PROXY",     desc: "Proxy" },
+    "com.netease.trojan":               { sev: "HIGH",     name: "Trojan",                 cat: "PROXY",     desc: "Trojan proxy" },
+    "com.hiddify.app":                  { sev: "HIGH",     name: "Hiddify",                cat: "PROXY",     desc: "Proxy" },
+    "com.karing.app":                   { sev: "HIGH",     name: "Karing",                 cat: "PROXY",     desc: "Proxy" },
+    "com.metacubex.ClashX":             { sev: "HIGH",     name: "ClashX",                 cat: "PROXY",     desc: "Proxy" },
+    "com.ssrss.Ssrss":                  { sev: "HIGH",     name: "SSR iOS",                cat: "PROXY",     desc: "Shadowsocks-R" },
+    "com.adguard.ios.AdguardPro":       { sev: "MEDIUM",   name: "AdGuard Pro",            cat: "PROXY",     desc: "MITM com cert" },
+    "com.v2box.ios":                    { sev: "HIGH",     name: "V2Box",                  cat: "PROXY",     desc: "V2Ray client" },
+    "com.streisand.Streisand":          { sev: "MEDIUM",   name: "Streisand",              cat: "PROXY",     desc: "Proxy" },
 
-    // DNS profile patterns
-    "com.ascent.nextdns.profile":       { sev: "CRITICAL", desc: "NextDNS profile (Ascent) - DNS sequester" },
-    "io.nextdns.profile":               { sev: "CRITICAL", desc: "NextDNS profile direto" },
-    "com.controld.config-profile":      { sev: "CRITICAL", desc: "Control-D DNS profile" },
-    "com.adguard.dns.config-profile":   { sev: "CRITICAL", desc: "AdGuard DNS profile" },
-    "com.cloudflare.warp.profile":      { sev: "CRITICAL", desc: "Cloudflare WARP profile" },
-    "com.opendns.config-profile":       { sev: "CRITICAL", desc: "OpenDNS profile" },
-    "com.quad9.config-profile":         { sev: "CRITICAL", desc: "Quad9 DNS profile" },
-    "com.nextdns.ios.profile":          { sev: "CRITICAL", desc: "NextDNS iOS profile" },
-    "com.nextdns.nextdns.profile":      { sev: "CRITICAL", desc: "NextDNS profile alt" },
+    // === VPN apps ===
+    "com.privateinternetaccess.ios":    { sev: "MEDIUM",   name: "PIA VPN",                cat: "VPN",       desc: "VPN client" },
+    "com.futureland.vpnmaster":         { sev: "MEDIUM",   name: "VPN Master",             cat: "VPN",       desc: "VPN client" },
+    "com.cloudflare.1dot1dot1dot1":     { sev: "MEDIUM",   name: "Cloudflare WARP",        cat: "VPN",       desc: "1.1.1.1 WARP" },
+    "com.Nord.VPN":                     { sev: "MEDIUM",   name: "NordVPN",                cat: "VPN",       desc: "VPN client" },
+    "com.expressvpn.ExpressVPN":        { sev: "MEDIUM",   name: "ExpressVPN",             cat: "VPN",       desc: "VPN client" },
+    "com.protonvpn.ios":                { sev: "MEDIUM",   name: "ProtonVPN",              cat: "VPN",       desc: "VPN client" },
+    "com.surfshark.vpnclient.ios":      { sev: "MEDIUM",   name: "Surfshark",              cat: "VPN",       desc: "VPN client" },
+    "com.windscribe.vpn":               { sev: "MEDIUM",   name: "Windscribe",             cat: "VPN",       desc: "VPN client" },
+    "com.celeritasdesign.GoodVPN":      { sev: "MEDIUM",   name: "GoodVPN",                cat: "VPN",       desc: "VPN client" },
+    "com.getlantern.lantern":           { sev: "MEDIUM",   name: "Lantern",                cat: "VPN",       desc: "VPN/proxy" },
+    "com.psiphon3.PsiphonForIOS":       { sev: "MEDIUM",   name: "Psiphon",                cat: "VPN",       desc: "Proxy VPN" },
 
-    // Jailbreak
-    "com.opa334.dopamine":              { sev: "CRITICAL", desc: "Dopamine JB iOS 15-16" },
-    "xyz.palera1n.palera1n":            { sev: "CRITICAL", desc: "palera1n JB rootless" },
-    "com.electrateam.unc0ver":          { sev: "CRITICAL", desc: "unc0ver JB" },
-    "com.tihmstar.checkra1n":           { sev: "CRITICAL", desc: "checkra1n JB" },
-    "org.taurine.jailbreak":            { sev: "CRITICAL", desc: "Taurine JB" },
-    "org.coolstar.odyssey":             { sev: "CRITICAL", desc: "Odyssey JB" },
-    "org.coolstar.sileo":               { sev: "CRITICAL", desc: "Sileo package manager JB" },
-    "xyz.willy.Zebra":                  { sev: "CRITICAL", desc: "Zebra package manager JB" },
-    "com.cydia.Cydia":                  { sev: "CRITICAL", desc: "Cydia package manager JB" },
+    // === DNS resellers / profiles ===
+    "io.nextdns.NextDNS":               { sev: "HIGH",     name: "NextDNS App",            cat: "DNS",       desc: "DNS filter app" },
+    "com.ascent.nextdns.profile":       { sev: "CRITICAL", name: "NextDNS Profile",        cat: "DNS",       desc: "Profile Ascent - DNS sequester (MITM em FF login)" },
+    "io.nextdns.profile":               { sev: "CRITICAL", name: "NextDNS Profile",        cat: "DNS",       desc: "Profile direto - DNS sequester" },
+    "com.controld.config-profile":      { sev: "CRITICAL", name: "Control-D Profile",      cat: "DNS",       desc: "DNS sequester via profile" },
+    "com.adguard.dns.config-profile":   { sev: "CRITICAL", name: "AdGuard DNS Profile",    cat: "DNS",       desc: "DNS sequester" },
+    "com.cloudflare.warp.profile":      { sev: "CRITICAL", name: "Cloudflare WARP Profile",cat: "DNS",       desc: "WARP via profile" },
+    "com.opendns.config-profile":       { sev: "CRITICAL", name: "OpenDNS Profile",        cat: "DNS",       desc: "DNS sequester" },
+    "com.quad9.config-profile":         { sev: "CRITICAL", name: "Quad9 Profile",          cat: "DNS",       desc: "DNS sequester" },
+    "com.nextdns.ios.profile":          { sev: "CRITICAL", name: "NextDNS iOS Profile",    cat: "DNS",       desc: "DNS sequester" },
+    "com.nextdns.nextdns.profile":      { sev: "CRITICAL", name: "NextDNS Profile (alt)",  cat: "DNS",       desc: "DNS sequester" },
 
-    // Sideload (TrollStore family + AltStore)
-    "com.opa334.TrollStore":            { sev: "CRITICAL", desc: "TrollStore - sideload sem JB" },
-    "com.opa334.TrollStoreHelper":      { sev: "CRITICAL", desc: "TrollStoreHelper" },
-    "com.opa334.trolldecrypt":          { sev: "CRITICAL", desc: "TrollDecrypt - decifrar IPAs" },
-    "com.opa334.trollfools":            { sev: "CRITICAL", desc: "TrollFools - injetor de tweaks" },
-    "com.rileytestut.AltStore":         { sev: "HIGH", desc: "AltStore sideload" },
-    "com.altstore.altstoreclassic":     { sev: "HIGH", desc: "AltStore Classic" },
-    "com.sideloadly.sideloadly":        { sev: "HIGH", desc: "Sideloadly" },
+    // === Jailbreak tools ===
+    "com.opa334.dopamine":              { sev: "CRITICAL", name: "Dopamine",               cat: "JAILBREAK", desc: "Jailbreak iOS 15-16" },
+    "xyz.palera1n.palera1n":            { sev: "CRITICAL", name: "palera1n",               cat: "JAILBREAK", desc: "JB rootless A11+" },
+    "com.electrateam.unc0ver":          { sev: "CRITICAL", name: "unc0ver",                cat: "JAILBREAK", desc: "JB iOS 14" },
+    "com.tihmstar.checkra1n":           { sev: "CRITICAL", name: "checkra1n",              cat: "JAILBREAK", desc: "JB hardware A11-" },
+    "org.taurine.jailbreak":            { sev: "CRITICAL", name: "Taurine",                cat: "JAILBREAK", desc: "Jailbreak" },
+    "org.coolstar.odyssey":             { sev: "CRITICAL", name: "Odyssey",                cat: "JAILBREAK", desc: "Jailbreak" },
+    "org.coolstar.sileo":               { sev: "CRITICAL", name: "Sileo",                  cat: "JAILBREAK", desc: "JB package manager" },
+    "xyz.willy.Zebra":                  { sev: "CRITICAL", name: "Zebra",                  cat: "JAILBREAK", desc: "JB package manager" },
+    "com.cydia.Cydia":                  { sev: "CRITICAL", name: "Cydia",                  cat: "JAILBREAK", desc: "JB package manager (legado)" },
 
-    // Cert sideloaders
-    "com.esign.ios":                    { sev: "HIGH", desc: "ESign sideload/IPA installer" },
-    "com.esign.esign":                  { sev: "HIGH", desc: "ESign alt" },
-    "app.esign.esign":                  { sev: "HIGH", desc: "ESign (app prefix)" },
-    "com.esignapp.esign":               { sev: "HIGH", desc: "ESign alt 2" },
-    "io.esign.esign":                   { sev: "HIGH", desc: "ESign (io)" },
-    "kh.crysalis.feather":              { sev: "HIGH", desc: "Feather sideloader (khcrysalis)" },
-    "xn.crysalis.feather":              { sev: "HIGH", desc: "Feather alt" },
-    "com.crysalis.feather":             { sev: "HIGH", desc: "Feather (com)" },
-    "io.feather.feather":               { sev: "HIGH", desc: "Feather (io)" },
-    "app.feather.feather":              { sev: "HIGH", desc: "Feather (app)" },
-    "com.ksign.app":                    { sev: "HIGH", desc: "Ksign sideloader cert-based" },
-    "io.ksign.ksign":                   { sev: "HIGH", desc: "Ksign (io)" },
-    "app.ksign.ksign":                  { sev: "HIGH", desc: "Ksign (app)" },
-    "com.ksign.ksign":                  { sev: "HIGH", desc: "Ksign (com)" },
-    "pkr.appwhitelist.ksign":           { sev: "HIGH", desc: "Ksign whitelist variant" },
-    "com.gbox.gbox":                    { sev: "HIGH", desc: "GBox sideloader iOS" },
-    "com.gboxapp.gbox":                 { sev: "HIGH", desc: "GBox alt" },
-    "io.gbox.gbox":                     { sev: "HIGH", desc: "GBox (io)" },
-    "app.gbox.io":                      { sev: "HIGH", desc: "GBox (io 2)" },
-    "com.itools.gbox":                  { sev: "HIGH", desc: "GBox (itools)" },
-    "com.usescarlet.scarlet":           { sev: "HIGH", desc: "Scarlet sideloader" },
-    "com.scarletapp.scarlet":           { sev: "HIGH", desc: "Scarlet alt" },
-    "com.scarletios.scarlet":           { sev: "HIGH", desc: "Scarlet (ios)" },
-    "com.appdb.appdb":                  { sev: "MEDIUM", desc: "AppDB sideload store" },
-    "io.appdb.appdb":                   { sev: "MEDIUM", desc: "AppDB (io)" },
-    "com.tutuapp.tutuapp":              { sev: "MEDIUM", desc: "TutuApp" },
-    "com.appcake.appcake":              { sev: "MEDIUM", desc: "AppCake" },
-    "com.appvalley.appvalley":          { sev: "MEDIUM", desc: "AppValley" },
-    "com.buildstore.buildstore":        { sev: "MEDIUM", desc: "BuildStore" },
-    "com.ignition.ignition":            { sev: "MEDIUM", desc: "Ignition" },
-    "com.signtools.signtools":          { sev: "MEDIUM", desc: "SignTools" },
-    "io.itrustteam.itrust":             { sev: "MEDIUM", desc: "iTrust" },
+    // === Sideload sem JB (TrollStore + AltStore) ===
+    "com.opa334.TrollStore":            { sev: "CRITICAL", name: "TrollStore",             cat: "SIDELOAD",  desc: "Sideload sem JB (perma-sign)" },
+    "com.opa334.TrollStoreHelper":      { sev: "CRITICAL", name: "TrollStore Helper",      cat: "SIDELOAD",  desc: "Helper do TrollStore" },
+    "com.opa334.trolldecrypt":          { sev: "CRITICAL", name: "TrollDecrypt",           cat: "SIDELOAD",  desc: "Decifrar IPAs" },
+    "com.opa334.trollfools":            { sev: "CRITICAL", name: "TrollFools",             cat: "SIDELOAD",  desc: "Injetor de tweaks via TrollStore" },
+    "com.rileytestut.AltStore":         { sev: "HIGH",     name: "AltStore",               cat: "SIDELOAD",  desc: "Sideload via dev cert" },
+    "com.altstore.altstoreclassic":     { sev: "HIGH",     name: "AltStore Classic",       cat: "SIDELOAD",  desc: "Sideload" },
+    "com.sideloadly.sideloadly":        { sev: "HIGH",     name: "Sideloadly",             cat: "SIDELOAD",  desc: "Sideload" },
 
-    // Cheat stores
-    "com.iosgods.iosgods":              { sev: "CRITICAL", desc: "iOSGods cheat app store" },
-    "com.gbox.pubg":                    { sev: "CRITICAL", desc: "GBox PUBG/FF cheat" },
+    // === Cert sideloaders (KellerSS: "cheat certificates") ===
+    "com.esign.ios":                    { sev: "HIGH",     name: "ESign",                  cat: "CERT",      desc: "Cert sideloader" },
+    "com.esign.esign":                  { sev: "HIGH",     name: "ESign",                  cat: "CERT",      desc: "Cert sideloader (alt)" },
+    "app.esign.esign":                  { sev: "HIGH",     name: "ESign",                  cat: "CERT",      desc: "Cert sideloader" },
+    "com.esignapp.esign":               { sev: "HIGH",     name: "ESign",                  cat: "CERT",      desc: "Cert sideloader" },
+    "io.esign.esign":                   { sev: "HIGH",     name: "ESign",                  cat: "CERT",      desc: "Cert sideloader" },
+    "kh.crysalis.feather":              { sev: "HIGH",     name: "Feather",                cat: "CERT",      desc: "Cert sideloader (khcrysalis)" },
+    "xn.crysalis.feather":              { sev: "HIGH",     name: "Feather",                cat: "CERT",      desc: "Cert sideloader" },
+    "com.crysalis.feather":             { sev: "HIGH",     name: "Feather",                cat: "CERT",      desc: "Cert sideloader" },
+    "io.feather.feather":               { sev: "HIGH",     name: "Feather",                cat: "CERT",      desc: "Cert sideloader" },
+    "app.feather.feather":              { sev: "HIGH",     name: "Feather",                cat: "CERT",      desc: "Cert sideloader" },
+    "com.ksign.app":                    { sev: "HIGH",     name: "Ksign",                  cat: "CERT",      desc: "Cert sideloader" },
+    "io.ksign.ksign":                   { sev: "HIGH",     name: "Ksign",                  cat: "CERT",      desc: "Cert sideloader" },
+    "app.ksign.ksign":                  { sev: "HIGH",     name: "Ksign",                  cat: "CERT",      desc: "Cert sideloader" },
+    "com.ksign.ksign":                  { sev: "HIGH",     name: "Ksign",                  cat: "CERT",      desc: "Cert sideloader" },
+    "pkr.appwhitelist.ksign":           { sev: "HIGH",     name: "Ksign Whitelist",        cat: "CERT",      desc: "Cert sideloader variant" },
+    "com.gbox.gbox":                    { sev: "HIGH",     name: "GBox",                   cat: "CERT",      desc: "Cert sideloader iOS" },
+    "com.gboxapp.gbox":                 { sev: "HIGH",     name: "GBox",                   cat: "CERT",      desc: "Cert sideloader (alt)" },
+    "io.gbox.gbox":                     { sev: "HIGH",     name: "GBox",                   cat: "CERT",      desc: "Cert sideloader" },
+    "app.gbox.io":                      { sev: "HIGH",     name: "GBox",                   cat: "CERT",      desc: "Cert sideloader" },
+    "com.itools.gbox":                  { sev: "HIGH",     name: "GBox",                   cat: "CERT",      desc: "Cert sideloader" },
+    "com.usescarlet.scarlet":           { sev: "HIGH",     name: "Scarlet",                cat: "CERT",      desc: "Cert sideloader" },
+    "com.scarletapp.scarlet":           { sev: "HIGH",     name: "Scarlet",                cat: "CERT",      desc: "Cert sideloader" },
+    "com.scarletios.scarlet":           { sev: "HIGH",     name: "Scarlet",                cat: "CERT",      desc: "Cert sideloader" },
+    "com.appdb.appdb":                  { sev: "MEDIUM",   name: "AppDB",                  cat: "CERT",      desc: "Sideload store" },
+    "io.appdb.appdb":                   { sev: "MEDIUM",   name: "AppDB",                  cat: "CERT",      desc: "Sideload store" },
+    "com.tutuapp.tutuapp":              { sev: "MEDIUM",   name: "TutuApp",                cat: "CERT",      desc: "Sideload store" },
+    "com.appcake.appcake":              { sev: "MEDIUM",   name: "AppCake",                cat: "CERT",      desc: "Sideload store" },
+    "com.appvalley.appvalley":          { sev: "MEDIUM",   name: "AppValley",              cat: "CERT",      desc: "Sideload store" },
+    "com.buildstore.buildstore":        { sev: "MEDIUM",   name: "BuildStore",             cat: "CERT",      desc: "Sideload store" },
+    "com.ignition.ignition":            { sev: "MEDIUM",   name: "Ignition",               cat: "CERT",      desc: "Sideload store" },
+    "com.signtools.signtools":          { sev: "MEDIUM",   name: "SignTools",              cat: "CERT",      desc: "Sign tools" },
+    "io.itrustteam.itrust":             { sev: "MEDIUM",   name: "iTrust",                 cat: "CERT",      desc: "Cert provider" },
 
-    // File managers / shells (root access)
-    "com.tigisoftware.Filza":           { sev: "CRITICAL", desc: "Filza file manager root" },
-    "com.tigisoftware.FilzaFree":       { sev: "CRITICAL", desc: "Filza Free" },
-    "com.ifunbox.ifunbox":              { sev: "HIGH", desc: "iFunBox" },
-    "app.ish.iSH":                      { sev: "HIGH", desc: "iSH shell Linux" },
-    "com.septudio.SSHClientLite":       { sev: "HIGH", desc: "SSH Client Lite" },
-    "live.cclerc.geranium":             { sev: "HIGH", desc: "Geranium tweak manager JB" },
+    // === Cheat stores ===
+    "com.iosgods.iosgods":              { sev: "CRITICAL", name: "iOSGods",                cat: "CHEAT",     desc: "Cheat app store" },
+    "com.gbox.pubg":                    { sev: "CRITICAL", name: "GBox PUBG/FF",           cat: "CHEAT",     desc: "Cheat-bundled GBox" },
 
-    // Developer profile (suspeito em FF)
-    "com.apple.dt.Xcode":               { sev: "MEDIUM", desc: "Xcode IDE" },
-    "com.apple.Preferences.Developer":  { sev: "MEDIUM", desc: "Preferências de Desenvolvedor" },
-    "com.apple.TestFlight":             { sev: "MEDIUM", desc: "TestFlight" },
+    // === File managers / shells (root access) ===
+    "com.tigisoftware.Filza":           { sev: "CRITICAL", name: "Filza",                  cat: "TWEAK",     desc: "File manager com root" },
+    "com.tigisoftware.FilzaFree":       { sev: "CRITICAL", name: "Filza Free",             cat: "TWEAK",     desc: "File manager com root" },
+    "com.ifunbox.ifunbox":              { sev: "HIGH",     name: "iFunBox",                cat: "TWEAK",     desc: "Gerenciador iOS" },
+    "app.ish.iSH":                      { sev: "HIGH",     name: "iSH",                    cat: "TWEAK",     desc: "Shell Linux emulado" },
+    "com.septudio.SSHClientLite":       { sev: "HIGH",     name: "SSH Client Lite",        cat: "TWEAK",     desc: "Shell SSH remoto" },
+    "live.cclerc.geranium":             { sev: "HIGH",     name: "Geranium",               cat: "TWEAK",     desc: "Tweak manager JB" },
 
-    // Anti-detect
-    "com.shpion.cleaner":               { sev: "HIGH", desc: "Spion Cleaner - limpeza rastros" },
-    "com.limneos.adprivacy":            { sev: "MEDIUM", desc: "AdPrivacy" },
-    "com.jjcm.nomoread":                { sev: "MEDIUM", desc: "NoMoreAd" },
+    // === Developer (suspeito em FF) ===
+    "com.apple.dt.Xcode":               { sev: "MEDIUM",   name: "Xcode",                  cat: "DEV",       desc: "IDE Apple - dev cert" },
+    "com.apple.Preferences.Developer":  { sev: "MEDIUM",   name: "Developer Settings",     cat: "DEV",       desc: "Developer mode" },
+    "com.apple.TestFlight":             { sev: "MEDIUM",   name: "TestFlight",             cat: "DEV",       desc: "Beta install path" },
+
+    // === Anti-detect / cleaners ===
+    "com.shpion.cleaner":               { sev: "HIGH",     name: "Spion Cleaner",          cat: "CLEANER",   desc: "Limpa rastros forenses" },
+    "com.limneos.adprivacy":            { sev: "MEDIUM",   name: "AdPrivacy",              cat: "CLEANER",   desc: "Bloqueio de rede" },
+    "com.jjcm.nomoread":                { sev: "MEDIUM",   name: "NoMoreAd",               cat: "CLEANER",   desc: "Bloqueio de rede" },
+};
+
+// Categorias estilo KellerSS (badges visuais)
+const CATEGORY_INFO = {
+    CHEAT:     { icon: "⚠",  label: "Cheat",     color: "red"    },
+    SIDELOAD:  { icon: "📦", label: "Sideload",  color: "red"    },
+    JAILBREAK: { icon: "🔓", label: "Jailbreak", color: "red"    },
+    CERT:      { icon: "🔐", label: "Cert",      color: "orange" },
+    PROXY:     { icon: "🔀", label: "Proxy",     color: "orange" },
+    VPN:       { icon: "🛡",  label: "VPN",       color: "orange" },
+    DNS:       { icon: "🌐", label: "DNS",       color: "red"    },
+    TWEAK:     { icon: "🛠",  label: "Tweak",     color: "orange" },
+    DEV:       { icon: "🧪", label: "Dev",       color: "orange" },
+    CLEANER:   { icon: "🧹", label: "Cleaner",   color: "orange" },
+    PCPAIR:    { icon: "💻", label: "PC Pair",   color: "orange" },
+    TAMPER:    { icon: "🔴", label: "Tamper",    color: "red"    },
 };
 
 const FF_OFFICIAL = new Set([
@@ -1125,11 +1175,13 @@ function detectPrivacyReport(a) {
         }
     }
 
-    // 1. CHEAT_APPS
+    // 1. CHEAT_APPS - com nome próprio
     for (const b of bundlesSeen) {
         if (CHEAT_APPS[b]) {
             const info = CHEAT_APPS[b];
-            alertF(`[${info.sev}] ${b}`, info.desc);
+            const label = info.name ? `${info.name} detectado` : b;
+            const tag = info.cat ? `[${info.sev}][${info.cat}]` : `[${info.sev}]`;
+            alertF(`${tag} ${label}`, `${info.desc} · bundle: ${b}`);
         }
     }
 
@@ -1402,28 +1454,216 @@ function fileType(file) {
 // Categoriza um bundle ID encontrado
 function classifyBundle(b, source) {
     if (CHEAT_APPS[b]) {
-        return { sev: CHEAT_APPS[b].sev, desc: CHEAT_APPS[b].desc };
+        const info = CHEAT_APPS[b];
+        return { sev: info.sev, desc: info.desc, name: info.name || b, cat: info.cat || 'OTHER' };
     }
-    if (SCAN_PATTERNS.uuidOpaqueRegex.test(b)) {
-        SCAN_PATTERNS.uuidOpaqueRegex.lastIndex = 0;
+    if (/[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/.test(b)) {
         const isDNS = /nextdns|controld|cloudflare\.warp|adguard\.dns|opendns|quad9/i.test(b);
-        return { sev: 'CRITICAL', desc: isDNS ? "DNS profile UUID opaco - sequestra DNS (MITM em FF login)" : "Profile com UUID opaco (MDM/reseller)" };
+        return {
+            sev: 'CRITICAL',
+            desc: isDNS ? "DNS profile UUID opaco - sequestra DNS (MITM em FF login)" : "Profile com UUID opaco (MDM/reseller)",
+            name: isDNS ? "DNS Profile (UUID opaco)" : "MDM Profile (UUID opaco)",
+            cat: 'DNS'
+        };
     }
     if (/nextdns|controld|cloudflare\.warp|adguard\.dns/i.test(b) && !FF_OFFICIAL.has(b)) {
-        return { sev: 'HIGH', desc: "DNS reseller / sequester" };
+        const m = b.match(/(nextdns|controld|cloudflare\.warp|adguard|opendns|quad9)/i);
+        const name = m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : 'DNS Reseller';
+        return { sev: 'HIGH', desc: "DNS reseller / sequester", name: name + " (DNS sequester)", cat: 'DNS' };
     }
     if (b.toLowerCase().includes('freefire') && !FF_OFFICIAL.has(b)) {
-        return { sev: 'CRITICAL', desc: "Bundle FF NÃO oficial (re-sign / IPA mod)" };
+        return { sev: 'CRITICAL', desc: "Bundle FF NÃO oficial (re-sign / IPA mod)", name: "Free Fire Modded IPA", cat: 'CHEAT' };
     }
-    if (/(esign|feather|ksign|gbox|scarlet|trollstore|sideload|cydia|sileo|iosgods|filza)/i.test(b)) {
-        return { sev: 'HIGH', desc: "Cheat / sideloader (heurística)" };
+    // Heurística por keyword
+    const heuristic = b.toLowerCase().match(/\b(esign|feather|ksign|gbox|scarlet|trollstore|sideload|cydia|sileo|iosgods|filza|dopamine|palera1n|unc0ver)\b/);
+    if (heuristic) {
+        const name = heuristic[1].charAt(0).toUpperCase() + heuristic[1].slice(1);
+        return { sev: 'HIGH', desc: "Cheat/sideloader (heurística keyword)", name: name + " (variante)", cat: 'SIDELOAD' };
     }
     return null;
 }
 
-async function handleSysdiagnose(filesList) {
-    showLoading('Lendo pasta sysdiagnose…');
+/* ============================================================
+   TAR.GZ ARCHIVE HANDLER (carrega pako via CDN, parse tar inline)
+   ============================================================ */
+let pakoLoaded = false;
+async function ensurePako() {
+    if (pakoLoaded) return;
+    return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako_inflate.min.js';
+        s.onload = () => { pakoLoaded = true; resolve(); };
+        s.onerror = () => reject(new Error('Falha ao carregar pako CDN'));
+        document.head.appendChild(s);
+    });
+}
+
+function untarBytes(bytes) {
+    const files = [];
+    let offset = 0;
+    const decoder = new TextDecoder('utf-8');
+    while (offset + 512 <= bytes.length) {
+        const header = bytes.slice(offset, offset + 512);
+        // Check EOF (zero block)
+        let isZero = true;
+        for (let i = 0; i < 100; i++) { if (header[i] !== 0) { isZero = false; break; } }
+        if (isZero) break;
+        // Parse name (first 100 bytes, null-terminated)
+        let name = '';
+        for (let i = 0; i < 100 && header[i] !== 0; i++) name += String.fromCharCode(header[i]);
+        // Prefix (155 bytes starting at 345) - long filenames
+        let prefix = '';
+        for (let i = 345; i < 500 && header[i] !== 0; i++) prefix += String.fromCharCode(header[i]);
+        if (prefix) name = prefix + '/' + name;
+        // Size (octal at 124-136)
+        let sizeStr = '';
+        for (let i = 124; i < 136 && header[i] !== 0 && header[i] !== 0x20; i++) {
+            sizeStr += String.fromCharCode(header[i]);
+        }
+        const size = parseInt(sizeStr, 8) || 0;
+        // typeflag at 156: '0' or '\0' = regular file, '5' = dir, 'L' = long name, 'x' = pax
+        const typeflag = String.fromCharCode(header[156] || 0x30);
+        offset += 512;
+        if (typeflag === '0' || typeflag === '\0' || typeflag === '') {
+            if (name && !name.startsWith('PaxHeader') && !name.includes('PaxHeaders')) {
+                const content = bytes.slice(offset, offset + size);
+                files.push({ name, size, content });
+            }
+        }
+        // Skip content (padded to 512)
+        offset += Math.ceil(size / 512) * 512;
+    }
+    return files;
+}
+
+async function handleTarGz(file) {
+    showLoading(`Descompactando ${file.name}…`);
     reset();
+    try {
+        await ensurePako();
+    } catch (e) {
+        warn("Falha ao carregar pako (gzip lib). Tente sem internet ou extraia o .tar.gz manualmente e use o modo 'Sysdiagnose pasta'.");
+        renderResults({});
+        return;
+    }
+    const buf = await file.arrayBuffer();
+    const compressed = new Uint8Array(buf);
+    showLoading(`Inflando gzip (${(file.size / 1024 / 1024).toFixed(1)} MB)…`);
+    let tarBytes;
+    try {
+        tarBytes = window.pako.inflate(compressed);
+    } catch (e) {
+        warn("Falha ao descompactar gzip: " + String(e));
+        renderResults({});
+        return;
+    }
+    showLoading(`Parseando tar (${(tarBytes.length / 1024 / 1024).toFixed(1)} MB descompactados)…`);
+    const tarFiles = untarBytes(tarBytes);
+    ok(`tar.gz extraído: ${tarFiles.length} arquivos`);
+
+    // Converte para File-like objects que handleSysdiagnose espera
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    const pseudoFiles = tarFiles.map(tf => ({
+        name: tf.name.split('/').pop(),
+        webkitRelativePath: tf.name,
+        size: tf.size,
+        text: async () => decoder.decode(tf.content),
+        arrayBuffer: async () => tf.content.buffer.slice(tf.content.byteOffset, tf.content.byteOffset + tf.content.byteLength),
+    }));
+
+    await handleSysdiagnose(pseudoFiles, { fromTarGz: true });
+}
+
+/* ============================================================
+   PC PAIRING DETECTION
+   ============================================================ */
+function scanPCPairings(files) {
+    const pairFiles = files.filter(f => {
+        const p = (f.webkitRelativePath || f.name).toLowerCase();
+        return p.includes('mobilelockdown/pair_records') || p.includes('pair_records/');
+    });
+    if (pairFiles.length === 0) return;
+    ok(`PC Pairing Records: ${pairFiles.length} arquivo(s)`);
+    if (pairFiles.length > 0) {
+        warn(`[MEDIUM][PCPAIR] Device já foi pareado com ${pairFiles.length} PC/Mac (logs/MobileLockdown/pair_records/)`);
+        for (const f of pairFiles.slice(0, 5)) {
+            const name = f.name.replace(/\.plist$/, '');
+            warn(`PC Pair: ${name}`);
+        }
+    }
+}
+
+/* ============================================================
+   SYSDIAGNOSE TAMPERING DETECTION
+   ============================================================ */
+function checkSysdiagnoseIntegrity(files, byType) {
+    // Arquivos críticos que SEMPRE devem existir em sysdiagnose válido
+    const expectedCritical = [
+        { type: 'installLog',     name: 'logs/MobileInstallation/mobile_installation.log' },
+        { type: 'psFile',         name: 'ps.txt' },
+        { type: 'taskinfo',       name: 'taskinfo.txt' },
+        { type: 'systemVersion',  name: 'logs/SystemVersion/SystemVersion.plist' },
+    ];
+    const missing = expectedCritical.filter(c => !byType[c.type] || byType[c.type].length === 0);
+    if (missing.length >= 2) {
+        alertF(`[CRITICAL][TAMPER] SYSDIAGNOSE ALTERADO - ${missing.length} arquivos críticos faltando`,
+            "Faltam: " + missing.map(m => m.name).join(", "));
+    } else if (missing.length === 1) {
+        warn(`[MEDIUM][TAMPER] Sysdiagnose com 1 arquivo crítico faltando: ${missing[0].name}`);
+    } else {
+        ok("Sysdiagnose integridade OK (todos arquivos críticos presentes)");
+    }
+
+    // Total de arquivos típico = 500-1500
+    if (files.length < 100) {
+        alertF(`[CRITICAL][TAMPER] Sysdiagnose com apenas ${files.length} arquivos (típico: 500-1500)`,
+            "Provavelmente foi reduzido/limpo manualmente");
+    } else if (files.length < 300) {
+        warn(`[MEDIUM] Sysdiagnose com poucos arquivos (${files.length}) - investigar`);
+    }
+}
+
+/* ============================================================
+   HWID EXTRACTION
+   ============================================================ */
+async function extractHWID(files) {
+    // Busca em remotectl_dumpstate.txt e SystemVersion
+    let serial = null, udid = null, ecid = null;
+    for (const f of files) {
+        const name = (f.webkitRelativePath || f.name).toLowerCase();
+        if (name.endsWith('remotectl_dumpstate.txt')) {
+            const raw = await readSafe(f);
+            if (raw) {
+                const sm = raw.match(/SerialNumber[\s:=]+([A-Z0-9]+)/i);
+                if (sm) serial = sm[1];
+                const um = raw.match(/UniqueDeviceID[\s:=]+([A-Fa-f0-9-]+)/i) ||
+                           raw.match(/UDID[\s:=]+([A-Fa-f0-9-]+)/i);
+                if (um) udid = um[1];
+                const em = raw.match(/ECID[\s:=]+([A-Fa-f0-9x]+)/i);
+                if (em) ecid = em[1];
+            }
+        }
+    }
+    if (serial) ok(`Serial: ${serial}`);
+    if (udid)   ok(`UDID:   ${udid}`);
+    if (ecid)   ok(`ECID:   ${ecid}`);
+    if (serial || udid) {
+        // HWID composto pra cross-reference com bans
+        const raw = `${serial || ''}:${udid || ''}:${ecid || ''}`;
+        // Hash MD5 simples via crypto.subtle SHA-256 (web crypto não tem MD5)
+        try {
+            const enc = new TextEncoder().encode(raw);
+            const buf = await crypto.subtle.digest('SHA-256', enc);
+            const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+            ok(`HWID (SHA-256): ${hex.substring(0, 16)}...`);
+        } catch (e) {}
+    }
+}
+
+async function handleSysdiagnose(filesList, opts) {
+    opts = opts || {};
+    if (!opts.fromTarGz) showLoading('Lendo pasta sysdiagnose…');
+    if (!opts.fromTarGz) reset();
 
     const files = Array.from(filesList);
     ok(`Pasta selecionada: ${files.length} arquivos`);
@@ -1678,6 +1918,15 @@ async function handleSysdiagnose(filesList) {
 
     ok(`Pass 8: ${totalScanned} arquivos varridos (${totalSkipped} skipados)`);
 
+    // ─── PASS 9: PC PAIRING ───
+    scanPCPairings(files);
+
+    // ─── PASS 10: INTEGRIDADE / TAMPER ───
+    checkSysdiagnoseIntegrity(files, byType);
+
+    // ─── PASS 11: HWID EXTRACTION ───
+    await extractHWID(files);
+
     // ─── Emite alerts agregados ───
     if (foundProfiles.size > 0) {
         ok(`◆ ${foundProfiles.size} profile identifiers encontrados via grep recursivo`);
@@ -1743,6 +1992,9 @@ $('#file-profile').addEventListener('change', e => {
 $('#file-sysdiag').addEventListener('change', e => {
     if (e.target.files.length) handleSysdiagnose(e.target.files);
 });
+$('#file-targz').addEventListener('change', e => {
+    if (e.target.files.length) handleTarGz(e.target.files[0]);
+});
 
 // Drag & drop on each dropzone
 function wireDrop(dzId, handler, isFolder) {
@@ -1761,6 +2013,7 @@ function wireDrop(dzId, handler, isFolder) {
         }
     });
 }
+wireDrop('#dz-targz',   handleTarGz, false);
 wireDrop('#dz-ndjson',  handleNDJSON, false);
 wireDrop('#dz-profile', handleProfile, false);
 wireDrop('#dz-sysdiag', handleSysdiagnose, true);
