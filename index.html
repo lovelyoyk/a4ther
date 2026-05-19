@@ -673,7 +673,7 @@ footer a:hover { color: var(--cyan); }
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "2.8.0";
+const VERSION = "3.0.0";
 
 /* ============================================================
    BLACKLIST API (configurar quando seu backend estiver no ar)
@@ -847,7 +847,22 @@ const CHEAT_APPS = {
     "com.shpion.cleaner":               { sev: "HIGH",     name: "Spion Cleaner",          cat: "CLEANER",   desc: "Limpa rastros forenses" },
     "com.limneos.adprivacy":            { sev: "MEDIUM",   name: "AdPrivacy",              cat: "CLEANER",   desc: "Bloqueio de rede" },
     "com.jjcm.nomoread":                { sev: "MEDIUM",   name: "NoMoreAd",               cat: "CLEANER",   desc: "Bloqueio de rede" },
+
+    // === xLeal / xDark family (confirmado no KellerSS frontend) ===
+    "xdark.store.pro":                  { sev: "HIGH",     name: "xLeal (Filza)",          cat: "SIDELOAD",  desc: "Sideloader xLeal/xDark - distribui Filza modded" },
+
+    // === iMazing (forense PC, indica device foi mexido com cabo) ===
+    "com.DigiDNA.iMazing-iOS":          { sev: "MEDIUM",   name: "iMazing",                cat: "DEV",       desc: "Forense PC - device foi analisado/extraído com iMazing no Mac/PC" },
 };
+
+// SUBSTRING patterns (detecção por trecho em qualquer bundle)
+const SUBSTRING_PATTERNS = [
+    { needle: "imazing",   name: "iMazing",       cat: "DEV",      sev: "MEDIUM", desc: "Forense PC - extração via iMazing no Mac/PC" },
+    { needle: "xdark",     name: "xDark/xLeal",   cat: "SIDELOAD", sev: "HIGH",   desc: "Sideloader xDark/xLeal" },
+    { needle: "3utools",   name: "3uTools",       cat: "DEV",      sev: "MEDIUM", desc: "Ferramenta forense PC (3uTools)" },
+    { needle: "ifunbox",   name: "iFunBox",       cat: "TWEAK",    sev: "HIGH",   desc: "Gerenciador de arquivos iOS" },
+    { needle: "altserver", name: "AltServer",     cat: "SIDELOAD", sev: "HIGH",   desc: "AltStore sideload server" },
+];
 
 // Categorias estilo KellerSS (badges visuais)
 const CATEGORY_INFO = {
@@ -1065,16 +1080,26 @@ function renderResults(stats) {
     hideLoading();
     lastStats = stats;
     let verdict, color, icon, subtitle;
+    // Estilo KellerSS: W.O (vermelho grande) ou LIMPO (verde)
     if (alerts.length > 0) {
-        verdict = 'SUSPEITO'; color = 'red'; icon = '✗';
-        subtitle = `${alerts.length} alerta${alerts.length !== 1 ? 's' : ''} crítico${alerts.length !== 1 ? 's' : ''} detectado${alerts.length !== 1 ? 's' : ''}`;
+        verdict = 'W . O'; color = 'red'; icon = '✗';
+        subtitle = `${alerts.length} alerta${alerts.length !== 1 ? 's' : ''} crítico${alerts.length !== 1 ? 's' : ''} · aplicar W.O / BAN`;
     } else if (warnings.length > 0) {
         verdict = 'REVISAR'; color = 'orange'; icon = '⚠';
         subtitle = `${warnings.length} aviso${warnings.length !== 1 ? 's' : ''} a checar manualmente`;
     } else {
-        verdict = 'LIMPO'; color = 'green'; icon = '✓';
+        verdict = 'L I M P O'; color = 'green'; icon = '✓';
         subtitle = 'Device aprovado · nenhum indicador suspeito';
     }
+
+    // Stats KellerSS-style: Apps Instalados | Cheats | Perfis MDM
+    let cheatCount = 0, profileCount = 0;
+    for (const a of alerts) {
+        const m = (typeof a === 'string' ? a : a.msg) || '';
+        if (/\[CHEAT\]|\[CERT\]|\[SIDELOAD\]|\[JAILBREAK\]/.test(m)) cheatCount++;
+        if (/PROFILE|MDM|\[DNS\]/.test(m)) profileCount++;
+    }
+    const appsCount = stats && stats.bundles !== undefined ? stats.bundles : '?';
 
     let html = `
         <div class="verdict ${color}">
@@ -1084,12 +1109,13 @@ function renderResults(stats) {
         </div>
 
         <div class="stats">
-            <div class="stat alerts"><div class="stat-num">${alerts.length}</div><div class="stat-label">Alertas</div></div>
+            <div class="stat"><div class="stat-num" style="color: var(--cyan)">${appsCount}</div><div class="stat-label">Apps Instalados</div></div>
+            <div class="stat alerts"><div class="stat-num">${cheatCount}</div><div class="stat-label">Cheats</div></div>
+            <div class="stat alerts"><div class="stat-num">${profileCount}</div><div class="stat-label">Perfis MDM</div></div>
             <div class="stat warns"><div class="stat-num">${warnings.length}</div><div class="stat-label">Avisos</div></div>
             <div class="stat oks"><div class="stat-num">${okItems.length}</div><div class="stat-label">OKs</div></div>`;
     if (stats) {
         if (stats.events !== undefined)  html += `<div class="stat"><div class="stat-num">${stats.events}</div><div class="stat-label">Eventos</div></div>`;
-        if (stats.bundles !== undefined) html += `<div class="stat"><div class="stat-num">${stats.bundles}</div><div class="stat-label">Bundles</div></div>`;
         if (stats.domains !== undefined) html += `<div class="stat"><div class="stat-num">${stats.domains}</div><div class="stat-label">Domínios</div></div>`;
         if (stats.ips !== undefined)     html += `<div class="stat"><div class="stat-num">${stats.ips}</div><div class="stat-label">IPs</div></div>`;
     }
@@ -1574,6 +1600,8 @@ function fileType(file) {
 
 // Categoriza um bundle ID encontrado
 function classifyBundle(b, source) {
+    const bl = (b || "").toLowerCase();
+
     if (CHEAT_APPS[b]) {
         const info = CHEAT_APPS[b];
         return { sev: info.sev, desc: info.desc, name: info.name || b, cat: info.cat || 'OTHER' };
@@ -1592,16 +1620,81 @@ function classifyBundle(b, source) {
         const name = m ? m[1].charAt(0).toUpperCase() + m[1].slice(1) : 'DNS Reseller';
         return { sev: 'HIGH', desc: "DNS reseller / sequester", name: name + " (DNS sequester)", cat: 'DNS' };
     }
-    if (b.toLowerCase().includes('freefire') && !FF_OFFICIAL.has(b)) {
+    if (bl.includes('freefire') && !FF_OFFICIAL.has(b)) {
         return { sev: 'CRITICAL', desc: "Bundle FF NÃO oficial (re-sign / IPA mod)", name: "Free Fire Modded IPA", cat: 'CHEAT' };
     }
+
+    // SUBSTRING patterns (iMazing, xDark, 3uTools, iFunBox, AltServer)
+    for (const sp of SUBSTRING_PATTERNS) {
+        if (bl.includes(sp.needle)) {
+            return { sev: sp.sev, name: sp.name, cat: sp.cat, desc: sp.desc };
+        }
+    }
+
     // Heurística por keyword
-    const heuristic = b.toLowerCase().match(/\b(esign|feather|ksign|gbox|scarlet|trollstore|sideload|cydia|sileo|iosgods|filza|dopamine|palera1n|unc0ver)\b/);
+    const heuristic = bl.match(/\b(esign|feather|ksign|gbox|scarlet|trollstore|sideload|cydia|sileo|iosgods|filza|dopamine|palera1n|unc0ver)\b/);
     if (heuristic) {
         const name = heuristic[1].charAt(0).toUpperCase() + heuristic[1].slice(1);
         return { sev: 'HIGH', desc: "Cheat/sideloader (heurística keyword)", name: name + " (variante)", cat: 'SIDELOAD' };
     }
     return null;
+}
+
+/* ============================================================
+   5-LEVEL PROFILE CLASSIFICATION (estilo KellerSS)
+     cheat   → CHEAT confirmado (vermelho)
+     opaque  → DETECTADO (vermelho, suspeito sem ID conhecido)
+     suspect → SUSPEITO (rosa, keyword cheat mas não conclusivo)
+     vpn     → VPN legítima (âmbar)
+     legit   → OK (verde, Apple/empresa)
+   ============================================================ */
+function classifyProfile(identifier, payloadTypes, organization, displayName) {
+    const id = (identifier || "").toLowerCase();
+    const org = (organization || "").toLowerCase();
+    const dn = (displayName || "").toLowerCase();
+    const all = id + " " + org + " " + dn;
+    const pts = (payloadTypes || []).join(" ").toLowerCase();
+
+    // 1. CHEAT confirmado - bundle/identifier conhecido
+    if (CHEAT_APPS[identifier]) {
+        return { class: 'cheat', label: 'CHEAT', color: 'red' };
+    }
+    if (/esign|feather|ksign|gbox|scarlet|trollstore|sideload|cheat|hack|aimbot|wallhack|ffh4x|cracked/i.test(all)) {
+        return { class: 'cheat', label: 'CERT CHEAT', color: 'red' };
+    }
+
+    // 2. UUID opaco em DNS reseller → cheat
+    if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(id) &&
+        /nextdns|controld|adguard|cloudflare|warp|opendns|quad9/i.test(id)) {
+        return { class: 'cheat', label: 'DNS CHEAT', color: 'red' };
+    }
+
+    // 3. UUID opaco genérico → DETECTADO (opaque)
+    if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/.test(id)) {
+        return { class: 'opaque', label: 'DETECTADO', color: 'red' };
+    }
+
+    // 4. VPN payload → vpn (legítimo pode ser MDM corporativo)
+    if (pts.includes('com.apple.vpn.managed') ||
+        /vpn|nordvpn|expressvpn|protonvpn|surfshark|windscribe|warp/i.test(all)) {
+        return { class: 'vpn', label: 'VPN', color: 'orange' };
+    }
+
+    // 5. Payload tem proxy/CA root/web filter → suspect
+    if (pts.includes('com.apple.proxy') ||
+        pts.includes('com.apple.security.root') ||
+        pts.includes('com.apple.webcontent-filter') ||
+        pts.includes('com.apple.dnssettings')) {
+        return { class: 'suspect', label: 'Suspeito', color: 'orange' };
+    }
+
+    // 6. Apple/corporate → legit
+    if (id.startsWith('com.apple.') || /mdm|corp|enterprise|microsoft|google/i.test(all)) {
+        return { class: 'legit', label: 'OK', color: 'green' };
+    }
+
+    // Default: suspect
+    return { class: 'suspect', label: 'Suspeito', color: 'orange' };
 }
 
 /* ============================================================
@@ -1669,6 +1762,13 @@ async function handleTarGz(file) {
     }
     const buf = await file.arrayBuffer();
     const compressed = new Uint8Array(buf);
+
+    // ─── chkH: extrai gzip mtime do header (bytes 4-7, little-endian) ───
+    let gzipMtime = 0;
+    if (compressed.length > 8 && compressed[0] === 0x1f && compressed[1] === 0x8b) {
+        gzipMtime = (compressed[4] | (compressed[5] << 8) | (compressed[6] << 16) | (compressed[7] << 24)) * 1000;
+    }
+
     showLoading(`Inflando gzip (${(file.size / 1024 / 1024).toFixed(1)} MB)…`);
     let tarBytes;
     try {
@@ -1681,6 +1781,9 @@ async function handleTarGz(file) {
     showLoading(`Parseando tar (${(tarBytes.length / 1024 / 1024).toFixed(1)} MB descompactados)…`);
     const tarFiles = untarBytes(tarBytes);
     ok(`tar.gz extraído: ${tarFiles.length} arquivos`);
+    if (gzipMtime > 0) {
+        ok(`gzip mtime: ${new Date(gzipMtime).toISOString()}`);
+    }
 
     // Converte para File-like objects que handleSysdiagnose espera
     const decoder = new TextDecoder('utf-8', { fatal: false });
@@ -1688,11 +1791,12 @@ async function handleTarGz(file) {
         name: tf.name.split('/').pop(),
         webkitRelativePath: tf.name,
         size: tf.size,
+        lastModified: gzipMtime,
         text: async () => decoder.decode(tf.content),
         arrayBuffer: async () => tf.content.buffer.slice(tf.content.byteOffset, tf.content.byteOffset + tf.content.byteLength),
     }));
 
-    await handleSysdiagnose(pseudoFiles, { fromTarGz: true });
+    await handleSysdiagnose(pseudoFiles, { fromTarGz: true, gzipMtime, tarFilename: file.name });
 }
 
 /* ============================================================
@@ -1715,10 +1819,11 @@ function scanPCPairings(files) {
 }
 
 /* ============================================================
-   SYSDIAGNOSE TAMPERING DETECTION
+   SYSDIAGNOSE TAMPERING DETECTION (KellerSS-style 7 sub-checks)
    ============================================================ */
-function checkSysdiagnoseIntegrity(files, byType) {
-    // Arquivos críticos que SEMPRE devem existir em sysdiagnose válido
+async function checkSysdiagnoseIntegrity(files, byType, opts) {
+    opts = opts || {};
+    // ─── chkI: campos críticos ausentes ───
     const expectedCritical = [
         { type: 'installLog',     name: 'logs/MobileInstallation/mobile_installation.log' },
         { type: 'psFile',         name: 'ps.txt' },
@@ -1727,20 +1832,108 @@ function checkSysdiagnoseIntegrity(files, byType) {
     ];
     const missing = expectedCritical.filter(c => !byType[c.type] || byType[c.type].length === 0);
     if (missing.length >= 2) {
-        alertF(`[CRITICAL][TAMPER] SYSDIAGNOSE ALTERADO - ${missing.length} arquivos críticos faltando`,
+        alertF(`[CRITICAL][TAMPER] (chkI) SYSDIAGNOSE ADULTERADO - ${missing.length} arquivos críticos faltando`,
             "Faltam: " + missing.map(m => m.name).join(", "));
     } else if (missing.length === 1) {
-        warn(`[MEDIUM][TAMPER] Sysdiagnose com 1 arquivo crítico faltando: ${missing[0].name}`);
+        warn(`[MEDIUM][TAMPER] (chkI) 1 arquivo crítico faltando: ${missing[0].name}`);
     } else {
-        ok("Sysdiagnose integridade OK (todos arquivos críticos presentes)");
+        ok("(chkI) Campos críticos presentes");
     }
 
-    // Total de arquivos típico = 500-1500
+    // ─── chkE: total de arquivos suspeito ───
     if (files.length < 100) {
         alertF(`[CRITICAL][TAMPER] Sysdiagnose com apenas ${files.length} arquivos (típico: 500-1500)`,
-            "Provavelmente foi reduzido/limpo manualmente");
+            "Reduzido/limpo manualmente");
     } else if (files.length < 300) {
-        warn(`[MEDIUM] Sysdiagnose com poucos arquivos (${files.length}) - investigar`);
+        warn(`[MEDIUM] Sysdiagnose com poucos arquivos (${files.length})`);
+    }
+
+    // ─── chkB: MCState.log com files coletados mas deletados depois ───
+    const mcStateLogs = files.filter(f => (f.webkitRelativePath || f.name).toLowerCase().includes('mcstate') && (f.webkitRelativePath || f.name).toLowerCase().endsWith('.log'));
+    if (mcStateLogs.length > 0) {
+        let suspiciousDelete = 0;
+        for (const f of mcStateLogs) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            // procura "collected" seguido por "deleted" / "removed"
+            const deletedAfterCollect = raw.match(/collected[\s\S]{0,500}(deleted|removed|unlink)/gi);
+            if (deletedAfterCollect) suspiciousDelete += deletedAfterCollect.length;
+        }
+        if (suspiciousDelete > 0) {
+            alertF(`[CRITICAL][TAMPER] (chkB) MCState.log mostra ${suspiciousDelete} arquivos coletados E deletados`,
+                "Cheat tentou esconder rastros antes do sysdiagnose terminar");
+        }
+    }
+
+    // ─── chkC + chkD: timestomping (timestamps adulterados) ───
+    // Sysdiagnose lastModified de cada arquivo
+    const mtimes = files.map(f => f.lastModified || 0).filter(t => t > 0);
+    if (mtimes.length > 100) {
+        // chkC: muitos arquivos com mtime > captureTime? (não temos captureTime, mas podemos checar uniformidade)
+        // chkD: timestomping = todos arquivos com EXATAMENTE o mesmo timestamp
+        const uniqueMtimes = new Set(mtimes);
+        if (uniqueMtimes.size < mtimes.length / 20) {
+            alertF(`[CRITICAL][TAMPER] (chkD) Timestomping: ${mtimes.length} arquivos com só ${uniqueMtimes.size} timestamps distintos`,
+                "Uniformidade impossível em sysdiagnose real");
+        }
+        // chkC: mtime futuro?
+        const now = Date.now();
+        const futureCount = mtimes.filter(t => t > now + 3600000).length;
+        if (futureCount > 0) {
+            alertF(`[CRITICAL][TAMPER] (chkC) ${futureCount} arquivos com mtime no FUTURO`,
+                "Touched/adulterado com data falsa");
+        }
+        // mtime muito antigo (anchors stale)
+        const yearAgo = now - 365 * 24 * 3600 * 1000;
+        const veryOld = mtimes.filter(t => t < yearAgo).length;
+        if (veryOld > 50) {
+            warn(`[MEDIUM][TAMPER] (chkG) ${veryOld} arquivos com mtime > 1 ano antigo (stale anchors?)`);
+        }
+    }
+
+    // ─── chkH: gzip mtime vs nome do arquivo ───
+    if (opts.gzipMtime && opts.tarFilename) {
+        // Nome típico: sysdiagnose_2026.05.19_18-32-45-0300.tar.gz
+        const m = opts.tarFilename.match(/sysdiagnose_(\d{4})\.(\d{2})\.(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+        if (m) {
+            const filenameDate = new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
+            const diffHours = Math.abs(opts.gzipMtime - filenameDate.getTime()) / 3600000;
+            if (diffHours > 24) {
+                alertF(`[CRITICAL][TAMPER] (chkH/chkJ) Gzip mtime diverge ${diffHours.toFixed(1)}h do nome do arquivo`,
+                    `Nome: ${m[0]} · gzip mtime: ${new Date(opts.gzipMtime).toISOString()}`);
+            } else {
+                ok(`(chkH) gzip mtime bate com nome do arquivo (diff: ${diffHours.toFixed(1)}h)`);
+            }
+        }
+    }
+}
+
+/* ============================================================
+   MANUAL Wi-Fi PROXY DETECTION (chkN-style)
+   ============================================================ */
+async function checkManualProxy(files) {
+    // Procura HTTPProxy em qualquer plist de configuração
+    const prefsFiles = files.filter(f => {
+        const p = (f.webkitRelativePath || f.name).toLowerCase();
+        return p.endsWith('preferences.plist') || p.endsWith('com.apple.wifi.plist') ||
+               p.endsWith('com.apple.wifi.known-networks.plist');
+    });
+    for (const f of prefsFiles) {
+        const raw = await readSafe(f);
+        if (!raw) continue;
+        // Match HTTPProxy + valor
+        const proxyMatch = raw.match(/HTTPProxy[\s\S]{0,200}(\d+\.\d+\.\d+\.\d+)/);
+        const portMatch = raw.match(/HTTPPort[\s\S]{0,100}<integer>(\d+)/);
+        if (proxyMatch) {
+            const port = portMatch ? portMatch[1] : '?';
+            alertF(`[CRITICAL][CHEAT] PROXY MANUAL Wi-Fi: ${proxyMatch[1]}:${port}`,
+                `Configurado manualmente em ${f.name} - MITM clássico`);
+        }
+        // PAC URL custom
+        const pacMatch = raw.match(/ProxyAutoConfigURLString[\s\S]{0,200}<string>(https?:\/\/[^<]+)/);
+        if (pacMatch) {
+            alertF(`[CRITICAL][CHEAT] PAC URL configurada`, pacMatch[1]);
+        }
     }
 }
 
@@ -2042,8 +2235,14 @@ async function handleSysdiagnose(filesList, opts) {
     // ─── PASS 9: PC PAIRING ───
     scanPCPairings(files);
 
-    // ─── PASS 10: INTEGRIDADE / TAMPER ───
-    checkSysdiagnoseIntegrity(files, byType);
+    // ─── PASS 10: INTEGRIDADE / TAMPER (7 sub-checks) ───
+    await checkSysdiagnoseIntegrity(files, byType, {
+        gzipMtime: opts.gzipMtime,
+        tarFilename: opts.tarFilename,
+    });
+
+    // ─── PASS 10b: Manual Wi-Fi Proxy ───
+    await checkManualProxy(files);
 
     // ─── PASS 11: HWID EXTRACTION ───
     await extractHWID(files);
