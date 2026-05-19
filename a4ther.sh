@@ -2762,7 +2762,7 @@ if [ -d /var/containers/Bundle/Application ]; then
                     # Filtrar grandes legítimos (Google, Microsoft, etc.)
                     case "$(echo "$TEAM_NAME" | tr '[:upper:]' '[:lower:]')" in
                         *apple*|*google*|*microsoft*|*meta*|*facebook*|*samsung*|\
-                        *spotify*|*adobe*|*amazon*|*netflix*|*disney*|*twitter*|*x corp*|\
+                        *spotify*|*adobe*|*amazon*|*netflix*|*disney*|*twitter*|\
                         *whatsapp*|*tencent*|*supercell*|*riot*|*epic*|*activision*)
                             info "  $APP_NAME: $TEAM_NAME ($TEAM_ID)" ;;
                         *esign*|*feather*|*ksign*|*gbox*|*scarlet*|*sideload*|*trollstore*|*altstore*|*signtools*|*ignition*|*appcake*|*appdb*|*tutuapp*|*panda*|*iosgods*)
