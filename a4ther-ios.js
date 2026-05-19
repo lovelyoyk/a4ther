@@ -49,7 +49,6 @@ const CHEAT_BUNDLES_JB = [
     "com.rileytestut.AltStore",
     "com.altstore.altstoreclassic",
     "com.sideloadly.sideloadly",
-    "com.esign.ios",
     "com.iosgods.iosgods",
     "com.gbox.pubg",
     "live.cclerc.geranium",
@@ -59,6 +58,52 @@ const CHEAT_BUNDLES_JB = [
     "app.ish.iSH",
     "com.septudio.SSHClientLite",
     "com.shpion.cleaner",
+];
+
+// Certificate-based sideloaders (Esign / Feather / Ksign / Gbox / Scarlet / etc.)
+// Esses serviços assinam IPAs com cert de Apple Developer (free ou enterprise) e
+// instalam apps modificados sem jailbreak. Apple revoga periodicamente.
+const CHEAT_BUNDLES_CERT_SIDELOAD = [
+    // Esign
+    "com.esign.ios",
+    "com.esign.esign",
+    "app.esign.esign",
+    "com.esignapp.esign",
+    "io.esign.esign",
+    // Feather (developer khcrysalis)
+    "kh.crysalis.feather",
+    "xn.crysalis.feather",
+    "com.crysalis.feather",
+    "io.feather.feather",
+    "app.feather.feather",
+    // Ksign
+    "com.ksign.app",
+    "io.ksign.ksign",
+    "app.ksign.ksign",
+    "com.ksign.ksign",
+    "pkr.appwhitelist.ksign",
+    // Gbox (installer iOS, diferente do com.gbox.pubg que é cheat)
+    "com.gbox.gbox",
+    "com.gboxapp.gbox",
+    "io.gbox.gbox",
+    "app.gbox.io",
+    "com.itools.gbox",
+    // Scarlet
+    "com.usescarlet.scarlet",
+    "com.scarletapp.scarlet",
+    "com.scarletios.scarlet",
+    // Outros sideloaders cert-based
+    "com.appdb.appdb",
+    "com.tutuapp.tutuapp",
+    "com.appcake.appcake",
+    "com.appvalley.appvalley",
+    "com.buildstore.buildstore",
+    "com.appsync.appsync",
+    "com.ignition.ignition",
+    "com.signtools.signtools",
+    "com.relink.relink",
+    "io.itrustteam.itrust",
+    "io.appdb.appdb",
 ];
 
 // Bundle IDs de proxy / VPN / sniffer (cheats remotos)
@@ -113,6 +158,41 @@ const CHEAT_DOMAINS = [
     "ipa.aspy.dev",
 ];
 
+// Domínios de cert-based sideloaders (Esign / Feather / Ksign / Gbox / etc.)
+const CERT_SIDELOAD_DOMAINS = [
+    // Esign
+    "esign.yyyue.xyz",
+    "esign.kichik.com",
+    "esign.app",
+    "api.esign.app",
+    // Feather
+    "feathertweak.com",
+    "feather.appsmash.com",
+    "khcrysalis.com",
+    "feather.app",
+    // Ksign
+    "ksign.app",
+    "ksign.click",
+    "api.ksign.app",
+    // Gbox
+    "gbox.global",
+    "gboxapp.io",
+    "api.gbox.io",
+    // Scarlet
+    "scarlet.usescarlet.com",
+    "api.scarletapp.com",
+    // Outros
+    "appdb.to",
+    "appdb.win",
+    "tutuapp.com",
+    "panda.tools",
+    "ignition.fun",
+    "appvalley.vip",
+    "buildstore.us",
+    "itrustteam.com",
+    "iosgods.com",
+];
+
 // TLDs suspeitos (free hosting usado por cheat panels)
 const TLD_SUSPECT = [
     ".netlify.app", ".workers.dev", ".vercel.app",
@@ -125,12 +205,13 @@ const TLD_SUSPECT = [
 const SUSPECT_KEYWORDS = [
     "cheat", "hack", "aimbot", "wallhack", "esp",
     "modmenu", "injector", "tweak", "substrate", "frida",
-    "filza", "esign", "gbox", "dopamine", "sileo",
-    "trollstore", "trolldecrypt", "spoofer", "cleaner",
-    "unc0ver", "checkra1n", "jailbreak", "cydia", "zebra",
-    "altstore", "iosgods", "geranium", "potatso", "shadowrocket",
-    "surge", "quantumult", "hiddify", "shadowsocks", "trojan",
-    "karing", "proxyff", "bypass", "inject", "libhooker",
+    "filza", "esign", "feather", "ksign", "gbox", "scarlet",
+    "dopamine", "sileo", "trollstore", "trolldecrypt", "spoofer",
+    "cleaner", "unc0ver", "checkra1n", "jailbreak", "cydia",
+    "zebra", "altstore", "iosgods", "geranium", "potatso",
+    "shadowrocket", "surge", "quantumult", "hiddify", "shadowsocks",
+    "trojan", "karing", "proxyff", "bypass", "inject", "libhooker",
+    "sideload", "appdb", "tutuapp", "appvalley", "ignition",
 ];
 
 // ============================================================
@@ -240,6 +321,22 @@ function detect(analysis) {
     for (const b of CHEAT_BUNDLES_PROXY) {
         if (bundlesSeen.has(b)) {
             alert(`Proxy / VPN bundle ativo: ${b}`);
+        }
+    }
+
+    // 3b) Cert-based sideloaders (Esign / Feather / Ksign / Gbox / Scarlet)
+    for (const b of CHEAT_BUNDLES_CERT_SIDELOAD) {
+        if (bundlesSeen.has(b)) {
+            alert(`Cert sideloader (assina IPA modded): ${b}`);
+        }
+    }
+
+    // 3c) Domínios de sideload services (apps re-assinam via esses servers)
+    for (const d of CERT_SIDELOAD_DOMAINS) {
+        for (const seen of domainsSeen) {
+            if (seen.toLowerCase().includes(d.toLowerCase())) {
+                alert(`Domínio de sideload service: ${seen}`);
+            }
         }
     }
 

@@ -22,7 +22,7 @@
 #     chmod +x FFScanner.sh && sh FFScanner.sh
 # ============================================================
 
-VERSION="3.5.0"
+VERSION="3.6.0"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -2618,6 +2618,37 @@ com.rileytestut.AltStore
 com.altstore.altstoreclassic
 com.sideloadly.sideloadly
 com.esign.ios
+com.esign.esign
+app.esign.esign
+com.esignapp.esign
+io.esign.esign
+kh.crysalis.feather
+xn.crysalis.feather
+com.crysalis.feather
+io.feather.feather
+app.feather.feather
+com.ksign.app
+io.ksign.ksign
+app.ksign.ksign
+com.ksign.ksign
+pkr.appwhitelist.ksign
+com.gbox.gbox
+com.gboxapp.gbox
+io.gbox.gbox
+app.gbox.io
+com.itools.gbox
+com.usescarlet.scarlet
+com.scarletapp.scarlet
+com.scarletios.scarlet
+com.appdb.appdb
+com.tutuapp.tutuapp
+com.appcake.appcake
+com.appvalley.appvalley
+com.buildstore.buildstore
+com.ignition.ignition
+com.signtools.signtools
+io.itrustteam.itrust
+io.appdb.appdb
 com.iosgods.iosgods
 com.gbox.pubg
 live.cclerc.geranium
@@ -2643,6 +2674,145 @@ if [ -d /var/containers/Bundle/Application ]; then
     done
 fi
 [ "$CB_HITS" = "0" ] && ok "Sem cheat bundle iOS conhecido"
+
+# ============================================================
+#  iOS-6c. PROVISIONING PROFILES / CERTIFICATES
+#         Cert sideloaders (Esign/Feather/Ksign/Gbox/Scarlet) deixam pegada
+#         em /var/MobileDevice/ProvisioningProfiles/ + cada .app tem o seu
+# ============================================================
+header "iOS - PROVISIONING PROFILES / CERTIFICATES"
+
+PROV_HITS=0
+
+# 1) Diretórios de provisioning profiles (global - todos perfis instalados)
+PROV_DIRS="
+/var/MobileDevice/ProvisioningProfiles
+/private/var/MobileDevice/ProvisioningProfiles
+/var/installd/Library/MobileDevice/ProvisioningProfiles
+/var/jb/var/MobileDevice/ProvisioningProfiles
+"
+
+for PD in $PROV_DIRS; do
+    [ -d "$PD" ] || continue
+    PROVS=$(ls "$PD" 2>/dev/null | grep '\.mobileprovision$')
+    [ -z "$PROVS" ] && continue
+    info "Profiles em $PD: $(echo "$PROVS" | wc -l)"
+    echo "$PROVS" | while IFS= read -r PF; do
+        [ -z "$PF" ] && continue
+        FULL="$PD/$PF"
+        # mobileprovision é CMS-encoded; usar 'security cms' ou strings
+        CONTENT=""
+        if have security; then
+            CONTENT=$(security cms -D -i "$FULL" 2>/dev/null)
+        fi
+        [ -z "$CONTENT" ] && have strings && CONTENT=$(strings "$FULL" 2>/dev/null)
+        [ -z "$CONTENT" ] && continue
+        # Team Name e Team ID
+        TEAM_NAME=$(echo "$CONTENT" | grep -A1 -i 'TeamName' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
+        TEAM_ID=$(echo "$CONTENT" | grep -A1 -i 'TeamIdentifier' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
+        APP_ID=$(echo "$CONTENT" | grep -A1 -i 'application-identifier' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
+        # ProvisionsAllDevices (true = enterprise cert)
+        ENTERPRISE=$(echo "$CONTENT" | grep -i 'ProvisionsAllDevices' | head -n 1)
+        # IsXcodeManaged
+        XCODE=$(echo "$CONTENT" | grep -i 'IsXcodeManaged' | head -n 1)
+
+        info "  $PF"
+        [ -n "$TEAM_NAME" ] && info "    Team: $TEAM_NAME ($TEAM_ID)"
+        [ -n "$APP_ID" ]    && info "    App: $APP_ID"
+        [ -n "$ENTERPRISE" ] && warn "    ENTERPRISE certificate (ProvisionsAllDevices)"
+
+        # Team ID conhecidos legítimos
+        case "$TEAM_ID" in
+            "H99WFFB59J") ok "    Team Garena (oficial Free Fire)" ;;
+            "")           warn "    Team ID ausente" ;;
+            *)
+                # Procurar team names suspeitos
+                case "$(echo "$TEAM_NAME" | tr '[:upper:]' '[:lower:]')" in
+                    *esign*|*feather*|*ksign*|*gbox*|*scarlet*|*sideload*|*trollstore*|*altstore*|*signtools*|*ignition*|*appcake*|*appdb*|*tutuapp*|*panda*|*iosgods*)
+                        alert "    Cert de SIDELOAD SERVICE detectado: $TEAM_NAME" ;;
+                esac ;;
+        esac
+        # Strings cheat no payload
+        CHEAT_STR=$(echo "$CONTENT" | grep -iE 'cheat|hack|aimbot|wallhack|ffh4x|mod\.menu|injector|cracked' | head -n 1)
+        [ -n "$CHEAT_STR" ] && alert "    Profile contém string suspeita: $(echo "$CHEAT_STR" | head -c 100)"
+    done
+    PROV_HITS=$((PROV_HITS+1))
+done
+
+# 2) Cada .app instalada tem seu próprio embedded.mobileprovision — listar e checar Team ID
+if [ -d /var/containers/Bundle/Application ]; then
+    EMBED=$(find /var/containers/Bundle/Application -maxdepth 4 -name 'embedded.mobileprovision' 2>/dev/null | head -n 40)
+    if [ -n "$EMBED" ]; then
+        info "Embedded provisioning profiles (por app instalado):"
+        echo "$EMBED" | while IFS= read -r EP; do
+            [ -z "$EP" ] && continue
+            APP_DIR=$(dirname "$EP")
+            APP_NAME=$(basename "$APP_DIR" .app)
+            CONTENT=""
+            if have security; then
+                CONTENT=$(security cms -D -i "$EP" 2>/dev/null)
+            fi
+            [ -z "$CONTENT" ] && have strings && CONTENT=$(strings "$EP" 2>/dev/null)
+            TEAM_NAME=$(echo "$CONTENT" | grep -A1 -i 'TeamName' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
+            TEAM_ID=$(echo "$CONTENT" | grep -A1 -i 'TeamIdentifier' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
+            case "$TEAM_ID" in
+                "H99WFFB59J") info "  $APP_NAME: $TEAM_NAME ($TEAM_ID) [Garena]" ;;
+                "")           warn "  $APP_NAME: Team ID ausente (TrollStore/sem assinatura)" ;;
+                *)
+                    # Filtrar grandes legítimos (Google, Microsoft, etc.)
+                    case "$(echo "$TEAM_NAME" | tr '[:upper:]' '[:lower:]')" in
+                        *apple*|*google*|*microsoft*|*meta*|*facebook*|*samsung*|\
+                        *spotify*|*adobe*|*amazon*|*netflix*|*disney*|*twitter*|*x corp*|\
+                        *whatsapp*|*tencent*|*supercell*|*riot*|*epic*|*activision*)
+                            info "  $APP_NAME: $TEAM_NAME ($TEAM_ID)" ;;
+                        *esign*|*feather*|*ksign*|*gbox*|*scarlet*|*sideload*|*trollstore*|*altstore*|*signtools*|*ignition*|*appcake*|*appdb*|*tutuapp*|*panda*|*iosgods*)
+                            alert "  $APP_NAME: cert de SIDELOAD = $TEAM_NAME ($TEAM_ID)" ;;
+                        *)
+                            warn "  $APP_NAME: cert 3rd-party = $TEAM_NAME ($TEAM_ID)" ;;
+                    esac ;;
+            esac
+        done
+        PROV_HITS=$((PROV_HITS+1))
+    fi
+fi
+
+# 3) Free Fire especificamente: pegar Team ID dele e comparar com Garena oficial
+if [ -d /var/containers/Bundle/Application ]; then
+    FF_EMBED=$(find /var/containers/Bundle/Application -maxdepth 4 -name 'embedded.mobileprovision' 2>/dev/null \
+        | while IFS= read -r EP; do
+            APP_DIR=$(dirname "$EP")
+            INFO="$APP_DIR/Info.plist"
+            if [ -f "$INFO" ]; then
+                BID=$(grep -A1 'CFBundleIdentifier' "$INFO" 2>/dev/null | tail -n1 | sed -E 's/.*<string>([^<]+)<.*/\1/')
+                case "$BID" in
+                    com.dts.freefireth|com.dts.freefiremax|com.garena.global.freefire|com.garena.global.ffmax|com.garena.freefire.br|com.garena.freefire.kr)
+                        echo "$EP|$BID" ;;
+                esac
+            fi
+        done)
+    if [ -n "$FF_EMBED" ]; then
+        echo "$FF_EMBED" | while IFS=\| read -r EP BID; do
+            [ -z "$EP" ] && continue
+            info "Free Fire ($BID) cert:"
+            CONTENT=""
+            if have security; then
+                CONTENT=$(security cms -D -i "$EP" 2>/dev/null)
+            fi
+            [ -z "$CONTENT" ] && have strings && CONTENT=$(strings "$EP" 2>/dev/null)
+            TEAM_NAME=$(echo "$CONTENT" | grep -A1 -i 'TeamName' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
+            TEAM_ID=$(echo "$CONTENT" | grep -A1 -i 'TeamIdentifier' | grep -oE '<string>[^<]+</string>' | head -n1 | sed 's|</?string>||g')
+            info "  Team: $TEAM_NAME ($TEAM_ID)"
+            if [ "$TEAM_ID" = "H99WFFB59J" ]; then
+                ok "  Free Fire assinado por GARENA OFICIAL"
+            else
+                alert "  Free Fire assinado por OUTRO team ($TEAM_NAME) - sideload/re-sign confirmado"
+                PROV_HITS=$((PROV_HITS+1))
+            fi
+        done
+    fi
+fi
+
+[ "$PROV_HITS" = "0" ] && ok "Sem provisioning profile suspeito"
 
 # ============================================================
 #  iOS-7. PROCESSOS SUSPEITOS
