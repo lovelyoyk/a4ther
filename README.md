@@ -44,11 +44,46 @@ sh /tmp/a4ther.sh
 
 O script auto-detecta `Darwin` + paths de JB (`/var/jb`, `/Applications/Cydia.app`, etc.) e roda as **9 seções iOS**: jailbreak detection, Configuration Profiles, Substrate/tweaks, Frida iOS, sideload (TrollStore/AltStore/iGameGod), Free Fire bundle ID + App Store signature, processos suspeitos, HWID via `ioreg`.
 
-### 🍏 iOS sem jailbreak (via Scriptable)
+### 🍏 iOS sem jailbreak (via Scriptable) — 3 modos
 
 Para iPhone normal (sem JB), use o **`a4ther-ios.js`** — script JavaScript que roda no app **Scriptable** (gratuito na App Store).
 
-**Setup (uma vez só):**
+**Setup uma vez:**
+
+1. App Store → instala **Scriptable**
+2. Safari → cole: `scriptable:///add?url=https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther-ios.js`
+3. Scriptable abre, confirma importar
+
+**Roda o script, escolhe o modo:**
+
+#### 🆕 Modo 1 — Sysdiagnose (RECOMENDADO, mais completo)
+
+Analisa o diagnóstico completo do sistema iOS — apps, profiles, network, install history, processos e crashes:
+
+```
+1. iPhone: aperta Vol+ + Vol- + Side simultaneamente por 1 seg
+   (sente vibrar de leve confirmando)
+2. Aguarda ~5min (continua usando o iPhone normalmente)
+3. Settings → Privacy & Security → Analytics & Improvements
+   → Analytics Data → procura "sysdiagnose_AAAAMMDD_HHMMSS_*.tar.gz"
+4. Toca → Share → "Save to Files"
+5. No Files app: toca no .tar.gz → iOS extrai NATIVAMENTE (vira pasta)
+6. Volta no Scriptable → Run a4ther-ios → "Sysdiagnose"
+7. Folder picker → seleciona a pasta extraída
+8. Aguarda análise (~10-30 seg)
+```
+
+O sysdiagnose analyzer faz:
+- **summaries/Applications.txt** → lista todos bundle IDs instalados → cruza com 105 cheat apps catalogados
+- **Managed_Configuration_Profiles/** → analisa TODOS os profiles instalados (VPN, Proxy, CA Root, DNS, MDM, Restrictions, Screen Time)
+- **mobile_installation_logs/** → install/uninstall history de FF e cheats
+- **summaries/network_state.txt** → VPN ativa (utun/ppp/ipsec), HTTPProxy, HTTPSProxy, DNS, KNOWN_CHEAT_INFRA matches
+- **taskinfo.txt / ps.txt** → processos rodando (Frida, Cycript, gdb, Substrate, TrollStore, iSH, Cydia)
+- **crashes_and_spins/** → crashes do FF/cheat + conteúdo com strings de injeção (DYLD_INSERT, libsubstrate)
+
+#### Modo 2 — Privacy Report (.ndjson)
+
+**Setup legado (uma vez só):**
 
 1. **Instala o Scriptable** na App Store → https://apps.apple.com/app/scriptable/id1405459188
 2. **Liga o App Privacy Report** no iPhone:
