@@ -22,7 +22,7 @@
 #     chmod +x FFScanner.sh && sh FFScanner.sh
 # ============================================================
 
-VERSION="3.6.0"
+VERSION="3.7.0"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -1832,7 +1832,10 @@ if have pidof; then
 fi
 
 # 2) Domínios de cheat conhecidos (multi-plataforma, vivos em 2025/26)
-CHEAT_DOMAINS="fatalitycheats.xyz anubisw.online api.baontq.xyz purplevioleto.com ggwhitehawk.com ggpolarbear.com ggblueshark.com"
+CHEAT_DOMAINS="fatalitycheats.xyz anubisw.online api.baontq.xyz purplevioleto.com ggwhitehawk.com ggpolarbear.com ggblueshark.com version.ffmax.purplevioleto.com version.ggwhitehawk.com loginbp.ggpolarbear.com sacnetwork.ggblueshark.com sacevent.ggblueshark.com ipasign.cc ipa.aspy.dev"
+
+# FF_PROXY_LOGIN_DOMAINS - domínios oficiais do FF que NÃO devem ser acessados por outros apps
+FF_PROXY_LOGIN_DOMAINS="version.ffmax.purplevioleto.com version.ggwhitehawk.com loginbp.ggpolarbear.com gin.freefiremobile.com 100067.connect.garena.com 100067.msdk.garena.com client.us.freefiremobile.com client.sea.freefiremobile.com sacnetwork.ggblueshark.com sacevent.ggblueshark.com"
 for D in $CHEAT_DOMAINS; do
     # /etc/hosts
     for HF in /system/etc/hosts /etc/hosts; do
@@ -2588,11 +2591,20 @@ header "iOS - CHEAT BUNDLES CONHECIDOS"
 
 CHEAT_BUNDLES_IOS="
 com.34306.espff
+com.dts.freefireth.externalesp
+com.quyhoang.fxy
+com.phuc.aimlock
+com.checkboxcus.hhn
+com.hhnios.pubgvngatena
+com.dts.freefirethack
+com.dts.freefireth2
+com.nextor.app
 com.touchingapp.potatso
 com.touchingapp.potatsolite
 com.monite.proxyff
 com.nssurge.inc.surge-ios
 com.luo.quantumultx
+group.com.luo.quantumult
 com.shadowrocket.Shadowrocket
 com.liguangming.Shadowrocket
 com.github.shadowsocks
@@ -2601,6 +2613,24 @@ com.hiddify.app
 com.karing.app
 com.metacubex.ClashX
 com.ssrss.Ssrss
+com.adguard.ios.AdguardPro
+com.privateinternetaccess.ios
+com.anonymousiphone.detoxme
+com.futureland.vpnmaster
+com.cloudflare.1dot1dot1dot1
+com.Nord.VPN
+com.expressvpn.ExpressVPN
+com.protonvpn.ios
+com.surfshark.vpnclient.ios
+com.windscribe.vpn
+com.celeritasdesign.GoodVPN
+com.getlantern.lantern
+com.psiphon3.PsiphonForIOS
+com.v2box.ios
+com.streisand.Streisand
+com.limeVPN.LimeVPN
+com.openVPN.OpenVPN-Connect
+io.nextdns.NextDNS
 com.opa334.TrollStore
 com.opa334.TrollStoreHelper
 com.opa334.trolldecrypt
@@ -2617,6 +2647,13 @@ com.cydia.Cydia
 com.rileytestut.AltStore
 com.altstore.altstoreclassic
 com.sideloadly.sideloadly
+com.apple.dt.Xcode
+com.apple.Preferences.Developer
+com.apple.developer
+com.apple.TestFlight
+developer.apple.wwdc-Release
+com.limneos.adprivacy
+com.jjcm.nomoread
 com.esign.ios
 com.esign.esign
 app.esign.esign
