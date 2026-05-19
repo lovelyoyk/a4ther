@@ -44,14 +44,55 @@ sh /tmp/a4ther.sh
 
 O script auto-detecta `Darwin` + paths de JB (`/var/jb`, `/Applications/Cydia.app`, etc.) e roda as **9 seções iOS**: jailbreak detection, Configuration Profiles, Substrate/tweaks, Frida iOS, sideload (TrollStore/AltStore/iGameGod), Free Fire bundle ID + App Store signature, processos suspeitos, HWID via `ioreg`.
 
-### 🚫 iOS sem jailbreak
+### 🍏 iOS sem jailbreak (via Scriptable)
 
-**Não suportado** pelo a4ther.sh — iOS regular não permite executar shell scripts arbitrários. Alternativas que **existem** na comunidade FF:
+Para iPhone normal (sem JB), use o **`a4ther-ios.js`** — script JavaScript que roda no app **Scriptable** (gratuito na App Store).
 
-- **KellerSS-iOS** ou **PantherSS-iOS** — scripts `.js` que rodam no app **Scriptable** (gratuito na App Store) e analisam o **App Privacy Report** exportado pelo iOS
-- Workflow alternativo: player exporta `App Privacy Report` (Settings → Privacy → App Privacy Report) e envia o `.ndjson` pro admin analisar
+**Setup (uma vez só):**
 
-Não trabalhamos esses cenários aqui — usa as ferramentas existentes da comunidade.
+1. **Instala o Scriptable** na App Store → https://apps.apple.com/app/scriptable/id1405459188
+2. **Liga o App Privacy Report** no iPhone:
+   `Settings` → `Privacy & Security` → `App Privacy Report` → **toggle ON**
+3. **Joga Free Fire** por alguns minutos pra popular o log (ou usa o aparelho normalmente — o report captura TUDO que apps acessam)
+
+**Cada scan:**
+
+4. Em `Settings` → `Privacy & Security` → `App Privacy Report`, toca em **"Save App Privacy Report"** → escolhe onde salvar (Files / iCloud Drive)
+5. Abre o **Scriptable**, toca no `+` (canto superior direito) pra criar novo script
+6. Cola o código de [a4ther-ios.js](a4ther-ios.js) (ou importa via URL — ver abaixo)
+7. Roda o script (botão ▶ no canto inferior direito)
+8. Quando pedir, **seleciona o arquivo `.ndjson`** salvo no passo 4
+9. Vê o resultado na tela do Scriptable
+
+**Atalho — importar direto via URL no Scriptable:**
+
+```
+scriptable:///add?url=https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther-ios.js
+```
+
+Cole isso no Safari do iPhone — o Scriptable abre automaticamente e oferece importar.
+
+**O que o JS detecta:**
+
+- 9 bundle IDs de cheat FF confirmados (`com.34306.espff`, `com.dts.freefireth.externalesp`, `com.quyhoang.fxy`, `com.phuc.aimlock`, etc.)
+- 26 bundles de jailbreak / sideloader (Dopamine, TrollStore, Sileo, AltStore, iSH, Filza, iFunBox)
+- 25 bundles de proxy / VPN (Potatso, Shadowrocket, NordVPN, ProtonVPN, Quantumult, etc.)
+- 9 domínios de cheat hardcoded
+- 18 TLDs suspeitos (`.netlify.app`, `.workers.dev`, `.xyz`, `.gq`, etc.)
+- 42 keywords pra heurística por padrão de nome
+- FF conectando em domínios fora dos servidores oficiais Garena
+- Bundles com "freefire" no nome que não são os 6 oficiais (re-sign)
+- Opção de salvar relatório TXT em `iCloud Drive/Scriptable/a4ther_scan_*.txt`
+
+**Limitações JS vs bash:**
+
+- ✅ Detecta cheat **apps instalados** que tiveram network activity (visível no Privacy Report)
+- ✅ Detecta **proxy/VPN ativos** (capturados pelo Privacy Report)
+- ✅ Detecta **domínios suspeitos** acessados
+- ❌ NÃO detecta tweaks de Substrate (precisa JB)
+- ❌ NÃO detecta Frida (precisa JB)
+- ❌ NÃO lê filesystem (sandbox)
+- ❌ NÃO inspeciona apps que não tiveram atividade durante o período do log
 
 ### 🧪 Modo de teste (forçar plataforma)
 
