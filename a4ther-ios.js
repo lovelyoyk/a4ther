@@ -20,7 +20,7 @@
 //    6. Vê o resultado
 // ============================================================
 
-const VERSION = "2.4.1";
+const VERSION = "2.5.0";
 
 // ============================================================
 //  DATA — bundles, domínios, IPs, TLDs, ASNs (109+ entries)
@@ -142,6 +142,16 @@ const CHEAT_APPS = {
     "live.cclerc.geranium":                   "Geranium — tweak manager JB",
 
     // === Developer / dev profile (suspeito em contexto de jogo) ===
+    // === NextDNS / DNS profiles (sequester DNS = redirect FF login) ===
+    "com.ascent.nextdns.profile":             "NextDNS profile (Ascent) - DNS sequester",
+    "io.nextdns.profile":                     "NextDNS profile direto - DNS sequester",
+    "com.controld.config-profile":            "Control-D DNS profile - DNS sequester",
+    "com.adguard.dns.config-profile":         "AdGuard DNS profile",
+    "com.cloudflare.warp.profile":            "Cloudflare WARP profile",
+    "com.opendns.config-profile":             "OpenDNS profile",
+    "com.quad9.config-profile":               "Quad9 DNS profile",
+    "com.nextdns.ios.profile":                "NextDNS iOS profile",
+    "com.nextdns.nextdns.profile":            "NextDNS profile alt",
     "com.apple.dt.Xcode":                     "Xcode — IDE Apple",
     "com.apple.Preferences.Developer":        "Preferências de Desenvolvedor",
     "com.apple.developer":                    "Perfil Apple Developer",
@@ -508,7 +518,24 @@ function analyze(events) {
 function detect(analysis) {
     const { bundlesSeen, domainsSeen, ipsSeen, networkByBundle } = analysis;
 
-    // === 1. CHEAT_APPS (109 bundles catalogados) ===
+    // === 0. OPAQUE-ID PROFILE PATTERNS (NextDNS, MDM, etc.) ===
+    // Profiles dinâmicos com UUID no identifier indicam MDM/DNS reseller
+    // Padrão: <reverse_domain>.<name>-<UUID 36 chars com hífens>
+    const opaqueProfileRegex = /^[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+    const dnsResellerRegex = /(nextdns|controld|control-d|cloudflare.*warp|adguard.*dns|opendns|quad9|cleanbrowsing|mullvad.*dns)/i;
+    for (const b of bundlesSeen) {
+        if (opaqueProfileRegex.test(b)) {
+            alert(`[CRITICAL] Profile com ID OPACO (UUID dinâmico = MDM/reseller): ${b}`);
+        }
+        if (dnsResellerRegex.test(b) && !FF_OFFICIAL.has(b)) {
+            // Já pode estar em CHEAT_APPS, mas reforça
+            if (!CHEAT_APPS[b]) {
+                alert(`[HIGH] DNS reseller bundle: ${b} (DNS sequester possível)`);
+            }
+        }
+    }
+
+    // === 1. CHEAT_APPS (115+ bundles catalogados) ===
     for (const b of bundlesSeen) {
         if (CHEAT_APPS[b]) {
             const sev = CHEAT_SEVERITY[b] || "MEDIUM";
@@ -1029,7 +1056,21 @@ function analyzeProfile(raw, opts) {
     for (const p of proxyServers) alerts.push(`ProxyServer: ${p}`);
     for (const u of proxyPACs)    alerts.push(`PAC URL: ${u}`);
 
-    // 6) Heurística de cheat strings em Organization/DisplayName
+    // 6) Identifier com UUID opaco = profile dinâmico (MDM, NextDNS, etc.)
+    if (identifier) {
+        const opaqueRegex = /[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/;
+        if (opaqueRegex.test(identifier)) {
+            alerts.push(`[CRITICAL] Profile com UUID OPACO no identifier: ${identifier}`);
+            alerts.push(`   → Profile dinâmico (gerado por MDM/reseller como NextDNS/ControlD)`);
+        }
+        // DNS reseller patterns no identifier
+        const dnsResellerProf = /(nextdns|controld|control-d|adguard|cloudflare.*warp|opendns|quad9)/i;
+        if (dnsResellerProf.test(identifier)) {
+            alerts.push(`[CRITICAL] DNS reseller profile: ${identifier} (SEQUESTRA DNS - pode redirecionar FF)`);
+        }
+    }
+
+    // 7) Heurística de cheat strings em Organization/DisplayName
     const cheatRegex = /(esign|feather|ksign|gbox|scarlet|sideload|trollstore|cheat|hack|aimbot|wallhack|ffh4x|mod\.menu|injector|cracked|mitmproxy)/i;
     if (organization && cheatRegex.test(organization)) {
         alerts.push(`Organization contém keyword de cheat: ${organization}`);
@@ -1563,14 +1604,61 @@ async function scanSysdiagnoseProfiles(folder, fm) {
     const er = tryReadFile(folder, eventsCandidates, fm);
     if (er) {
         okItems.push(`MCSettingsEvents.plist presente (${er.raw.length} bytes)`);
-        // Heurística: procura strings tipo "InstallProfile", "RemoveProfile" + identifier
-        const installCount = (er.raw.match(/InstallProfile|installProfile/gi) || []).length;
-        const removeCount = (er.raw.match(/RemoveProfile|removeProfile/gi) || []).length;
-        if (installCount > 0) okItems.push(`MCSettingsEvents: ${installCount} install events de profile`);
-        if (removeCount > 0) warnings.push(`MCSettingsEvents: ${removeCount} remove events de profile (possível limpeza)`);
-        // Cheat strings em events
+
+        // Extrai profile identifiers no conteúdo (XML ou binary com strings ASCII)
+        const profileIdRegex = /(com\.[a-zA-Z][a-zA-Z0-9._-]+(?:profile)?(?:-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})?)/gi;
+        const profileIds = new Set();
+        let m;
+        while ((m = profileIdRegex.exec(er.raw)) !== null) {
+            const pid = m[1];
+            // Filtra entries Apple legítimas
+            if (pid.startsWith("com.apple.") &&
+                !pid.includes("profile") &&
+                !pid.includes("mdm")) continue;
+            profileIds.add(pid);
+        }
+
+        // Timestamps no plist (formato ISO ou epoch)
+        const timestamps = er.raw.match(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}/g) || [];
+
+        // Cada profile encontrado
+        for (const pid of profileIds) {
+            // Pattern: profile com UUID opaco = NextDNS / DNS reseller / MDM
+            const hasUUID = /[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/.test(pid);
+            const isDNS = /nextdns|controld|control-d|adguard.*dns|cloudflare.*warp/i.test(pid);
+
+            if (hasUUID && isDNS) {
+                alerts.push(`[CRITICAL] DNS profile com UUID opaco: ${pid}`);
+                alerts.push(`   → NextDNS/ControlD/AdGuard-tipo, redireciona DNS = MITM em FF login`);
+            } else if (hasUUID) {
+                alerts.push(`[HIGH] Profile com UUID opaco (MDM/reseller): ${pid}`);
+            } else if (isDNS) {
+                alerts.push(`[HIGH] DNS reseller profile: ${pid}`);
+            } else if (CHEAT_APPS[pid]) {
+                alerts.push(`[CRITICAL] Profile catalogado: ${pid}`);
+            } else if (/(esign|feather|ksign|gbox|scarlet|sideload|trollstore)/i.test(pid)) {
+                alerts.push(`[CRITICAL] Profile de cert sideloader: ${pid}`);
+            } else if (!pid.startsWith("com.apple.")) {
+                warnings.push(`[MEDIUM] Profile não-Apple: ${pid}`);
+            }
+        }
+
+        // Contagem geral
+        const installCount = (er.raw.match(/InstallProfile|installProfile|Install Profile/gi) || []).length;
+        const removeCount = (er.raw.match(/RemoveProfile|removeProfile|Remove Profile/gi) || []).length;
+        if (installCount > 0) okItems.push(`MCSettingsEvents: ${installCount} install events`);
+        if (removeCount > 0) {
+            warnings.push(`MCSettingsEvents: ${removeCount} REMOVE events (profile foi removido - limpeza?)`);
+            // Indica histórico de profile removido (sinal forte que houve atividade)
+            if (profileIds.size > 0) {
+                warnings.push(`   → ${profileIds.size} profile(s) identifier(s) presentes nos eventos`);
+            }
+        }
+        if (timestamps.length > 0) okItems.push(`Timestamps no plist: ${timestamps[0]} ... ${timestamps[timestamps.length - 1]}`);
+
+        // Cheat keywords genéricas
         const cheatHit = er.raw.match(/esign|feather|ksign|gbox|scarlet|sideload|trollstore|cheat|hack/i);
-        if (cheatHit) alerts.push(`[sysdiag/MCState] MCSettingsEvents contém keyword cheat: ${cheatHit[0]}`);
+        if (cheatHit) alerts.push(`[sysdiag/MCState] MCSettingsEvents tem keyword cheat: ${cheatHit[0]}`);
     }
 }
 
