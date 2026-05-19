@@ -526,10 +526,11 @@ footer a:hover { color: var(--cyan); }
 <!-- ─── UPLOAD ─── -->
 <section class="upload-section" id="uploadSection">
     <div class="tabs" role="tablist">
-        <button class="tab active" data-tab="targz"   role="tab">Sysdiagnose (.tar.gz)</button>
-        <button class="tab"        data-tab="sysdiag" role="tab">Sysdiagnose (pasta)</button>
-        <button class="tab"        data-tab="ndjson"  role="tab">Privacy Report (.ndjson)</button>
-        <button class="tab"        data-tab="profile" role="tab">Profile (.mobileconfig)</button>
+        <button class="tab active" data-tab="targz"   role="tab">📦 iOS sysdiagnose (.tar.gz)</button>
+        <button class="tab"        data-tab="sysdiag" role="tab">📁 iOS sysdiagnose (pasta)</button>
+        <button class="tab"        data-tab="ndjson"  role="tab">📊 iOS Privacy Report</button>
+        <button class="tab"        data-tab="profile" role="tab">🔐 iOS Profile</button>
+        <button class="tab"        data-tab="android" role="tab">🤖 Android (a4ther.sh)</button>
     </div>
 
     <!-- TAR.GZ (default, mais fácil) -->
@@ -593,6 +594,26 @@ footer a:hover { color: var(--cyan); }
         </div>
     </div>
 
+    <!-- Android (TXT do a4ther.sh) -->
+    <div class="tab-panel" data-panel="android">
+        <label class="dropzone" id="dz-android">
+            <span class="dropzone-icon">🤖</span>
+            <div class="dropzone-text">Arraste ou clique para enviar o <code>.txt</code> do scan Android</div>
+            <div class="dropzone-hint">Relatório gerado pelo <code>a4ther.sh</code> no Termux</div>
+            <input type="file" id="file-android" accept=".txt,text/plain" />
+        </label>
+        <div class="help-box">
+            <strong>Como gerar:</strong>
+            <ol>
+                <li>No Android, instala Termux (F-Droid)</li>
+                <li>Cola: <code>pkg install -y curl &amp;&amp; curl -L -o a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh &amp;&amp; chmod +x a4ther.sh &amp;&amp; sh a4ther.sh</code></li>
+                <li>O scan salva em <code>~/FFScanner_reports/scan_*.txt</code></li>
+                <li>Compartilha o TXT pra cá (Telegram/WhatsApp/iCloud)</li>
+                <li>Faz upload aqui</li>
+            </ol>
+        </div>
+    </div>
+
     <!-- Profile -->
     <div class="tab-panel" data-panel="profile">
         <label class="dropzone" id="dz-profile">
@@ -652,7 +673,34 @@ footer a:hover { color: var(--cyan); }
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "2.7.0";
+const VERSION = "2.8.0";
+
+/* ============================================================
+   BLACKLIST API (configurar quando seu backend estiver no ar)
+   ============================================================ */
+const BLACKLIST_CONFIG = {
+    // Mude pra URL do seu backend quando integrar.
+    // Espera GET /check?hwid=<HWID> retornando JSON:
+    //   { banned: true|false, reason: "cheats|proxy|sideload|...", date: "...", motivos: [...] }
+    apiUrl: "",   // ex: "https://api.a4thersystems.com/blacklist/check"
+    enabled: false, // ligar pra true quando o backend estiver pronto
+    timeoutMs: 5000,
+};
+
+async function checkBlacklist(hwid) {
+    if (!BLACKLIST_CONFIG.enabled || !BLACKLIST_CONFIG.apiUrl || !hwid) return null;
+    try {
+        const url = `${BLACKLIST_CONFIG.apiUrl}?hwid=${encodeURIComponent(hwid)}`;
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), BLACKLIST_CONFIG.timeoutMs);
+        const res = await fetch(url, { signal: ctrl.signal });
+        clearTimeout(t);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch (e) {
+        return { error: String(e) };
+    }
+}
 document.getElementById('version').textContent = `v${VERSION}`;
 
 /* ============================================================
@@ -1271,6 +1319,79 @@ function detectPrivacyReport(a) {
             if (bl.includes(kw)) { warn(`[LOW] Bundle por padrão [${kw}]: ${b}`); break; }
         }
     }
+}
+
+/* ============================================================
+   ANDROID — parser do TXT gerado pelo a4ther.sh
+   ============================================================ */
+async function handleAndroid(file) {
+    showLoading(`Lendo ${file.name}…`);
+    reset();
+    const raw = await file.text();
+    if (!raw || raw.length < 100) {
+        warn("Arquivo TXT vazio ou inválido");
+        renderResults({});
+        return;
+    }
+    // O TXT do a4ther.sh tem linhas tipo:
+    //   [ALERTA]  texto aqui
+    //   [AVISO]   texto aqui
+    //   [OK]      texto aqui
+    //   [INFO]    texto aqui
+    //   === SECAO ===
+    let currentSection = "";
+    let totalSections = 0;
+    let hwid = null, model = null, android = null;
+    const lines = raw.split('\n');
+    for (const line of lines) {
+        // Section headers (também tem variantes com ◆ e ━━━)
+        const sec = line.match(/^=== (.+?) ===$/) || line.match(/^\s*◆\s+(.+?)\s*$/);
+        if (sec) {
+            currentSection = sec[1].trim();
+            totalSections++;
+            continue;
+        }
+        // Tags
+        const alertMatch = line.match(/^\s*[●○]?\s*\[ALERTA\]\s*(?:ALERTA\s+)?(.+?)$/) ||
+                          line.match(/^\s*●\s*ALERTA\s+(.+?)$/);
+        const warnMatch  = line.match(/^\s*[●○]?\s*\[AVISO\]\s*(?:AVISO\s+)?(.+?)$/) ||
+                          line.match(/^\s*●\s*AVISO\s+(.+?)$/);
+        const okMatch    = line.match(/^\s*[●○]?\s*\[OK\]\s*(?:OK\s+)?(.+?)$/) ||
+                          line.match(/^\s*●\s*OK\s+(.+?)$/);
+        const infoMatch  = line.match(/^\s*[●○]?\s*\[INFO\]\s*(?:info\s+|INFO\s+)?(.+?)$/) ||
+                          line.match(/^\s*○\s*info\s+(.+?)$/);
+        if (alertMatch) {
+            alertF(`[${currentSection || 'Android'}] ${alertMatch[1].trim()}`);
+        } else if (warnMatch) {
+            warn(`[${currentSection || 'Android'}] ${warnMatch[1].trim()}`);
+        } else if (okMatch) {
+            ok(`[${currentSection || 'Android'}] ${okMatch[1].trim()}`);
+        } else if (infoMatch) {
+            const t = infoMatch[1].trim();
+            // Captura HWID / modelo
+            if (t.startsWith("HWID")) hwid = t.replace(/^HWID[\s:]+/i, '');
+            if (t.startsWith("Modelo") || t.startsWith("Marca/Modelo")) model = t.replace(/^[a-zA-Z\/]+[\s:]+/, '');
+            if (t.startsWith("Android")) android = t.replace(/^Android[\s:]+/, '');
+        }
+    }
+    if (totalSections === 0) {
+        warn("Não parece ser um relatório do a4ther.sh (sem cabeçalhos)");
+    } else {
+        ok(`Relatório a4ther.sh parseado: ${totalSections} seções`);
+    }
+    if (model) ok(`Device: ${model}`);
+    if (android) ok(`Android: ${android}`);
+    // Tenta blacklist se HWID estiver presente
+    if (hwid && BLACKLIST_CONFIG.enabled) {
+        showLoading('Consultando blacklist...');
+        const bl = await checkBlacklist(hwid);
+        if (bl && bl.banned) {
+            alertF(`[CRITICAL][BLACKLIST] HWID BANIDO — motivo: ${bl.reason || '?'}`, bl.date ? `data: ${bl.date}` : '');
+        } else if (bl && !bl.error) {
+            ok("HWID limpo (não está na blacklist)");
+        }
+    }
+    renderResults({});
 }
 
 async function handleNDJSON(file) {
@@ -1995,6 +2116,9 @@ $('#file-sysdiag').addEventListener('change', e => {
 $('#file-targz').addEventListener('change', e => {
     if (e.target.files.length) handleTarGz(e.target.files[0]);
 });
+$('#file-android').addEventListener('change', e => {
+    if (e.target.files.length) handleAndroid(e.target.files[0]);
+});
 
 // Drag & drop on each dropzone
 function wireDrop(dzId, handler, isFolder) {
@@ -2017,6 +2141,7 @@ wireDrop('#dz-targz',   handleTarGz, false);
 wireDrop('#dz-ndjson',  handleNDJSON, false);
 wireDrop('#dz-profile', handleProfile, false);
 wireDrop('#dz-sysdiag', handleSysdiagnose, true);
+wireDrop('#dz-android', handleAndroid, false);
 
 // Actions
 $('#btn-back').addEventListener('click', () => {
