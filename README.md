@@ -2,15 +2,18 @@
 
 Scanner anti-cheat para Free Fire. Auto-detecta **Android** (Termux) ou **iOS jailbroken** (SSH) e roda os checks específicos da plataforma.
 
-## Uso rápido
+## Como rodar
 
-### One-liner Termux (Android)
+### 🤖 Android (via Termux)
+
+1. Instala o **Termux** (F-Droid recomendado — o do Play Store está abandonado)
+2. Abre o Termux e cola o one-liner:
 
 ```bash
 pkg update -y && pkg install -y curl && rm -f a4ther.sh && curl -L -o a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh && chmod +x a4ther.sh && sh a4ther.sh
 ```
 
-### Passo a passo
+Ou passo a passo:
 
 ```bash
 pkg install -y curl
@@ -18,6 +21,44 @@ curl -L -o a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4t
 chmod +x a4ther.sh
 sh a4ther.sh
 ```
+
+### 🍎 iOS jailbroken (via SSH)
+
+Funciona em devices com **palera1n / Dopamine / Unc0ver / Taurine / Checkra1n**. Player precisa:
+
+1. **No iPhone:** instalar **OpenSSH** pelo Sileo / Cydia / Zebra
+2. **No iPhone:** conferir IP local em Settings → Wi-Fi → (i) ao lado da rede
+3. **Conectar iPhone e PC/admin no mesmo Wi-Fi**
+
+No PC do admin (Linux/Mac/Termux):
+
+```bash
+# Conecta no iPhone (senha padrão de JB antigo: alpine — peça pro player a dele)
+ssh root@IP_DO_IPHONE
+
+# Dentro do iPhone via SSH:
+curl -L -o /tmp/a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh
+chmod +x /tmp/a4ther.sh
+sh /tmp/a4ther.sh
+```
+
+O script auto-detecta `Darwin` + paths de JB (`/var/jb`, `/Applications/Cydia.app`, etc.) e roda as **9 seções iOS**: jailbreak detection, Configuration Profiles, Substrate/tweaks, Frida iOS, sideload (TrollStore/AltStore/iGameGod), Free Fire bundle ID + App Store signature, processos suspeitos, HWID via `ioreg`.
+
+### 🚫 iOS sem jailbreak
+
+**Não suportado** pelo a4ther.sh — iOS regular não permite executar shell scripts arbitrários. Alternativas que **existem** na comunidade FF:
+
+- **KellerSS-iOS** ou **PantherSS-iOS** — scripts `.js` que rodam no app **Scriptable** (gratuito na App Store) e analisam o **App Privacy Report** exportado pelo iOS
+- Workflow alternativo: player exporta `App Privacy Report` (Settings → Privacy → App Privacy Report) e envia o `.ndjson` pro admin analisar
+
+Não trabalhamos esses cenários aqui — usa as ferramentas existentes da comunidade.
+
+### Saída
+
+Console colorido com banner FIGlet, section headers e dots coloridos. Relatório em texto puro salvo em `~/FFScanner_reports/scan_AAAAMMDD_HHMMSS.txt`. Exit code:
+- `0` = LIMPO (verde)
+- `1` = REVISAR (amarelo) — avisos a checar manualmente
+- `2` = SUSPEITO (vermelho) — alertas críticos detectados
 
 ## O que detecta
 
