@@ -20,7 +20,7 @@
 //    6. Vê o resultado
 // ============================================================
 
-const VERSION = "2.2.0";
+const VERSION = "2.3.0";
 
 // ============================================================
 //  DATA — bundles, domínios, IPs, TLDs, ASNs (109+ entries)
@@ -933,9 +933,13 @@ async function loadProfileFile() {
     return { raw, path };
 }
 
-function analyzeProfile(raw) {
-    // Reset alerts/warns/oks pra este scan
-    alerts = []; warnings = []; okItems = [];
+function analyzeProfile(raw, opts) {
+    opts = opts || {};
+    // Reset só se não estiver em modo batch (sysdiagnose chama várias vezes)
+    if (!opts.noReset) {
+        alerts = []; warnings = []; okItems = [];
+    }
+    const prefix = opts.filePrefix ? `[${opts.filePrefix}] ` : "";
 
     // 1) Extrair todos os PayloadType
     const payloadTypes = [];
@@ -1131,20 +1135,25 @@ async function main() {
     const menu = new Alert();
     menu.title = `A4ther Systems v${VERSION}`;
     menu.message = "Free Fire iOS Anti-Cheat Scanner\nLS Aluguel\n\nEscolha o que analisar:";
+    menu.addAction("Sysdiagnose (TUDO - recomendado)");
     menu.addAction("Privacy Report (.ndjson)");
     menu.addAction("Profile File (.mobileconfig)");
-    menu.addAction("Ambos");
+    menu.addAction("Privacy Report + Profile");
     menu.addCancelAction("Cancelar");
     const choice = await menu.present();
     if (choice === -1) return;
 
+    // ── Modo 0: Sysdiagnose (mais completo)
+    if (choice === 0) {
+        await runSysdiagnoseAnalyzer();
+        return;
+    }
     // ── Modo 1: Privacy Report
-    if (choice === 0 || choice === 2) {
+    if (choice === 1 || choice === 3) {
         await runPrivacyReport();
     }
-
     // ── Modo 2: Profile File
-    if (choice === 1 || choice === 2) {
+    if (choice === 2 || choice === 3) {
         await runProfileAnalyzer();
     }
 }
@@ -1208,6 +1217,419 @@ async function runPrivacyReport() {
         d.message = path;
         d.addAction("OK");
         await d.present();
+    }
+}
+
+// ============================================================
+//  SYSDIAGNOSE ANALYZER
+//  Aponta para uma pasta sysdiagnose_*.tar.gz JÁ EXTRAÍDA pelo iOS.
+//  Lê todos os arquivos forenses relevantes: apps instalados, profiles,
+//  install history, network state, processos, crashes.
+// ============================================================
+
+async function runSysdiagnoseAnalyzer() {
+    const info = new Alert();
+    info.title = "Sysdiagnose Analyzer";
+    info.message = "Como gerar:\n\n1. iPhone: aperta Vol+ + Vol- + Side por 1 seg (sente vibrar leve)\n2. Aguarda ~5min (continua usando o iPhone)\n3. Settings → Privacy & Security → Analytics & Improvements → Analytics Data\n4. Acha sysdiagnose_*.tar.gz, toca → Share → Save to Files\n5. No Files app: toca no .tar.gz → iOS extrai automaticamente (vira pasta)\n6. Volta aqui → seleciona a PASTA extraída";
+    info.addAction("Selecionar pasta");
+    info.addCancelAction("Cancelar");
+    if ((await info.present()) === -1) return;
+
+    let folderPath;
+    try {
+        folderPath = await DocumentPicker.openFolder();
+    } catch (e) {
+        const a = new Alert();
+        a.title = "Erro";
+        a.message = "Folder picker falhou: " + String(e);
+        a.addAction("OK");
+        await a.present();
+        return;
+    }
+    if (!folderPath) return;
+
+    alerts = []; warnings = []; okItems = [];
+    okItems.push(`Sysdiagnose folder: ${folderPath}`);
+
+    // Try iCloud first, fall back to local FM
+    let fm = FileManager.iCloud();
+    try {
+        if (!fm.fileExists(folderPath)) fm = FileManager.local();
+    } catch (e) {
+        fm = FileManager.local();
+    }
+
+    // 1. Apps instalados
+    await scanSysdiagnoseApplications(folderPath, fm);
+    // 2. Configuration profiles
+    await scanSysdiagnoseProfiles(folderPath, fm);
+    // 3. Install / uninstall history
+    await scanSysdiagnoseInstallLogs(folderPath, fm);
+    // 4. Network state (VPN, proxy, DNS)
+    await scanSysdiagnoseNetwork(folderPath, fm);
+    // 5. Process listing
+    await scanSysdiagnoseProcesses(folderPath, fm);
+    // 6. Crash logs
+    await scanSysdiagnoseCrashes(folderPath, fm);
+
+    // Build UI
+    const stats = {
+        events: 0, bundles: 0, domains: 0, ips: 0,
+    };
+    await buildResultTable(stats).present(true);
+
+    // Save option
+    const s = new Alert();
+    s.title = "Salvar análise sysdiagnose?";
+    s.message = "Salvar relatório TXT?";
+    s.addAction("Sim");
+    s.addCancelAction("Não");
+    if ((await s.present()) === 0) {
+        const sfm = FileManager.iCloud();
+        const ts = new Date().toISOString().replace(/[:\.]/g, "-").substring(0, 19);
+        const path = sfm.joinPath(sfm.documentsDirectory(), `a4ther_sysdiag_${ts}.txt`);
+        sfm.writeString(path, buildTextReport(stats));
+        const d = new Alert();
+        d.title = "Salvo";
+        d.message = path;
+        d.addAction("OK");
+        await d.present();
+    }
+}
+
+function joinFolderPath(folder, sub, fm) {
+    return fm.joinPath(folder, sub);
+}
+
+function tryReadFile(folder, candidates, fm) {
+    for (const c of candidates) {
+        const p = joinFolderPath(folder, c, fm);
+        try {
+            if (fm.fileExists(p)) {
+                const raw = fm.readString(p);
+                if (raw && raw.length > 0) return { path: p, raw };
+            }
+        } catch (e) { /* ignore */ }
+    }
+    return null;
+}
+
+function tryListDir(folder, sub, fm) {
+    const p = joinFolderPath(folder, sub, fm);
+    try {
+        if (fm.fileExists(p) && fm.isDirectory(p)) {
+            return { path: p, files: fm.listContents(p) };
+        }
+    } catch (e) { /* ignore */ }
+    return null;
+}
+
+async function scanSysdiagnoseApplications(folder, fm) {
+    okItems.push("── Apps instalados ──");
+    const r = tryReadFile(folder, [
+        "summaries/Applications.txt",
+        "summary/Applications.txt",
+        "Applications.txt",
+        "mobile_installation/MobileInstallation.txt",
+        "MobileInstallation.txt",
+    ], fm);
+    if (!r) {
+        warnings.push("Lista de aplicações não encontrada no sysdiagnose");
+        return;
+    }
+    okItems.push(`Arquivo: ${r.path.split("/").pop()}`);
+
+    // Extrai bundle IDs (formato com.foo.bar)
+    const bundleRegex = /\b[a-zA-Z][a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,}\b/g;
+    const bundles = new Set();
+    let m;
+    while ((m = bundleRegex.exec(r.raw)) !== null) {
+        const b = m[0];
+        // Filtra falsos positivos (versões tipo "1.2.3" e paths)
+        if (/^\d/.test(b)) continue;
+        if (b.includes("/")) continue;
+        bundles.add(b);
+    }
+    okItems.push(`${bundles.size} bundle IDs únicos extraídos`);
+
+    // CHEAT_APPS check
+    let cheatHits = 0;
+    for (const b of bundles) {
+        if (CHEAT_APPS[b]) {
+            const sev = CHEAT_SEVERITY[b] || "MEDIUM";
+            const desc = CHEAT_APPS[b];
+            const msg = `[${sev}] ${b} — ${desc}`;
+            if (sev === "CRITICAL" || sev === "HIGH") alerts.push("[sysdiag/apps] " + msg);
+            else warnings.push("[sysdiag/apps] " + msg);
+            cheatHits++;
+        }
+    }
+    if (cheatHits === 0) okItems.push("Nenhum cheat app instalado");
+
+    // FF official
+    let ffFound = 0;
+    for (const ff of FF_OFFICIAL) {
+        if (bundles.has(ff)) {
+            okItems.push(`Free Fire oficial: ${ff}`);
+            ffFound++;
+        }
+    }
+    // FF non-official re-sign
+    for (const b of bundles) {
+        if (b.toLowerCase().includes("freefire") && !FF_OFFICIAL.has(b) && !CHEAT_APPS[b]) {
+            alerts.push(`[sysdiag/apps] Bundle FF NÃO oficial (re-sign): ${b}`);
+        }
+    }
+    // Keyword heuristic
+    for (const b of bundles) {
+        if (CHEAT_APPS[b]) continue;
+        if (b.startsWith("com.apple.") || b.startsWith("com.google.") ||
+            b.startsWith("com.facebook.") || b.startsWith("com.microsoft.") ||
+            FF_OFFICIAL.has(b)) continue;
+        const bl = b.toLowerCase();
+        for (const kw of SUSPECT_KEYWORDS) {
+            if (bl.includes(kw)) {
+                warnings.push(`[sysdiag/apps] Bundle por padrão de nome [${kw}]: ${b}`);
+                break;
+            }
+        }
+    }
+}
+
+async function scanSysdiagnoseProfiles(folder, fm) {
+    okItems.push("── Configuration Profiles ──");
+    const candidates = [
+        "Managed_Configuration_Profiles",
+        "managed_configuration_profiles",
+        "configuration_profiles",
+        "ConfigurationProfiles",
+    ];
+    let dirInfo = null;
+    for (const c of candidates) {
+        const r = tryListDir(folder, c, fm);
+        if (r) { dirInfo = r; break; }
+    }
+    if (!dirInfo) {
+        okItems.push("Nenhuma pasta de profiles (device sem profiles)");
+        return;
+    }
+    okItems.push(`Pasta: ${dirInfo.path.split("/").slice(-2).join("/")}`);
+    okItems.push(`${dirInfo.files.length} arquivos`);
+
+    let profileCount = 0;
+    for (const f of dirInfo.files) {
+        if (!f.match(/\.(mobileconfig|plist|stub)$/i)) continue;
+        profileCount++;
+        const full = fm.joinPath(dirInfo.path, f);
+        let raw = "";
+        try { raw = fm.readString(full); } catch (e) {}
+        if (!raw) {
+            try {
+                const data = fm.read(full);
+                raw = data.toRawString();
+            } catch (e) {}
+        }
+        if (!raw || raw.length < 50) continue;
+        // Use analyzeProfile com noReset + prefix
+        analyzeProfile(raw, { noReset: true, filePrefix: `profile/${f}` });
+    }
+    if (profileCount === 0) okItems.push("Pasta vazia ou sem .mobileconfig");
+    else okItems.push(`${profileCount} profiles analisados`);
+}
+
+async function scanSysdiagnoseInstallLogs(folder, fm) {
+    okItems.push("── Install / Uninstall history ──");
+    const candidates = [
+        "mobile_installation_logs/mobile_installation.log.0",
+        "mobile_installation_logs/mobile_installation.log",
+        "mobile_installation/mobile_installation.log.0",
+        "logs/MobileInstallation/mobile_installation.log.0",
+    ];
+    const r = tryReadFile(folder, candidates, fm);
+    if (!r) {
+        // Tenta listar a pasta e pegar o primeiro .log
+        const lr = tryListDir(folder, "mobile_installation_logs", fm) ||
+                   tryListDir(folder, "logs/MobileInstallation", fm);
+        if (lr) {
+            okItems.push(`Logs dir: ${lr.path.split("/").pop()}, ${lr.files.length} arquivos`);
+            // Pega o primeiro .log e lê
+            for (const f of lr.files) {
+                if (f.endsWith(".log") || f.endsWith(".log.0")) {
+                    const p = fm.joinPath(lr.path, f);
+                    let raw = "";
+                    try { raw = fm.readString(p); } catch (e) {}
+                    if (raw) {
+                        parseInstallLog(raw);
+                        return;
+                    }
+                }
+            }
+        }
+        warnings.push("Logs de instalação não encontrados");
+        return;
+    }
+    okItems.push(`Arquivo: ${r.path.split("/").pop()}`);
+    parseInstallLog(r.raw);
+}
+
+function parseInstallLog(raw) {
+    // Grep linhas relevantes
+    const lines = raw.split("\n");
+    const installEvents = [];
+    const removeEvents = [];
+    for (const line of lines) {
+        const ll = line.toLowerCase();
+        // Bundle FF ou cheat na linha?
+        const isFFOrCheat = ll.includes("freefire") || ll.includes("dts.freefire") ||
+                            ll.includes("garena") || ll.includes("cheat") ||
+                            ll.includes("trollstore") || ll.includes("esign") ||
+                            ll.includes("feather") || ll.includes("ksign");
+        if (!isFFOrCheat) continue;
+        if (ll.includes("install")) installEvents.push(line);
+        else if (ll.includes("uninstall") || ll.includes("remove") || ll.includes("delete")) {
+            removeEvents.push(line);
+        }
+    }
+    if (installEvents.length > 0) {
+        okItems.push(`${installEvents.length} eventos de install relevantes`);
+        for (const e of installEvents.slice(-5)) {
+            warnings.push(`[install] ${e.substring(0, 200)}`);
+        }
+    }
+    if (removeEvents.length > 0) {
+        alerts.push(`[sysdiag/install] ${removeEvents.length} eventos de UNINSTALL relevantes (recente?):`);
+        for (const e of removeEvents.slice(-5)) {
+            alerts.push(`  ${e.substring(0, 200)}`);
+        }
+    }
+}
+
+async function scanSysdiagnoseNetwork(folder, fm) {
+    okItems.push("── Network state ──");
+    const candidates = [
+        "summaries/network_state.txt",
+        "network_state.txt",
+        "network/network_state.txt",
+        "summaries/system_state.txt",
+        "system_state.txt",
+    ];
+    const r = tryReadFile(folder, candidates, fm);
+    if (!r) {
+        warnings.push("network_state.txt não encontrado");
+        return;
+    }
+    okItems.push(`Arquivo: ${r.path.split("/").pop()}`);
+    const raw = r.raw;
+
+    // VPN configurada?
+    if (/utun\d+|ppp\d+|ipsec/i.test(raw)) {
+        alerts.push("[sysdiag/net] Interface VPN ativa (utun/ppp/ipsec) presente");
+    }
+
+    // Proxy ativo?
+    const proxyMatch = raw.match(/HTTPProxy[^a-zA-Z]+([0-9.]+)/i);
+    if (proxyMatch) alerts.push(`[sysdiag/net] HTTPProxy configurado: ${proxyMatch[1]}`);
+    const httpsMatch = raw.match(/HTTPSProxy[^a-zA-Z]+([0-9.]+)/i);
+    if (httpsMatch) alerts.push(`[sysdiag/net] HTTPSProxy configurado: ${httpsMatch[1]}`);
+
+    // DNS custom?
+    const dnsLines = raw.split("\n").filter(l => /dns|nameserver/i.test(l)).slice(0, 5);
+    for (const d of dnsLines) {
+        const trimmed = d.trim();
+        if (trimmed) okItems.push(`[net/dns] ${trimmed.substring(0, 120)}`);
+    }
+
+    // Cheat domains/IPs em network state
+    for (const [indicator, desc] of Object.entries(KNOWN_CHEAT_INFRA)) {
+        if (raw.toLowerCase().includes(indicator.toLowerCase())) {
+            alerts.push(`[sysdiag/net] CHEAT INFRA em network state: ${indicator} — ${desc}`);
+        }
+    }
+}
+
+async function scanSysdiagnoseProcesses(folder, fm) {
+    okItems.push("── Processos ──");
+    const candidates = [
+        "taskinfo.txt",
+        "summaries/taskinfo.txt",
+        "ps.txt",
+        "summaries/ps.txt",
+        "ps_thread.txt",
+    ];
+    const r = tryReadFile(folder, candidates, fm);
+    if (!r) {
+        warnings.push("taskinfo/ps.txt não encontrado");
+        return;
+    }
+    okItems.push(`Arquivo: ${r.path.split("/").pop()}`);
+
+    // Greppa processos suspeitos
+    const patterns = [
+        "frida", "frida-server", "frida-gadget", "cycript", "gdb", "lldb", "debugserver",
+        "substrated", "Substrate", "MobileSubstrate",
+        "cheat", "hack", "aimbot", "injector",
+        "trollstore", "TrollStore", "iSH",
+        "Cydia", "Sileo", "Zebra",
+    ];
+    const lines = r.raw.split("\n");
+    for (const p of patterns) {
+        const found = lines.filter(l => l.toLowerCase().includes(p.toLowerCase())).slice(0, 3);
+        for (const l of found) {
+            alerts.push(`[sysdiag/proc] Processo (${p}): ${l.substring(0, 180)}`);
+        }
+    }
+}
+
+async function scanSysdiagnoseCrashes(folder, fm) {
+    okItems.push("── Crashes / Spins ──");
+    const candidates = [
+        "crashes_and_spins",
+        "Crashes_and_spins",
+        "Library/Logs/CrashReporter",
+        "logs/Crashes",
+    ];
+    let dirInfo = null;
+    for (const c of candidates) {
+        const r = tryListDir(folder, c, fm);
+        if (r) { dirInfo = r; break; }
+    }
+    if (!dirInfo) {
+        warnings.push("Pasta de crashes não encontrada");
+        return;
+    }
+    okItems.push(`Pasta: ${dirInfo.path.split("/").pop()}`);
+    okItems.push(`${dirInfo.files.length} arquivos de crash`);
+
+    // Procura crashes do FF ou de Frida/cheat
+    let suspectCount = 0;
+    for (const f of dirInfo.files) {
+        const fl = f.toLowerCase();
+        if (fl.includes("freefire") || fl.includes("frida") ||
+            fl.includes("cheat") || fl.includes("dts.freefire") ||
+            fl.includes("dopamine") || fl.includes("trollstore")) {
+            alerts.push(`[sysdiag/crash] Crash relevante: ${f}`);
+            suspectCount++;
+        }
+    }
+    if (suspectCount === 0) okItems.push("Nenhum crash relevante");
+
+    // Lê os 3 mais recentes pra ver se conteúdo tem traços
+    const sorted = dirInfo.files.slice(0, 5);
+    for (const f of sorted) {
+        if (!f.match(/\.(ips|crash|panic|json)$/i)) continue;
+        const p = fm.joinPath(dirInfo.path, f);
+        let raw = "";
+        try { raw = fm.readString(p); } catch (e) {}
+        if (!raw || raw.length < 100) continue;
+        // Procura strings de cheat
+        const hits = ["frida-server", "frida-gadget", "libsubstrate", "substitute",
+                      "DYLD_INSERT", "Cycript", "cheat", "trolldecrypt"];
+        for (const h of hits) {
+            if (raw.toLowerCase().includes(h.toLowerCase())) {
+                alerts.push(`[sysdiag/crash] ${f} contém: ${h}`);
+                break;
+            }
+        }
     }
 }
 
