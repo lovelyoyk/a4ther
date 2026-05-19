@@ -20,7 +20,7 @@
 //    6. Vê o resultado
 // ============================================================
 
-const VERSION = "2.1.0";
+const VERSION = "2.2.0";
 
 // ============================================================
 //  DATA — bundles, domínios, IPs, TLDs, ASNs (109+ entries)
@@ -391,6 +391,51 @@ const SUSPECT_KEYWORDS = [
 
 // SCRIPTABLE bundle (usado pra detectar abuse)
 const SCRIPTABLE_BUNDLE = "dk.simonbs.Scriptable";
+
+// ============================================================
+//  iOS PROFILE PAYLOAD TYPES (analisador de .mobileconfig)
+// ============================================================
+// PayloadType → categoria + severidade
+const PROFILE_PAYLOADS = {
+    // ── CRÍTICOS (MITM / sequestro de rede) ──
+    "com.apple.vpn.managed":                       { sev: "CRITICAL", cat: "VPN",        desc: "VPN configurada via profile - roteia TODO tráfego" },
+    "com.apple.vpn.managed.applayer":              { sev: "CRITICAL", cat: "VPN",        desc: "Per-app VPN - rote app específico (FF?)" },
+    "com.apple.proxy.http.global":                 { sev: "CRITICAL", cat: "PROXY",      desc: "HTTP Proxy global - MITM clássico" },
+    "com.apple.security.root":                     { sev: "CRITICAL", cat: "CA",         desc: "CA Root cert - permite decrypt TLS (MITM completo)" },
+    "com.apple.security.pkcs1":                    { sev: "CRITICAL", cat: "CA",         desc: "PKCS#1 cert - permite MITM" },
+    "com.apple.security.pkcs12":                   { sev: "CRITICAL", cat: "CA",         desc: "PKCS#12 cert - permite MITM" },
+    "com.apple.security.scep":                     { sev: "CRITICAL", cat: "CA",         desc: "SCEP cert enrollment - MDM" },
+    "com.apple.webcontent-filter":                 { sev: "CRITICAL", cat: "FILTER",     desc: "Web Content Filter - proxy alternativo" },
+    "com.apple.dnsSettings.managed":               { sev: "CRITICAL", cat: "DNS",        desc: "DNS custom - sequester domínios FF" },
+    "com.apple.dnsProxy.managed":                  { sev: "CRITICAL", cat: "DNS",        desc: "DNS Proxy - interceptação de DNS" },
+    "com.apple.relay.managed":                     { sev: "HIGH",     cat: "RELAY",      desc: "iCloud Private Relay disable/managed" },
+
+    // ── RESTRICTIONS / POLICIES ──
+    "com.apple.applicationaccess":                 { sev: "CRITICAL", cat: "RESTRICT",   desc: "App restrictions - controla quais apps rodam" },
+    "com.apple.applicationaccess.new":             { sev: "CRITICAL", cat: "RESTRICT",   desc: "App restrictions (iOS 13+)" },
+    "com.apple.screentimepolicy":                  { sev: "CRITICAL", cat: "RESTRICT",   desc: "Screen Time policy" },
+    "com.apple.passwordpolicy":                    { sev: "HIGH",     cat: "RESTRICT",   desc: "Password policy enforced" },
+    "com.apple.systempolicy.kernel-extension-policy": { sev: "HIGH",  cat: "RESTRICT",   desc: "Kext allow/deny policy" },
+    "com.apple.systempolicy.system-extension-policy": { sev: "HIGH",  cat: "RESTRICT",   desc: "System extension policy" },
+    "com.apple.familyControls":                    { sev: "HIGH",     cat: "RESTRICT",   desc: "Family Controls / Screen Time" },
+
+    // ── MDM ──
+    "com.apple.mdm":                               { sev: "HIGH",     cat: "MDM",        desc: "MDM - device sob controle remoto" },
+
+    // ── ACCOUNTS / ACTIVATION ──
+    "com.apple.iTunesStoreAccount":                { sev: "MEDIUM",   cat: "ACCOUNT",    desc: "iTunes Store Account managed" },
+    "com.apple.activation":                        { sev: "MEDIUM",   cat: "ACTIVATION", desc: "Device activation managed" },
+
+    // ── NETWORK ──
+    "com.apple.wifi.managed":                      { sev: "MEDIUM",   cat: "WIFI",       desc: "Wi-Fi forçado via profile" },
+    "com.apple.airplay.security":                  { sev: "LOW",      cat: "AIRPLAY",    desc: "AirPlay policy" },
+
+    // ── EMAIL / CALENDAR / CONTACTS (geralmente legítimo MDM corporativo) ──
+    "com.apple.mail.managed":                      { sev: "LOW",      cat: "EMAIL",      desc: "Email managed (corporativo)" },
+    "com.apple.eas.account":                       { sev: "LOW",      cat: "EMAIL",      desc: "Exchange Account" },
+    "com.apple.caldav.account":                    { sev: "LOW",      cat: "CALENDAR",   desc: "CalDAV managed" },
+    "com.apple.carddav.account":                   { sev: "LOW",      cat: "CONTACTS",   desc: "CardDAV managed" },
+};
 
 // ============================================================
 //  DETECTION ENGINE
@@ -855,14 +900,265 @@ function buildTextReport(stats) {
 //  MAIN
 // ============================================================
 
+// ============================================================
+//  PROFILE FILE ANALYZER (.mobileconfig)
+// ============================================================
+
+async function loadProfileFile() {
+    const dp = DocumentPicker;
+    let path;
+    try {
+        path = await dp.openFile();
+    } catch (e) {
+        path = await dp.open(["com.apple.mobileconfig", "public.data", "public.xml", "public.text"]);
+    }
+    if (!path) throw new Error("Nenhum arquivo selecionado");
+    const fileFM = path.startsWith("/private/") ? FileManager.local() : FileManager.iCloud();
+    let raw = fileFM.readString(path);
+    if (!raw) {
+        // Tenta como binary - extrai strings ASCII printáveis
+        const data = fileFM.read(path);
+        try {
+            raw = data.toRawString();
+        } catch (e) {
+            // Fallback: força ler bytes e extrair só ASCII
+            raw = "";
+            for (let i = 0; i < data.getLength(); i++) {
+                const b = data.bytes[i];
+                raw += (b >= 32 && b < 127) ? String.fromCharCode(b) : " ";
+            }
+        }
+    }
+    if (!raw) throw new Error("Não consegui ler conteúdo: " + path);
+    return { raw, path };
+}
+
+function analyzeProfile(raw) {
+    // Reset alerts/warns/oks pra este scan
+    alerts = []; warnings = []; okItems = [];
+
+    // 1) Extrair todos os PayloadType
+    const payloadTypes = [];
+    const ptRegex = /<key>\s*PayloadType\s*<\/key>\s*<string>([^<]+)<\/string>/gi;
+    let m;
+    while ((m = ptRegex.exec(raw)) !== null) {
+        payloadTypes.push(m[1].trim());
+    }
+    // Fallback: scan ASCII pra binary plists
+    if (payloadTypes.length === 0) {
+        for (const pt of Object.keys(PROFILE_PAYLOADS)) {
+            if (raw.includes(pt)) payloadTypes.push(pt);
+        }
+    }
+
+    // 2) Extrair metadata
+    function extractMeta(key) {
+        const r = new RegExp(`<key>\\s*${key}\\s*<\\/key>\\s*<string>([^<]+)<\\/string>`, "i");
+        const mm = raw.match(r);
+        return mm ? mm[1].trim() : null;
+    }
+    function extractMetaBinary(key) {
+        // Pra binary plist, procura a string seguinte ao key
+        const idx = raw.indexOf(key);
+        if (idx === -1) return null;
+        // Procura próxima string ASCII printable
+        let s = "", started = false, count = 0;
+        for (let i = idx + key.length; i < raw.length && count < 200; i++) {
+            const c = raw.charCodeAt(i);
+            if (c >= 32 && c < 127 && c !== 60 && c !== 62) {
+                s += String.fromCharCode(c);
+                started = true;
+            } else if (started) {
+                if (s.length >= 3) break;
+                s = ""; started = false;
+            }
+            count++;
+        }
+        return s.length >= 3 ? s : null;
+    }
+
+    const displayName  = extractMeta("PayloadDisplayName")  || extractMetaBinary("PayloadDisplayName");
+    const identifier   = extractMeta("PayloadIdentifier")   || extractMetaBinary("PayloadIdentifier");
+    const organization = extractMeta("PayloadOrganization") || extractMetaBinary("PayloadOrganization");
+    const uuid         = extractMeta("PayloadUUID")         || extractMetaBinary("PayloadUUID");
+
+    // Hosts / proxies / URLs no profile
+    const hostNames = [];
+    const hnRegex = /<key>\s*HostName\s*<\/key>\s*<string>([^<]+)<\/string>/gi;
+    while ((m = hnRegex.exec(raw)) !== null) hostNames.push(m[1].trim());
+
+    const proxyServers = [];
+    const psRegex = /<key>\s*ProxyServer\s*<\/key>\s*<string>([^<]+)<\/string>/gi;
+    while ((m = psRegex.exec(raw)) !== null) proxyServers.push(m[1].trim());
+
+    const proxyPACs = [];
+    const pacRegex = /<key>\s*ProxyAutoConfigURLString\s*<\/key>\s*<string>([^<]+)<\/string>/gi;
+    while ((m = pacRegex.exec(raw)) !== null) proxyPACs.push(m[1].trim());
+
+    // 3) Mostrar metadata
+    if (displayName)  okItems.push(`Display Name: ${displayName}`);
+    if (identifier)   okItems.push(`Identifier:   ${identifier}`);
+    if (organization) okItems.push(`Organization: ${organization}`);
+    if (uuid)         okItems.push(`UUID:         ${uuid}`);
+
+    // 4) Verificar cada PayloadType contra a lista crítica
+    const unique = [...new Set(payloadTypes)];
+    if (unique.length === 0) {
+        warn("Nenhum PayloadType detectado - arquivo pode não ser .mobileconfig válido");
+    }
+    for (const pt of unique) {
+        const info = PROFILE_PAYLOADS[pt];
+        if (info) {
+            const tag = `[${info.sev}]`;
+            const msg = `${tag} ${info.cat} - ${pt}\n   → ${info.desc}`;
+            if (info.sev === "CRITICAL") alerts.push(msg);
+            else if (info.sev === "HIGH") alerts.push(msg);
+            else if (info.sev === "MEDIUM") warnings.push(msg);
+            else warnings.push(msg);
+        } else {
+            okItems.push(`PayloadType desconhecido: ${pt}`);
+        }
+    }
+
+    // 5) Mostrar HostNames / ProxyServers / PAC URLs encontrados
+    for (const h of hostNames)    alerts.push(`HostName configurado: ${h}`);
+    for (const p of proxyServers) alerts.push(`ProxyServer: ${p}`);
+    for (const u of proxyPACs)    alerts.push(`PAC URL: ${u}`);
+
+    // 6) Heurística de cheat strings em Organization/DisplayName
+    const cheatRegex = /(esign|feather|ksign|gbox|scarlet|sideload|trollstore|cheat|hack|aimbot|wallhack|ffh4x|mod\.menu|injector|cracked|mitmproxy)/i;
+    if (organization && cheatRegex.test(organization)) {
+        alerts.push(`Organization contém keyword de cheat: ${organization}`);
+    }
+    if (displayName && cheatRegex.test(displayName)) {
+        alerts.push(`Display Name contém keyword de cheat: ${displayName}`);
+    }
+    if (identifier && cheatRegex.test(identifier)) {
+        alerts.push(`Identifier contém keyword de cheat: ${identifier}`);
+    }
+
+    // 7) URLs no profile - greppa todas
+    const urls = raw.match(/https?:\/\/[a-zA-Z0-9.\-\/]+/g) || [];
+    const uniqueUrls = [...new Set(urls)].slice(0, 10);
+    for (const u of uniqueUrls) {
+        const ul = u.toLowerCase();
+        // FF login domains via profile = MITM clássico
+        for (const ffd of FF_PROXY_LOGIN_DOMAINS) {
+            if (ul.includes(ffd)) {
+                alerts.push(`Profile contém URL de domínio FF (MITM!): ${u}`);
+            }
+        }
+        // Cheat infra domains
+        for (const [cd] of Object.entries(KNOWN_CHEAT_INFRA)) {
+            if (ul.includes(cd.toLowerCase())) {
+                alerts.push(`Profile contém URL de cheat infra: ${u}`);
+            }
+        }
+        // Suspect TLDs
+        for (const tld of SUSPICIOUS_TLDS) {
+            if (ul.endsWith(tld) || ul.includes(tld + "/") || ul.includes(tld + ":")) {
+                warnings.push(`URL com TLD suspeito (${tld}): ${u}`);
+                break;
+            }
+        }
+    }
+
+    return {
+        payloadTypes: unique,
+        metadata: { displayName, identifier, organization, uuid },
+        hostNames, proxyServers, proxyPACs,
+        urls: uniqueUrls,
+    };
+}
+
+function buildProfileTable(profileInfo) {
+    const t = new UITable();
+    t.showSeparators = true;
+
+    const hdr = new UITableRow();
+    hdr.height = 80;
+    hdr.isHeader = true;
+    const c = hdr.addText("A4THER SYSTEMS", `v${VERSION} ▪ LS Aluguel ▪ Profile Analyzer`);
+    c.titleFont = Font.boldSystemFont(22);
+    c.titleColor = Color.cyan();
+    c.subtitleFont = Font.systemFont(12);
+    c.subtitleColor = Color.gray();
+    t.addRow(hdr);
+
+    const verdict = new UITableRow();
+    verdict.height = 70;
+    let txt, color;
+    if (alerts.length > 0) { txt = `✗ PROFILE PERIGOSO — ${alerts.length} alertas`; color = Color.red(); }
+    else if (warnings.length > 0) { txt = `⚠ REVISAR — ${warnings.length} avisos`; color = Color.orange(); }
+    else { txt = "✓ Profile parece OK"; color = Color.green(); }
+    const vc = verdict.addText(txt,
+        `Payloads: ${profileInfo.payloadTypes.length}  •  Hosts: ${profileInfo.hostNames.length}  •  Proxies: ${profileInfo.proxyServers.length}`);
+    vc.titleFont = Font.boldSystemFont(20);
+    vc.titleColor = color;
+    vc.subtitleFont = Font.systemFont(12);
+    t.addRow(verdict);
+
+    function section(title, items, color) {
+        if (items.length === 0) return;
+        const sh = new UITableRow();
+        const shc = sh.addText(`◆ ${title}`, `${items.length} item${items.length !== 1 ? "s" : ""}`);
+        shc.titleFont = Font.boldSystemFont(16);
+        shc.titleColor = color;
+        t.addRow(sh);
+        for (const item of items) {
+            const r = new UITableRow();
+            r.height = 60;
+            const x = r.addText("●  " + item);
+            x.titleFont = Font.systemFont(12);
+            x.titleColor = color;
+            t.addRow(r);
+        }
+    }
+
+    section("ALERTAS",  alerts,   Color.red());
+    section("AVISOS",   warnings, Color.orange());
+    section("METADATA", okItems,  Color.green());
+
+    return t;
+}
+
+// ============================================================
+//  MAIN
+// ============================================================
+
 async function main() {
-    const w = new Alert();
-    w.title = `A4ther Systems v${VERSION}`;
-    w.message = "Free Fire iOS Anti-Cheat Scanner\nLS Aluguel\n\n109+ bundle IDs catalogados, 12 cheat servers, 22 telemetry, 22 TLDs, 15 script patterns.\n\nVai abrir o picker pra você selecionar o arquivo .ndjson do App Privacy Report.\n\nSe ainda não tem:\n1. Settings → Privacy → App Privacy Report → ON\n2. Joga FF por uns minutos\n3. Em App Privacy Report, 'Save App Privacy Report'";
-    w.addAction("Continuar");
-    w.addCancelAction("Cancelar");
-    const idx = await w.present();
-    if (idx === -1) return;
+    // Menu inicial: escolha o modo
+    const menu = new Alert();
+    menu.title = `A4ther Systems v${VERSION}`;
+    menu.message = "Free Fire iOS Anti-Cheat Scanner\nLS Aluguel\n\nEscolha o que analisar:";
+    menu.addAction("Privacy Report (.ndjson)");
+    menu.addAction("Profile File (.mobileconfig)");
+    menu.addAction("Ambos");
+    menu.addCancelAction("Cancelar");
+    const choice = await menu.present();
+    if (choice === -1) return;
+
+    // ── Modo 1: Privacy Report
+    if (choice === 0 || choice === 2) {
+        await runPrivacyReport();
+    }
+
+    // ── Modo 2: Profile File
+    if (choice === 1 || choice === 2) {
+        await runProfileAnalyzer();
+    }
+}
+
+async function runPrivacyReport() {
+    const info = new Alert();
+    info.title = "App Privacy Report";
+    info.message = "Vai abrir o picker pra você selecionar o arquivo .ndjson.\n\nSe ainda não tem:\n1. Settings → Privacy → App Privacy Report → ON\n2. Joga FF por uns minutos\n3. Em App Privacy Report → 'Save App Privacy Report'";
+    info.addAction("Selecionar arquivo");
+    info.addCancelAction("Pular");
+    if ((await info.present()) === -1) return;
+
+    // Reset counters pra esta run
+    alerts = []; warnings = []; okItems = [];
 
     let report;
     try { report = await loadReport(); }
@@ -907,6 +1203,92 @@ async function main() {
         const ts = new Date().toISOString().replace(/[:\.]/g, "-").substring(0, 19);
         const path = fm.joinPath(fm.documentsDirectory(), `a4ther_scan_${ts}.txt`);
         fm.writeString(path, buildTextReport(stats));
+        const d = new Alert();
+        d.title = "Salvo";
+        d.message = path;
+        d.addAction("OK");
+        await d.present();
+    }
+}
+
+async function runProfileAnalyzer() {
+    const info = new Alert();
+    info.title = "Profile File (.mobileconfig)";
+    info.message = "Vai abrir o picker pra você selecionar o arquivo .mobileconfig.\n\nDe onde tirar:\n• Profile baixado de algum site (verificar ANTES de instalar)\n• Profile exportado via Apple Configurator 2 no Mac\n• Profile salvo em Files / iCloud Drive\n\nO scanner extrai todos PayloadTypes + metadata e cruza com lista de cheat services.";
+    info.addAction("Selecionar arquivo");
+    info.addCancelAction("Pular");
+    if ((await info.present()) === -1) return;
+
+    let profile;
+    try { profile = await loadProfileFile(); }
+    catch (e) {
+        const a = new Alert();
+        a.title = "Erro";
+        a.message = String(e);
+        a.addAction("OK");
+        await a.present();
+        return;
+    }
+
+    const result = analyzeProfile(profile.raw);
+    await buildProfileTable(result).present(true);
+
+    // Opcional: salvar relatório
+    const s = new Alert();
+    s.title = "Salvar análise?";
+    s.message = "Salvar relatório TXT?";
+    s.addAction("Sim");
+    s.addCancelAction("Não");
+    if ((await s.present()) === 0) {
+        const fm = FileManager.iCloud();
+        const ts = new Date().toISOString().replace(/[:\.]/g, "-").substring(0, 19);
+        const path = fm.joinPath(fm.documentsDirectory(), `a4ther_profile_${ts}.txt`);
+        const lines = [];
+        lines.push("=========================================");
+        lines.push(`  A4ther Systems v${VERSION} | LS Aluguel`);
+        lines.push("  iOS Profile Analyzer");
+        lines.push(`  ${new Date().toISOString()}`);
+        lines.push(`  Source: ${profile.path}`);
+        lines.push("=========================================");
+        lines.push("");
+        lines.push("--- METADATA ---");
+        if (result.metadata.displayName)  lines.push(`  DisplayName:  ${result.metadata.displayName}`);
+        if (result.metadata.identifier)   lines.push(`  Identifier:   ${result.metadata.identifier}`);
+        if (result.metadata.organization) lines.push(`  Organization: ${result.metadata.organization}`);
+        if (result.metadata.uuid)         lines.push(`  UUID:         ${result.metadata.uuid}`);
+        lines.push("");
+        lines.push(`--- PAYLOAD TYPES (${result.payloadTypes.length}) ---`);
+        for (const pt of result.payloadTypes) {
+            const info = PROFILE_PAYLOADS[pt];
+            if (info) lines.push(`  [${info.sev}] ${pt} → ${info.desc}`);
+            else lines.push(`  [?] ${pt}`);
+        }
+        if (result.hostNames.length > 0) {
+            lines.push("");
+            lines.push("--- HOSTNAMES ---");
+            for (const h of result.hostNames) lines.push(`  ${h}`);
+        }
+        if (result.proxyServers.length > 0) {
+            lines.push("");
+            lines.push("--- PROXY SERVERS ---");
+            for (const p of result.proxyServers) lines.push(`  ${p}`);
+        }
+        if (result.proxyPACs.length > 0) {
+            lines.push("");
+            lines.push("--- PAC URLs ---");
+            for (const u of result.proxyPACs) lines.push(`  ${u}`);
+        }
+        if (alerts.length > 0) {
+            lines.push("");
+            lines.push("--- ALERTAS ---");
+            for (const a of alerts) lines.push("  [!] " + a);
+        }
+        if (warnings.length > 0) {
+            lines.push("");
+            lines.push("--- AVISOS ---");
+            for (const w of warnings) lines.push("  [?] " + w);
+        }
+        fm.writeString(path, lines.join("\n"));
         const d = new Alert();
         d.title = "Salvo";
         d.message = path;
