@@ -7,15 +7,6 @@
 #   - Free Fire / Free Fire Max instalados via Play Store / App Store oficial
 #   - Cheats: root/jailbreak, frida, mods, tweaks, etc.
 #
-#  Síntese de detecções de:
-#   - KellerSS-Android (binário Go)            [kellerzz/KellerSS-Android]
-#   - CardozoSS / OlhosDoCapeta (binário Go)   [CardozoServer/OlhosDoCapeta-Android]
-#   - TiziXit-AntiCheat (bash 2364 linhas)     [Streakxit/TiziXit-AntiCheat]
-#   - thxrlk00/Scanner KellerSS.php (PHP 2198) [thxrlk00/Scanner]
-#   - thzzSS/scanner-brevent (thz.sh)          [thzzSS/scanner-brevent]
-#   - ZackSS (bash)                            [zacksevenSS/ZackSS]
-#   + 12 forks/variantes analisados
-#
 #  Uso no Termux:
 #     pkg install -y curl
 #     curl -L -o FFScanner.sh <URL_RAW>
@@ -357,7 +348,7 @@ header "ROOT / SU / SUPERUSER"
 
 ROOT_HITS=0
 
-# Paths su (todas variantes vistas em KellerSS/CardozoSS/TiziXit)
+# Paths su (todas variantes conhecidas)
 for P in /system/bin/su /system/xbin/su /sbin/su /system/sbin/su \
          /vendor/bin/su /su/bin/su /system/sd/xbin/su /data/magisk \
          /system/app/Superuser.apk /system/etc/init.d/99SuperSUDaemon \
@@ -367,7 +358,7 @@ for P in /system/bin/su /system/xbin/su /sbin/su /system/sbin/su \
     exists "$P" && { alert "Caminho su/root: $P"; ROOT_HITS=$((ROOT_HITS+1)); }
 done
 
-# Nomes de binário "su" disfarçado (CardozoSS caça estes)
+# Nomes de binário "su" disfarçado
 for SU_VAR in su64 su32 su-back __su off.su Bksu susu su.sh supersu; do
     for D in /system/bin /system/xbin /sbin /vendor/bin /data/adb /data/local/tmp; do
         if exists "$D/$SU_VAR"; then
@@ -627,7 +618,7 @@ done
 # ============================================================
 header "FREE FIRE - HISTÓRICO INSTALL/UNINSTALL (últimos 7 dias)"
 
-# 1) Pacotes desinstalados conforme batterystats (TiziXit pattern)
+# 1) Pacotes desinstalados conforme batterystats
 #    dumpsys batterystats guarda registros 'pkgunin=' até batteria zerar
 if have dumpsys; then
     UNINSTALLED=$(dumpsys batterystats 2>/dev/null | grep -oE 'pkgunin=[0-9]+:"[^"]+"' | sort -u)
@@ -945,7 +936,7 @@ if have find; then
     fi
 fi
 
-# MIUI/HyperOS backup com APKs (TiziXit caça aqui)
+# MIUI/HyperOS backup com APKs
 if [ -d /sdcard/MIUI/backup/AllBackup ]; then
     MIUI_BK=$(find /sdcard/MIUI/backup/AllBackup 2>/dev/null -maxdepth 3 -type f -name '*.apk' 2>/dev/null | head -n 20)
     [ -n "$MIUI_BK" ] && echo "$MIUI_BK" | while IFS= read -r L; do
@@ -2093,7 +2084,7 @@ fi
 [ "$SYS_HITS" = "0" ] && ok "/system sem tampering visível"
 
 # ============================================================
-#  31. HWID (SHA-256 + MD5 TiziXit-compat)
+#  31. HWID (SHA-256 + MD5)
 # ============================================================
 header "HWID"
 
@@ -2105,17 +2096,17 @@ ANDROID_ID=""
 have settings && ANDROID_ID=$(settings get secure android_id 2>/dev/null)
 
 RAW="${SERIAL}|${MAC}|${ANDROID_ID}|$(gp ro.product.model)"
-TIZIXIT_RAW="${ANDROID_ID}:${SERIAL}:${BOOT_SERIAL}"
+HWID_ALT_RAW="${ANDROID_ID}:${SERIAL}:${BOOT_SERIAL}"
 
 HASH=""
-HASH_TIZIXIT=""
+HASH_HWID_ALT=""
 if have sha256sum; then
     HASH=$(printf '%s' "$RAW" | sha256sum 2>/dev/null | awk '{print $1}')
 fi
 if have md5sum; then
-    HASH_TIZIXIT=$(printf '%s' "$TIZIXIT_RAW" | md5sum 2>/dev/null | awk '{print $1}')
+    HASH_HWID_ALT=$(printf '%s' "$HWID_ALT_RAW" | md5sum 2>/dev/null | awk '{print $1}')
 elif have md5; then
-    HASH_TIZIXIT=$(printf '%s' "$TIZIXIT_RAW" | md5 -q 2>/dev/null)
+    HASH_HWID_ALT=$(printf '%s' "$HWID_ALT_RAW" | md5 -q 2>/dev/null)
 fi
 
 info "Serial:        ${SERIAL:-?}"
@@ -2123,7 +2114,7 @@ info "Boot serial:   ${BOOT_SERIAL:-?}"
 info "MAC wlan0:     ${MAC:-?}"
 info "Android ID:    ${ANDROID_ID:-?}"
 info "HWID SHA-256:  ${HASH:-(indisponível)}"
-info "HWID MD5 (TX): ${HASH_TIZIXIT:-(indisponível)}"
+info "HWID MD5: ${HASH_HWID_ALT:-(indisponível)}"
 
 fi  # ===== fim do bloco ANDROID =====
 

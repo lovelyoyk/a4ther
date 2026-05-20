@@ -4,8 +4,6 @@
 //  Roda em iPhone SEM jailbreak via app Scriptable (gratuito App Store).
 //
 //  Data sources mescladas:
-//   - kellerzz/KellerSS-iOS (2779 linhas, ~50 bundles)
-//   - ynwkxshii/PantherSS-IOS (2702 linhas, +5 modules extras)
 //   - VLIZVIP/-loz-IOZ-ANTI-CHEAT (idêntico ao Keller)
 //   - 34 cert sideloaders (Esign, Feather, Ksign, Gbox, Scarlet)
 //   - 9 FF iOS cheats confirmados (espff, externalesp, aimlock, etc.)
@@ -39,7 +37,7 @@ const CHEAT_APPS = {
     "com.dts.freefireth2":                    "Free Fire IPA re-sign variant",
     "com.nextor.app":                         "Nextor menu carrier app",
 
-    // === Proxy / VPN / MITM (KellerSS + Panther) ===
+    // === Proxy / VPN / MITM ===
     "com.touchingapp.potatsolite":            "PotatsoLite — proxy iOS (mitmproxy cheat)",
     "com.touchingapp.potatso":                "Potatso — proxy iOS",
     "com.monite.proxyff":                     "ProxyFF — proxy iOS (cheat confirmado)",

@@ -1030,17 +1030,15 @@ footer a:hover {
 <footer>
     <p>
         <span class="footer-brand">A4THER SYSTEMS</span>
-        <span class="sep">▪</span>
+        <span class="sep">·</span>
         <strong>LS Aluguel</strong>
     </p>
     <p>
-        <a href="https://github.com/lovelyoyk/a4ther" target="_blank" rel="noopener">GitHub</a>
-        <span class="sep">·</span>
         Análise <strong>100% client-side</strong> · seus arquivos nunca saem do navegador
     </p>
     <p class="text-faint" style="margin-top: 0.8rem;">
-        Síntese de KellerSS · PantherSS · CardozoSS · TiziXit · 50+ sources<br />
-        ~115 bundles catalogados · 12 cheat servers · 27 payload types · UUID opaco detection
+        Free Fire Anti-Cheat Scanner · iOS &amp; Android<br />
+        ~130 bundles catalogados · 27 payload types · 7 tampering checks · UUID opaco detection
     </p>
 </footer>
 
@@ -1050,7 +1048,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "3.2.0";
+const VERSION = "3.2.1";
 
 /* ============================================================
    BLACKLIST API (configurar quando seu backend estiver no ar)
@@ -1083,7 +1081,7 @@ document.getElementById('version').textContent = `v${VERSION}`;
 /* ============================================================
    DETECTION DATA (sincronizado com a4ther-ios.js)
    ============================================================ */
-// CATEGORIES (estilo KellerSS):
+// CATEGORIES:
 //  CHEAT     = cheat ativo confirmado (mod menu, ESP, aimbot)
 //  SIDELOAD  = installer de IPA modded (cert-based)
 //  JAILBREAK = JB tool ou package manager
@@ -1169,7 +1167,7 @@ const CHEAT_APPS = {
     "com.altstore.altstoreclassic":     { sev: "HIGH",     name: "AltStore Classic",       cat: "SIDELOAD",  desc: "Sideload" },
     "com.sideloadly.sideloadly":        { sev: "HIGH",     name: "Sideloadly",             cat: "SIDELOAD",  desc: "Sideload" },
 
-    // === Cert sideloaders (KellerSS: "cheat certificates") ===
+    // === Cert sideloaders (Cheat Certificates) ===
     "com.esign.ios":                    { sev: "HIGH",     name: "ESign",                  cat: "CERT",      desc: "Cert sideloader" },
     "com.esign.esign":                  { sev: "HIGH",     name: "ESign",                  cat: "CERT",      desc: "Cert sideloader (alt)" },
     "app.esign.esign":                  { sev: "HIGH",     name: "ESign",                  cat: "CERT",      desc: "Cert sideloader" },
@@ -1230,7 +1228,7 @@ const CHEAT_APPS = {
     "com.limneos.adprivacy":            { sev: "MEDIUM",   name: "AdPrivacy",              cat: "CLEANER",   desc: "Bloqueio de rede" },
     "com.jjcm.nomoread":                { sev: "MEDIUM",   name: "NoMoreAd",               cat: "CLEANER",   desc: "Bloqueio de rede" },
 
-    // === xLeal / xDark family (confirmado no KellerSS frontend) ===
+    // === xLeal / xDark family ===
     "xdark.store.pro":                  { sev: "HIGH",     name: "xLeal (Filza)",          cat: "SIDELOAD",  desc: "Sideloader xLeal/xDark - distribui Filza modded" },
 
     // === iMazing (forense PC, indica device foi mexido com cabo) ===
@@ -1246,7 +1244,7 @@ const SUBSTRING_PATTERNS = [
     { needle: "altserver", name: "AltServer",     cat: "SIDELOAD", sev: "HIGH",   desc: "AltStore sideload server" },
 ];
 
-// Categorias estilo KellerSS (badges visuais)
+// Categorias (badges visuais)
 const CATEGORY_INFO = {
     CHEAT:     { icon: "⚠",  label: "Cheat",     color: "red"    },
     SIDELOAD:  { icon: "📦", label: "Sideload",  color: "red"    },
@@ -1353,7 +1351,7 @@ const SIDELOAD_DOMAINS = [
     "esigncert.zeejb.com", "iosrocket.com",
 ];
 
-// PayloadOrganization keywords (KellerSS detecta isso em profiles)
+// PayloadOrganization keywords (cheat indicators)
 const PROFILE_ORG_KEYWORDS = [
     "signulous", "scarlet", "feather", "esign", "gbox", "ksign",
     "iosgods", "iosrocket", "iloader", "digiidna", "imazing",
@@ -1488,7 +1486,7 @@ function renderResults(stats) {
     hideLoading();
     lastStats = stats;
     let verdict, color, icon, subtitle;
-    // Estilo KellerSS: W.O (vermelho grande) ou LIMPO (verde)
+    // Verdict: W.O (vermelho) ou LIMPO (verde)
     if (alerts.length > 0) {
         verdict = 'W . O'; color = 'red'; icon = '✗';
         subtitle = `${alerts.length} alerta${alerts.length !== 1 ? 's' : ''} crítico${alerts.length !== 1 ? 's' : ''} · aplicar W.O / BAN`;
@@ -1500,7 +1498,7 @@ function renderResults(stats) {
         subtitle = 'Device aprovado · nenhum indicador suspeito';
     }
 
-    // Stats KellerSS-style: Apps Instalados | Cheats | Perfis MDM
+    // Stats: Apps Instalados | Cheats | Perfis MDM
     let cheatCount = 0, profileCount = 0;
     for (const a of alerts) {
         const m = (typeof a === 'string' ? a : a.msg) || '';
@@ -1943,7 +1941,7 @@ async function handleProfile(file) {
 }
 
 /* ============================================================
-   SYSDIAGNOSE FOLDER ANALYZER (recursive deep-scan, KellerSS-style)
+   SYSDIAGNOSE FOLDER ANALYZER (recursive deep-scan)
    ============================================================ */
 
 // Extrai strings ASCII printáveis de qualquer texto (suporta binary plists)
@@ -2062,7 +2060,7 @@ function classifyBundle(b, source) {
 }
 
 /* ============================================================
-   5-LEVEL PROFILE CLASSIFICATION (estilo KellerSS)
+   5-LEVEL PROFILE CLASSIFICATION
      cheat   → CHEAT confirmado (vermelho)
      opaque  → DETECTADO (vermelho, suspeito sem ID conhecido)
      suspect → SUSPEITO (rosa, keyword cheat mas não conclusivo)
@@ -2240,7 +2238,7 @@ function scanPCPairings(files) {
 }
 
 /* ============================================================
-   SYSDIAGNOSE TAMPERING DETECTION (KellerSS-style 7 sub-checks)
+   SYSDIAGNOSE TAMPERING DETECTION (7 sub-checks)
    ============================================================ */
 async function checkSysdiagnoseIntegrity(files, byType, opts) {
     opts = opts || {};
@@ -2421,7 +2419,7 @@ async function handleSysdiagnose(filesList, opts) {
     }
     ok(`Tipos: ${Object.entries(byType).map(([k,v]) => `${k}=${v.length}`).join(', ')}`);
 
-    // ─── SCAN PASS 1: install/uninstall logs (KellerSS pega bundles aqui) ───
+    // ─── SCAN PASS 1: install/uninstall logs ───
     if (byType.installLog) {
         let combined = "";
         for (const f of byType.installLog) {
@@ -2574,7 +2572,7 @@ async function handleSysdiagnose(filesList, opts) {
     }
 
     // ─── SCAN PASS 8 (KILLER): GREP EM TODOS OS ARQUIVOS ───
-    // KellerSS faz isso - varre TUDO procurando padrões conhecidos.
+    // Pass agressivo: varre TUDO procurando padrões conhecidos.
     showLoading('Pass 8: scan recursivo em todos os arquivos…');
 
     const foundProfiles = new Map();   // identifier → array de fontes

@@ -188,17 +188,11 @@ Console colorido com banner FIGlet, section headers e dots coloridos. Relatório
 - Free Fire iOS — verificação App Store via `embedded.mobileprovision`
 - Processos e HWID via `ioreg`
 
-## Síntese de fontes
+## Sobre
 
-Detecções consolidadas a partir de 6 scanners open-source + 18 forks/variantes:
-- `kellerzz/KellerSS-Android` (binário Go)
-- `CardozoServer/OlhosDoCapeta-Android` (binário Go)
-- `Streakxit/TiziXit-AntiCheat` (bash 2364 linhas)
-- `thxrlk00/Scanner` (PHP 2198 linhas)
-- `thzzSS/scanner-brevent` (bash)
-- `zacksevenSS/ZackSS` (bash)
-- `kellerzz/KellerSS-iOS`, `ynwkxshii/PantherSS-IOS` (JS Scriptable)
-- `susuzadas-a11y/Pinguim` (bash)
+A4ther Systems - Free Fire Anti-Cheat Scanner
+Desenvolvido por LS Aluguel.
+
 
 ## Saída
 
