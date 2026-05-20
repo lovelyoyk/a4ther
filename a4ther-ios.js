@@ -1,12 +1,7 @@
 // ============================================================
-//  A4ther Systems v2.4.0 | LS Aluguel
+//  A4ther Systems v3.3.0 | LS Aluguel
 //  iOS Free Fire Anti-Cheat Scanner (Scriptable)
 //  Roda em iPhone SEM jailbreak via app Scriptable (gratuito App Store).
-//
-//  Data sources mescladas:
-//   - VLIZVIP/-loz-IOZ-ANTI-CHEAT (idêntico ao Keller)
-//   - 34 cert sideloaders (Esign, Feather, Ksign, Gbox, Scarlet)
-//   - 9 FF iOS cheats confirmados (espff, externalesp, aimlock, etc.)
 //
 //  Como usar:
 //    1. Settings → Privacy & Security → App Privacy Report → ON
@@ -18,7 +13,7 @@
 //    6. Vê o resultado
 // ============================================================
 
-const VERSION = "2.5.0";
+const VERSION = "3.3.0";
 
 // ============================================================
 //  DATA — bundles, domínios, IPs, TLDs, ASNs (109+ entries)

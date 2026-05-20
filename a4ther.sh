@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v3.4.0 | LS Aluguel
+#  A4ther Systems v3.3.0 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -9,11 +9,11 @@
 #
 #  Uso no Termux:
 #     pkg install -y curl
-#     curl -L -o FFScanner.sh <URL_RAW>
-#     chmod +x FFScanner.sh && sh FFScanner.sh
+#     curl -L -o a4ther.sh <URL_RAW>
+#     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="3.8.0"
+VERSION="3.3.0"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -30,8 +30,8 @@ TS=$(date '+%Y%m%d_%H%M%S' 2>/dev/null)
 REPORT=""
 for D in "$HOME" /sdcard /storage/emulated/0 /data/local/tmp /tmp .; do
     [ -d "$D" ] && [ -w "$D" ] || continue
-    if mkdir -p "$D/FFScanner_reports" 2>/dev/null; then
-        REPORT="$D/FFScanner_reports/scan_${TS}.txt"
+    if mkdir -p "$D/a4ther_reports" 2>/dev/null; then
+        REPORT="$D/a4ther_reports/scan_${TS}.txt"
         : > "$REPORT" 2>/dev/null && break
         REPORT=""
     fi

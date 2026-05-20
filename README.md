@@ -143,7 +143,7 @@ Também funciona com `FORCE_PLATFORM=android` (rodando bash com sudo + paths fak
 
 ### Saída
 
-Console colorido com banner FIGlet, section headers e dots coloridos. Relatório em texto puro salvo em `~/FFScanner_reports/scan_AAAAMMDD_HHMMSS.txt`. Exit code:
+Console colorido com banner FIGlet, section headers e dots coloridos. Relatório em texto puro salvo em `~/a4ther_reports/scan_AAAAMMDD_HHMMSS.txt`. Exit code:
 - `0` = LIMPO (verde)
 - `1` = REVISAR (amarelo) — avisos a checar manualmente
 - `2` = SUSPEITO (vermelho) — alertas críticos detectados
@@ -197,7 +197,7 @@ Desenvolvido por LS Aluguel.
 ## Saída
 
 - Console colorido (ANSI) com banner FIGlet + section headers + dots coloridos
-- Relatório em texto puro salvo em `~/FFScanner_reports/scan_AAAAMMDD_HHMMSS.txt`
+- Relatório em texto puro salvo em `~/a4ther_reports/scan_AAAAMMDD_HHMMSS.txt`
 - Exit code: `0` = LIMPO, `1` = REVISAR, `2` = SUSPEITO
 
 ## Limitações honestas
@@ -209,4 +209,4 @@ Desenvolvido por LS Aluguel.
 
 ---
 
-A4ther Systems v3.4.0 | LS Aluguel
+A4ther Systems v3.3.0 | LS Aluguel
