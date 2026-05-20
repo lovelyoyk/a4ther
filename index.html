@@ -178,7 +178,7 @@ a:hover { color: var(--text); }
 /* ============================================================
    HEADER
    ============================================================ */
-/* HERO — A4THER em letras grandes (block letter style) com glow roxo */
+/* HERO — A4ther FIGlet ASCII com glow roxo */
 .hero {
     text-align: center;
     padding: 1.5rem 0 3.5rem;
@@ -191,38 +191,54 @@ a:hover { color: var(--text); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* FIGlet removido — exibe só o logo-text */
-.logo-art { display: none; }
-
-.logo-text {
-    display: block;
-    font-family: var(--mono);
-    font-size: clamp(3rem, 11vw, 5.75rem);
-    font-weight: 800;
+.logo-art {
     color: var(--purple);
-    letter-spacing: 0.06em;
-    margin: 0 0 0.5rem;
-    line-height: 1;
-    user-select: none;
+    font-family: var(--mono);
+    font-size: clamp(0.45rem, 1.1vw, 0.75rem);
+    line-height: 1.15;
+    white-space: pre;
+    display: inline-block;
+    text-align: left;
+    margin: 0 auto;
     text-shadow:
-        0 0 18px var(--purple-glow),
-        0 0 44px rgba(179, 136, 255, 0.32),
-        0 0 88px rgba(179, 136, 255, 0.16);
+        0 0 10px var(--purple-glow),
+        0 0 28px rgba(179, 136, 255, 0.28),
+        0 0 56px rgba(179, 136, 255, 0.12);
     animation: glow-pulse 4s ease-in-out infinite;
+    user-select: none;
 }
 @keyframes glow-pulse {
     0%, 100% {
         text-shadow:
-            0 0 18px var(--purple-glow),
-            0 0 44px rgba(179, 136, 255, 0.32),
-            0 0 88px rgba(179, 136, 255, 0.16);
+            0 0 10px var(--purple-glow),
+            0 0 28px rgba(179, 136, 255, 0.28),
+            0 0 56px rgba(179, 136, 255, 0.12);
     }
     50% {
         text-shadow:
-            0 0 24px var(--purple-glow),
-            0 0 58px rgba(179, 136, 255, 0.48),
-            0 0 116px rgba(179, 136, 255, 0.26);
+            0 0 14px var(--purple-glow),
+            0 0 38px rgba(179, 136, 255, 0.42),
+            0 0 78px rgba(179, 136, 255, 0.22);
     }
+}
+
+/* Fallback A4THER block em telas estreitas (FIGlet vira ilegível < 640px) */
+.logo-text {
+    display: none;
+    font-family: var(--mono);
+    font-size: clamp(2.5rem, 9vw, 5rem);
+    font-weight: 800;
+    color: var(--purple);
+    letter-spacing: 0.08em;
+    text-shadow:
+        0 0 16px var(--purple-glow),
+        0 0 44px rgba(179, 136, 255, 0.25);
+    margin: 0 0 0.5rem;
+    line-height: 1;
+}
+@media (max-width: 640px) {
+    .logo-art  { display: none; }
+    .logo-text { display: block; }
 }
 
 .tagline {
@@ -253,32 +269,19 @@ a:hover { color: var(--text); }
     margin-right: auto;
 }
 .subtitle .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 4px 12px 4px 10px;
-    background: linear-gradient(135deg, rgba(179, 136, 255, 0.18), rgba(122, 78, 255, 0.08));
-    border: 1px solid var(--border-hi);
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: var(--text);
+    display: inline-block;
+    padding: 3px 10px;
+    background: rgba(179, 136, 255, 0.06);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--purple);
     margin-left: 8px;
     vertical-align: middle;
-    box-shadow: 0 2px 12px var(--purple-glow);
-    position: relative;
-    overflow: hidden;
-}
-.subtitle .pill::before {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--purple);
-    box-shadow: 0 0 8px var(--purple);
-    flex-shrink: 0;
-    animation: dot-pulse 2.4s ease-in-out infinite;
+    font-family: var(--mono);
 }
 
 /* Linha decorativa abaixo do hero */
@@ -319,23 +322,7 @@ a:hover { color: var(--text); }
     color: var(--text-dim);
     margin-bottom: 0.55rem;
     padding-left: 0.25rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-.dropdown-label::before {
-    content: '';
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--purple);
-    box-shadow: 0 0 8px var(--purple-glow);
-    animation: dot-pulse 2.4s ease-in-out infinite;
-}
-@keyframes dot-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50%      { opacity: 0.5; transform: scale(1.35); }
+    display: block;
 }
 
 .dropdown {
@@ -548,22 +535,22 @@ a:hover { color: var(--text); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* DROPZONE — glass + border gradient (sem dashed, sem barras bugadas) */
+/* DROPZONE — borda SIMPLES e UNIFORME (sem L-curves nos cantos) */
 .dropzone {
     position: relative;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-hi);
     border-radius: var(--radius-xl);
     padding: 3.5rem 2rem;
     text-align: center;
     background:
-        linear-gradient(135deg, rgba(28, 22, 48, 0.65), rgba(20, 16, 36, 0.55));
+        linear-gradient(180deg, rgba(28, 22, 48, 0.55), rgba(20, 16, 36, 0.55));
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     transition: var(--transition);
     cursor: pointer;
     overflow: hidden;
 }
-/* Aura roxa interna */
+/* Aura roxa interna no hover (mantém o efeito sem deixar canto bugado) */
 .dropzone::before {
     content: '';
     position: absolute;
@@ -573,35 +560,13 @@ a:hover { color: var(--text); }
     transition: opacity 400ms var(--ease);
     pointer-events: none;
 }
-/* Borda animada com gradiente roxo (substitui o dashed bugado) */
-.dropzone::after {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(135deg,
-        rgba(179, 136, 255, 0.4) 0%,
-        rgba(179, 136, 255, 0.08) 35%,
-        rgba(122, 78, 255, 0.08) 65%,
-        rgba(179, 136, 255, 0.4) 100%);
-    -webkit-mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-            mask-composite: exclude;
-    opacity: 0.6;
-    pointer-events: none;
-    transition: opacity 400ms var(--ease);
-}
 .dropzone:hover, .dropzone.dragging {
-    background:
-        linear-gradient(135deg, rgba(38, 30, 64, 0.78), rgba(28, 22, 48, 0.68));
+    border-color: var(--purple);
+    background: linear-gradient(180deg, rgba(38, 30, 64, 0.7), rgba(28, 22, 48, 0.7));
     box-shadow: var(--shadow-purple);
     transform: translateY(-2px);
 }
-.dropzone:hover::before, .dropzone.dragging::before { opacity: 0.5; }
-.dropzone:hover::after, .dropzone.dragging::after  { opacity: 1; }
+.dropzone:hover::before, .dropzone.dragging::before { opacity: 0.4; }
 .dropzone.dragging {
     animation: dz-bounce 600ms ease-in-out infinite;
 }
@@ -646,13 +611,11 @@ a:hover { color: var(--text); }
     cursor: pointer;
 }
 
-/* HELP BOX — borda sutil, sem barra colorida bugada */
+/* HELP BOX — borda uniforme, sem strip lateral */
 .help-box {
-    position: relative;
     margin-top: 1.25rem;
-    padding: 1.25rem 1.5rem 1.25rem 1.75rem;
-    background:
-        linear-gradient(135deg, rgba(28, 22, 48, 0.55), rgba(20, 16, 36, 0.45));
+    padding: 1.25rem 1.5rem;
+    background: linear-gradient(180deg, rgba(28, 22, 48, 0.45), rgba(20, 16, 36, 0.4));
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border);
@@ -660,19 +623,6 @@ a:hover { color: var(--text); }
     font-size: 0.9rem;
     color: var(--text-dim);
     line-height: 1.7;
-    overflow: hidden;
-}
-/* Strip lateral com gradiente roxo (em vez de border-left sólido) */
-.help-box::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 12%; bottom: 12%;
-    width: 2px;
-    background: linear-gradient(180deg,
-        transparent, var(--purple) 30%, var(--purple) 70%, transparent);
-    opacity: 0.6;
-    box-shadow: 0 0 8px var(--purple-glow);
-    border-radius: 2px;
 }
 .help-box strong {
     color: var(--cyan);
@@ -1139,17 +1089,23 @@ footer a:hover {
 
 <!-- ─── HERO A4THER ─── -->
 <header class="hero">
+    <pre class="logo-art" aria-hidden="true">    █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗
+   ██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗
+   ███████║███████║   ██║   ███████║█████╗  ██████╔╝
+   ██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗
+   ██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║
+   ╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</pre>
     <h1 class="logo-text">A4THER</h1>
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v3.3.0</span>
+        <span id="version">v3.3.1</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
     <p class="subtitle">
         Free Fire Anti-Cheat Scanner
-        <span class="pill">LS Aluguel</span>
+        <span class="pill">iOS · Android</span>
     </p>
     <div class="hero-divider"></div>
 </header>
@@ -1359,7 +1315,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "3.3.0";
+const VERSION = "3.3.1";
 
 /* ============================================================
    BLACKLIST API (configurar quando seu backend estiver no ar)
