@@ -194,38 +194,27 @@ a:hover { color: var(--text); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.logo-art {
-    color: var(--purple);
-    font-family: var(--mono);
-    /* fluido — funciona em todas as larguras: desktop, tablet, mobile */
-    font-size: clamp(0.34rem, 1.55vw, 0.78rem);
-    line-height: 1.15;
-    white-space: pre;
-    display: inline-block;
-    text-align: left;
+/* FIGlet antigo (oculto — SVG é mais limpo) */
+.logo-art { display: none; }
+
+/* SVG A4THER — letras limpas, glow circular via feGaussianBlur */
+.logo-svg {
+    display: block;
+    width: 100%;
+    max-width: 540px;
+    height: auto;
     margin: 0 auto;
-    max-width: 100%;
-    overflow: hidden;
-    text-shadow:
-        0 0 10px var(--purple-glow),
-        0 0 28px rgba(179, 136, 255, 0.28),
-        0 0 56px rgba(179, 136, 255, 0.12);
-    animation: glow-pulse 4s ease-in-out infinite;
+    animation: glow-pulse 4.5s ease-in-out infinite;
     user-select: none;
 }
+.logo-svg text {
+    font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    font-weight: 800;
+    fill: var(--purple);
+}
 @keyframes glow-pulse {
-    0%, 100% {
-        text-shadow:
-            0 0 10px var(--purple-glow),
-            0 0 28px rgba(179, 136, 255, 0.28),
-            0 0 56px rgba(179, 136, 255, 0.12);
-    }
-    50% {
-        text-shadow:
-            0 0 14px var(--purple-glow),
-            0 0 38px rgba(179, 136, 255, 0.42),
-            0 0 78px rgba(179, 136, 255, 0.22);
-    }
+    0%, 100% { opacity: 0.92; transform: scale(1); }
+    50%      { opacity: 1;    transform: scale(1.012); }
 }
 
 /* logo-text só como fallback semântico para a11y — visualmente oculto */
@@ -1099,17 +1088,28 @@ footer a:hover {
 
 <!-- ─── HERO A4THER ─── -->
 <header class="hero">
-    <pre class="logo-art" aria-hidden="true">    █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗
-   ██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗
-   ███████║███████║   ██║   ███████║█████╗  ██████╔╝
-   ██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗
-   ██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║
-   ╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</pre>
+    <svg class="logo-svg" viewBox="0 0 540 130" xmlns="http://www.w3.org/2000/svg" aria-label="A4THER" role="img">
+        <defs>
+            <filter id="a4ther-glow" x="-30%" y="-30%" width="160%" height="160%">
+                <feGaussianBlur stdDeviation="2.5" result="b1"/>
+                <feGaussianBlur stdDeviation="8"   result="b2"/>
+                <feGaussianBlur stdDeviation="18"  result="b3"/>
+                <feMerge>
+                    <feMergeNode in="b3"/>
+                    <feMergeNode in="b2"/>
+                    <feMergeNode in="b1"/>
+                    <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+            </filter>
+        </defs>
+        <text x="50%" y="58%" text-anchor="middle" dominant-baseline="middle"
+              font-size="96" letter-spacing="8" filter="url(#a4ther-glow)">A4THER</text>
+    </svg>
     <h1 class="logo-text">A4THER</h1>
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v3.3.3</span>
+        <span id="version">v3.3.4</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1325,7 +1325,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "3.3.3";
+const VERSION = "3.3.4";
 
 /* ============================================================
    BLACKLIST API (configurar quando seu backend estiver no ar)
@@ -2277,6 +2277,8 @@ function fileType(file) {
     const name = (file.webkitRelativePath || file.name).toLowerCase();
     if (name.includes('mobileinstallation/mobile_installation.log')) return 'installLog';
     if (name.includes('mcstate/shared/mcsettingsevents.plist')) return 'mcEvents';
+    if (name.includes('mcprofileevents')) return 'mcProfileEvents'; /* profile install/uninstall + proxy events */
+    if (name.includes('mdmprofileevents')) return 'mcProfileEvents';
     if (name.includes('mcstate/shared/profile-')) return 'profileStub';
     if (name.includes('com.apple.networkextension.plist')) return 'networkExt';
     if (name.includes('preferences/systemconfiguration/preferences.plist')) return 'netPrefs';
@@ -2756,6 +2758,102 @@ async function handleSysdiagnose(filesList, opts) {
                 } else if (!pid.startsWith('com.apple.')) {
                     warn(`[MEDIUM] Profile não-Apple no histórico: ${pid}`);
                 }
+            }
+        }
+    }
+
+    // ─── SCAN PASS 2.5: MCProfileEvents / MDMProfileEvents (install/uninstall + proxy) ───
+    if (byType.mcProfileEvents) {
+        for (const f of byType.mcProfileEvents) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            ok(`MCProfileEvents: ${f.name} · ${raw.length} bytes`);
+
+            const lines = raw.split('\n');
+            const installed   = new Set();
+            const uninstalled = new Set();
+            const proxyHosts  = new Set();
+            const payloadTypes= new Set();
+            const httpUrls    = new Set();
+            let suspicious    = 0;
+
+            for (const line of lines) {
+                // Profile installed / activated / removed
+                let m = line.match(/(?:profile|payload)[^"']*?(?:install|activat|enable|appl)(?:ed|ing)?[^a-z]+([a-zA-Z][a-zA-Z0-9._-]{4,200})/i);
+                if (m) installed.add(m[1]);
+                m = line.match(/(?:profile|payload)[^"']*?(?:remov|uninstall|disabl|delete)(?:ed|ing)?[^a-z]+([a-zA-Z][a-zA-Z0-9._-]{4,200})/i);
+                if (m) uninstalled.add(m[1]);
+
+                // Payload types do profile
+                const ptm = line.match(/com\.apple\.(proxy|vpn|dns|carrier|webClip|wifi|globalproxy|hotspothelper|trustsettings|mdm|caldav|carddav|exchange)\.[a-zA-Z]+/gi);
+                if (ptm) ptm.forEach(p => payloadTypes.add(p));
+
+                // Proxy host:port no log
+                const proxym = line.match(/(?:proxy|host|server)["':=\s]+([a-zA-Z0-9.\-]+\.[a-z]{2,})(?::(\d+))?/gi);
+                if (proxym) proxym.forEach(p => proxyHosts.add(p));
+
+                // URLs http(s)://
+                const urlm = line.match(/https?:\/\/[a-zA-Z0-9.\-]+\.[a-z]{2,}[a-zA-Z0-9_.\-/?=&%]*/g);
+                if (urlm) urlm.forEach(u => httpUrls.add(u));
+
+                // Padrões suspeitos no log linha-a-linha
+                if (/MITM|self.signed|untrusted CA|cert.*rejected|unauthor/i.test(line)) suspicious++;
+            }
+
+            if (installed.size > 0)   ok(`  → ${installed.size} profile install events`);
+            if (uninstalled.size > 0) warn(`  → ${uninstalled.size} profile uninstall events (cheat removendo rastros?)`);
+
+            // Cross-check com classifyBundle
+            for (const pid of installed) {
+                const c = classifyBundle(pid);
+                if (c) {
+                    alertF(`[${c.sev}] MCProfileEvents instalou: ${pid}`, c.desc + " (registrado no log de eventos)");
+                } else if (pid.match(/profile-[0-9A-Fa-f-]{20,}/i)) {
+                    alertF(`[CRITICAL] Profile UUID opaco no log MCProfileEvents: ${pid}`,
+                        "Profile com identifier sem owner aparente — típico de reseller DNS/proxy/cheat");
+                }
+            }
+            for (const pid of uninstalled) {
+                if (pid.match(/profile-[0-9A-Fa-f-]{20,}/i)) {
+                    warn(`[HIGH] Profile UUID opaco REMOVIDO recentemente: ${pid} (esconder rastros?)`);
+                }
+            }
+
+            // Payload types: alertar payloads ofensivos
+            for (const pt of payloadTypes) {
+                const lpt = pt.toLowerCase();
+                if (lpt.includes('proxy') || lpt.includes('globalproxy')) {
+                    alertF(`[CRITICAL] Payload PROXY ativo no histórico: ${pt}`,
+                        "Profile com payload de proxy força TODO tráfego pelo servidor controlado pelo atacante");
+                } else if (lpt.includes('vpn')) {
+                    warn(`[HIGH] Payload VPN no histórico: ${pt}`);
+                } else if (lpt.includes('dns')) {
+                    warn(`[HIGH] Payload DNS no histórico: ${pt} (DNS hijack? NextDNS/ControlD?)`);
+                } else if (lpt.includes('trustsettings') || lpt.includes('certificate')) {
+                    alertF(`[CRITICAL] Payload de CERTIFICADO no histórico: ${pt}`,
+                        "CA custom permite MITM em HTTPS — bypass de SSL pinning do Free Fire");
+                } else if (lpt.includes('webclip')) {
+                    warn(`[MEDIUM] Web Clip no histórico (atalho push de cheat?)`);
+                }
+            }
+
+            // Hosts/URLs no log — match com infra de cheat
+            const allTargets = new Set([...proxyHosts, ...httpUrls]);
+            for (const tgt of allTargets) {
+                const host = tgt.replace(/^https?:\/\//, '').split('/')[0].split(':')[0].toLowerCase();
+                if (typeof KNOWN_CHEAT_INFRA !== 'undefined' && KNOWN_CHEAT_INFRA[host]) {
+                    alertF(`[CRITICAL] MCProfileEvents APONTA pra infra de cheat: ${host}`, KNOWN_CHEAT_INFRA[host]);
+                } else if (typeof SUSPECT_TLDS !== 'undefined' && SUSPECT_TLDS.some(tld => host.endsWith(tld))) {
+                    warn(`[MEDIUM] Profile aponta pra TLD suspeito: ${host}`);
+                }
+            }
+
+            if (suspicious > 0) {
+                warn(`[HIGH] ${suspicious} linhas no MCProfileEvents com indícios MITM/cert-untrusted`);
+            }
+
+            if (installed.size === 0 && uninstalled.size === 0 && payloadTypes.size === 0) {
+                ok("MCProfileEvents: sem eventos de profile suspeitos");
             }
         }
     }
