@@ -11,6 +11,9 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
+<!-- Lenis smooth scroll -->
+<script src="https://cdn.jsdelivr.net/gh/studio-freight/lenis@1.0.42/bundled/lenis.min.js"></script>
+
 <style>
 /* ============================================================
    THEME · A4ther Systems · BLACK / WHITE / PURPLE
@@ -327,24 +330,14 @@ a:hover { color: var(--text); }
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     cursor: pointer;
-    transition: var(--transition);
-    overflow: hidden;
-}
-.dropdown::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, transparent 45%, rgba(179, 136, 255, 0.06) 50%, transparent 55%);
-    transform: translateX(-100%);
-    transition: transform 800ms var(--ease);
-    pointer-events: none;
+    transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+    /* SEM overflow: hidden — senão o menu (top:100%+8) é clipado e não abre */
 }
 .dropdown:hover {
     border-color: var(--border-hi);
     box-shadow: var(--shadow-purple);
     transform: translateY(-1px);
 }
-.dropdown:hover::before { transform: translateX(100%); }
 .dropdown.open {
     border-color: var(--purple);
     box-shadow:
@@ -608,10 +601,11 @@ a:hover { color: var(--text); }
     cursor: pointer;
 }
 
-/* HELP BOX — sem border, só background gradient */
+/* HELP BOX — strip lateral roxa de volta */
 .help-box {
+    position: relative;
     margin-top: 1.25rem;
-    padding: 1.25rem 1.5rem;
+    padding: 1.25rem 1.5rem 1.25rem 1.85rem;
     background: linear-gradient(180deg, rgba(28, 22, 48, 0.5), rgba(20, 16, 36, 0.5));
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.04),
@@ -622,6 +616,23 @@ a:hover { color: var(--text); }
     font-size: 0.9rem;
     color: var(--text-dim);
     line-height: 1.7;
+}
+.help-box::before {
+    content: '';
+    position: absolute;
+    left: 10px;
+    top: 14%;
+    bottom: 14%;
+    width: 2px;
+    background: linear-gradient(180deg,
+        transparent 0%,
+        var(--purple) 25%,
+        var(--purple) 75%,
+        transparent 100%);
+    box-shadow: 0 0 10px var(--purple-glow);
+    border-radius: 2px;
+    opacity: 0.85;
+    pointer-events: none;
 }
 .help-box strong {
     color: var(--cyan);
@@ -1098,7 +1109,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v3.3.2</span>
+        <span id="version">v3.3.3</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1314,7 +1325,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "3.3.2";
+const VERSION = "3.3.3";
 
 /* ============================================================
    BLACKLIST API (configurar quando seu backend estiver no ar)
@@ -3094,6 +3105,33 @@ $('#btn-share').addEventListener('click', async () => {
         alert('Relatório copiado pra clipboard');
     }
 });
+
+/* ============================================================
+   LENIS SMOOTH SCROLL
+   ============================================================ */
+(function setupLenis() {
+    if (typeof Lenis === 'undefined') return;
+    // Desliga em dispositivos que preferem movimento reduzido
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const lenis = new Lenis({
+        duration: 1.15,
+        easing: t => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+        smoothWheel: true,
+        smoothTouch: false,   // touch nativo é melhor no iOS
+        wheelMultiplier: 1,
+        touchMultiplier: 2,
+    });
+
+    function raf(time) {
+        lenis.raf(time);
+        requestAnimationFrame(raf);
+    }
+    requestAnimationFrame(raf);
+
+    // Exposto pra debug/uso futuro
+    window.__lenis = lenis;
+})();
 </script>
 
 </body>
