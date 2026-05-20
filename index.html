@@ -9,48 +9,46 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
 <style>
 /* ============================================================
    THEME · A4ther Systems
    ============================================================ */
+/* KellerSS-inspired palette */
 :root {
-    --bg:           #07090f;
-    --bg-elev:      #0d111d;
-    --bg-card:      #131826;
-    --bg-card-hi:   #1a2033;
-    --border:       #1f2937;
-    --border-hi:    #2d3748;
+    --bg:           #04060a;
+    --bg2:          #070c13;
+    --bg-card:      #0a1018;
+    --bg-card-hi:   #0e1521;
+    --border:       rgba(0,229,255,0.1);
+    --border-hi:    rgba(0,229,255,0.25);
 
-    --text:         #f3f4f6;
-    --text-dim:     #9ca3af;
-    --text-faint:   #6b7280;
+    --text:         #c8dde8;
+    --text-dim:     #6a8696;
+    --text-faint:   #3a5a6a;
 
-    --cyan:         #00e5e5;
-    --cyan-soft:    #00b8b8;
-    --cyan-glow:    rgba(0, 229, 229, 0.25);
+    --cyan:         #00e5ff;
+    --cyan-soft:    #00b4cc;
+    --cyan-glow:    rgba(0,229,255,0.25);
 
-    --red:          #ef4444;
-    --red-bg:       rgba(239, 68, 68, 0.08);
-    --red-border:   rgba(239, 68, 68, 0.3);
+    --red:          #ff3d5a;
+    --red-bg:       rgba(255,61,90,0.08);
+    --red-border:   rgba(255,61,90,0.3);
 
-    --orange:       #f59e0b;
-    --orange-bg:    rgba(245, 158, 11, 0.08);
-    --orange-border:rgba(245, 158, 11, 0.3);
+    --orange:       #ffb520;
+    --orange-bg:    rgba(255,181,32,0.08);
+    --orange-border:rgba(255,181,32,0.3);
 
-    --green:        #10b981;
-    --green-bg:     rgba(16, 185, 129, 0.08);
-    --green-border: rgba(16, 185, 129, 0.3);
+    --green:        #00ff9d;
+    --green-bg:     rgba(0,255,157,0.08);
+    --green-border: rgba(0,255,157,0.3);
 
-    --blue:         #3b82f6;
-    --purple:       #8b5cf6;
+    --mono:         'Share Tech Mono', 'JetBrains Mono', monospace;
+    --sans:         'Rajdhani', system-ui, sans-serif;
 
-    --radius:       12px;
-    --radius-lg:    20px;
-    --shadow:       0 4px 20px rgba(0, 0, 0, 0.4);
-    --shadow-lg:    0 10px 40px rgba(0, 0, 0, 0.6);
-
+    --radius:       6px;
+    --radius-lg:    8px;
     --transition:   200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -58,20 +56,54 @@
 
 html { font-size: 16px; -webkit-text-size-adjust: 100%; }
 body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: var(--sans);
     background: var(--bg);
-    background-image:
-        radial-gradient(circle at 20% 0%, rgba(0, 229, 229, 0.08) 0%, transparent 50%),
-        radial-gradient(circle at 80% 100%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
     color: var(--text);
     line-height: 1.5;
     min-height: 100vh;
     overflow-x: hidden;
+    font-size: 15px;
 }
 
+/* CRT scanline overlay */
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px);
+    pointer-events: none;
+    z-index: 9999;
+}
+
+/* Grid background animado */
+.bg-grid {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background-image:
+        linear-gradient(rgba(0,229,255,0.022) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(0,229,255,0.022) 1px,transparent 1px);
+    background-size: 44px 44px;
+    animation: grid-drift 30s linear infinite;
+    pointer-events: none;
+}
+@keyframes grid-drift { to { background-position: 44px 44px; } }
+
+/* Glowing orbs */
+.orb {
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(100px);
+}
+.orb1 { width: 500px; height: 500px; background: rgba(0,229,255,0.07); top: -180px; right: -180px; }
+.orb2 { width: 380px; height: 380px; background: rgba(0,80,255,0.05); bottom: -120px; left: -120px; }
+
 code, pre, .mono {
-    font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    font-family: var(--mono);
     font-size: 0.85em;
+    color: var(--cyan-soft);
 }
 
 a { color: var(--cyan); text-decoration: none; transition: var(--transition); }
@@ -81,7 +113,9 @@ a:hover { color: var(--text); }
    LAYOUT
    ============================================================ */
 .container {
-    max-width: 1200px;
+    position: relative;
+    z-index: 1;
+    max-width: 780px;
     margin: 0 auto;
     padding: 2rem 1.5rem 4rem;
 }
@@ -92,64 +126,61 @@ a:hover { color: var(--text); }
 /* ============================================================
    HEADER
    ============================================================ */
+/* Hero KellerSS-style */
 .hero {
     text-align: center;
-    padding: 2rem 0 3rem;
+    padding: 26px 24px 18px;
     border-bottom: 1px solid var(--border);
-    margin-bottom: 3rem;
+    margin-bottom: 2.5rem;
     position: relative;
+    overflow: hidden;
 }
-.hero::before {
+.hero::after {
     content: '';
     position: absolute;
-    top: 0; left: 50%;
-    width: 60%;
+    bottom: 0; left: 0; right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--cyan) 50%, transparent);
-    transform: translateX(-50%);
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    animation: shimmer 3s ease-in-out infinite;
 }
+@keyframes shimmer { 0%,100% { opacity:.3 } 50% { opacity:1 } }
 
-.logo-text {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(1.5rem, 6vw, 3rem);
-    font-weight: 800;
-    letter-spacing: 0.15em;
-    color: var(--cyan);
-    text-shadow: 0 0 30px var(--cyan-glow);
-    margin-bottom: 0.5rem;
-    line-height: 1;
+.hero-eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 4px;
+    color: rgba(0,229,255,0.32);
+    text-transform: uppercase;
+    margin-bottom: 8px;
 }
-
-.logo-art {
-    color: var(--cyan);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: clamp(0.4rem, 1.2vw, 0.7rem);
-    line-height: 1.1;
-    white-space: pre;
-    text-shadow: 0 0 20px var(--cyan-glow);
-    overflow-x: auto;
-    margin: 0 auto;
-    display: inline-block;
-    text-align: left;
-}
-@media (max-width: 640px) {
-    .logo-art { display: none; }
-}
-
-.tagline {
-    font-size: 0.9rem;
-    color: var(--text-dim);
-    margin-top: 1rem;
+.hero-name {
+    font-family: var(--mono);
+    font-size: clamp(2rem, 7vw, 3.2rem);
+    font-weight: 700;
+    color: var(--text);
     letter-spacing: 0.05em;
+    line-height: 1;
+    margin-bottom: 6px;
 }
-.tagline .sep { color: var(--cyan-soft); margin: 0 0.6em; }
-.tagline strong { color: var(--text); font-weight: 600; }
-
-.subtitle {
-    margin-top: 0.8rem;
-    font-size: 1rem;
+.hero-name span { color: var(--cyan); }
+.hero-sub {
+    font-size: 13px;
     color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
 }
+.hero-credits {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-faint);
+    letter-spacing: 2px;
+}
+.hero-credits .cn { color: var(--cyan-soft); }
+
+.logo-art { display: none; }
+.logo-text { display: none; }
+.tagline, .subtitle { display: none; }
 
 /* ============================================================
    UPLOAD AREA
@@ -504,23 +535,22 @@ footer a:hover { color: var(--cyan); }
 
 <div class="container">
 
-<!-- ─── HERO ─── -->
+<div class="bg-grid"></div>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+
+<!-- ─── HERO KellerSS-style ─── -->
 <header class="hero">
-    <pre class="logo-art" aria-hidden="true">  █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗
- ██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗
- ███████║███████║   ██║   ███████║█████╗  ██████╔╝
- ██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗
- ██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║
- ╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</pre>
-    <h1 class="logo-text" style="display: none;">A4THER</h1>
-    <div class="tagline">
-        <strong>S Y S T E M S</strong>
-        <span class="sep">▪</span>
-        <strong id="version">v2.5.0</strong>
-        <span class="sep">▪</span>
-        <strong>LS Aluguel</strong>
+    <div class="hero-eyebrow">Scanner Anti-Cheat iOS / Android</div>
+    <div class="hero-name">A4ther<span>SS</span></div>
+    <div class="hero-sub">Sysdiagnose · Privacy Report · Profiles · Android TXT</div>
+    <div class="hero-credits">
+        <span class="cn">A4ther Systems</span>
+        &nbsp;·&nbsp;
+        <span id="version">v3.1.0</span>
+        &nbsp;·&nbsp;
+        <span class="cn">LS Aluguel</span>
     </div>
-    <p class="subtitle">Free Fire Anti-Cheat Scanner · Análise client-side, sem servidor</p>
 </header>
 
 <!-- ─── UPLOAD ─── -->
@@ -673,7 +703,7 @@ footer a:hover { color: var(--cyan); }
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "3.0.0";
+const VERSION = "3.1.0";
 
 /* ============================================================
    BLACKLIST API (configurar quando seu backend estiver no ar)
@@ -833,6 +863,11 @@ const CHEAT_APPS = {
     // === File managers / shells (root access) ===
     "com.tigisoftware.Filza":           { sev: "CRITICAL", name: "Filza",                  cat: "TWEAK",     desc: "File manager com root" },
     "com.tigisoftware.FilzaFree":       { sev: "CRITICAL", name: "Filza Free",             cat: "TWEAK",     desc: "File manager com root" },
+    "com.tigisoftware.FilzaEscaped":    { sev: "CRITICAL", name: "Filza Escaped",          cat: "TWEAK",     desc: "Filza JB-escaped (sideload sem JB)" },
+    "org.coolstar.filza":               { sev: "CRITICAL", name: "Filza (CoolStar)",       cat: "TWEAK",     desc: "Filza fork" },
+    "live.cclerc.filza26":              { sev: "CRITICAL", name: "Filza26",                cat: "TWEAK",     desc: "Filza26Maker output (sideload iOS 26)" },
+    "regedit.ffh4x.vipmodmenu":         { sev: "CRITICAL", name: "FFH4X VIP Mod Menu",     cat: "CHEAT",     desc: "FFH4X regedit iOS - removido da App Store em 2024-04-16" },
+    "com.bajrang.ffh4xmodmenu":         { sev: "CRITICAL", name: "FFH4X Mod Menu",         cat: "CHEAT",     desc: "FFH4X iOS (Bajrang Kumar)" },
     "com.ifunbox.ifunbox":              { sev: "HIGH",     name: "iFunBox",                cat: "TWEAK",     desc: "Gerenciador iOS" },
     "app.ish.iSH":                      { sev: "HIGH",     name: "iSH",                    cat: "TWEAK",     desc: "Shell Linux emulado" },
     "com.septudio.SSHClientLite":       { sev: "HIGH",     name: "SSH Client Lite",        cat: "TWEAK",     desc: "Shell SSH remoto" },
@@ -886,31 +921,44 @@ const FF_OFFICIAL = new Set([
     "com.garena.freefire.br", "com.garena.freefire.kr",
 ]);
 
+// CORREÇÃO v3.1: lista expandida e CONFIRMADA via BaDomain/NoFreeFire_hosts.txt
+// Domínios OFICIAIS do FF que NÃO devem ser acessados por bundles não-FF (proxy bypass = MITM)
 const FF_PROXY_LOGIN_DOMAINS = new Set([
-    "version.ffmax.purplevioleto.com",
-    "version.ggwhitehawk.com",
-    "loginbp.ggpolarbear.com",
-    "gin.freefiremobile.com",
+    // Garena
+    "connect.garena.com",
     "100067.connect.garena.com",
     "100067.msdk.garena.com",
+    "sdk.garena.com",
+    "ff.garena.com",
+    "ws.garena.com",
+    // FreeFiremobile
+    "login.common.freefiremobile.com",
     "client.us.freefiremobile.com",
     "client.sea.freefiremobile.com",
-    "sacnetwork.ggblueshark.com",
-    "sacevent.ggblueshark.com",
+    "gin.freefiremobile.com",
+    "castle.freefiremobile.com",
+    "event.freefiremobile.com",
+    "core-cvs.freefiremobile.com",
+    "gcp.freefiremobile.com",
+    "network.freefiremobile.com",
+    "ctlin.freefiremobile.com",
+    "dir.freefiremobile.com",
+    // GGBlueshark (legítimo Garena)
+    "brevent.ggblueshark.com",
+    "idevent.ggblueshark.com",
+    "dl-cvs.ggblueshark.com",
+    "ffmconnect.ggblueshark.com",
+    "ffmmsdk.ggblueshark.com",
 ]);
 
+// CORREÇÃO v3.1.0: ggpolarbear/ggwhitehawk/ggblueshark são GARENA OFICIAL
+// (confirmado via Netify + BaDomain NoFreeFire_hosts.txt - usados pra BLOQUEAR FF, prova que são legit Garena)
 const KNOWN_CHEAT_INFRA = {
-    "46.202.145.85":                          "Fatality Cheats — servidor",
+    "46.202.145.85":                          "Fatality Cheats — servidor confirmado",
     "fatalitycheats.xyz":                     "Fatality Cheats — domínio",
     "anubisw.online":                         "Anubis cheat server — FF",
     "api.baontq.xyz":                         "Baontq cheat API — FF",
-    "version.ffmax.purplevioleto.com":        "Purple Violeto — FF MAX modded",
-    "version.ggwhitehawk.com":                "White Hawk cheat",
-    "loginbp.ggpolarbear.com":                "Polar Bear cheat",
-    "ggwhitehawk.com":                        "White Hawk parent",
-    "ggpolarbear.com":                        "Polar Bear parent",
-    "ggblueshark.com":                        "Blue Shark parent",
-    "ipasign.cc":                             "IPA Sign service",
+    "ipasign.cc":                             "IPA Sign service (cert sideload)",
     "ipa.aspy.dev":                           "IPA hosting TrollStore",
 };
 
@@ -951,6 +999,19 @@ const SIDELOAD_DOMAINS = [
     "appdb.to", "appdb.win", "tutuapp.com", "panda.tools",
     "ignition.fun", "appvalley.vip", "buildstore.us", "itrustteam.com",
     "iosgods.com",
+    // v3.1: 10 novos sideloader domains confirmados pelo agente
+    "iosgodsipa.com", "ipaomtk.com", "tweakhome.app", "chetoshop.com",
+    "ihackedit.com", "cokernutx.com", "platinmods.com",
+    "ipa.zeejb.com", "tutuipa.com", "app.iosgods.com",
+    "esigncert.zeejb.com", "iosrocket.com",
+];
+
+// PayloadOrganization keywords (KellerSS detecta isso em profiles)
+const PROFILE_ORG_KEYWORDS = [
+    "signulous", "scarlet", "feather", "esign", "gbox", "ksign",
+    "iosgods", "iosrocket", "iloader", "digiidna", "imazing",
+    "3utools", "cheat", "hack", "aimbot", "wallhack",
+    "xleal", "xdark", "appcake", "appvalley", "tutuapp",
 ];
 
 const APP_STORE_OFFICIAL = new Set([
@@ -1504,11 +1565,24 @@ function analyzeProfileText(raw) {
         }
     }
 
-    // Cheat keywords
-    const cheatRegex = /(esign|feather|ksign|gbox|scarlet|sideload|trollstore|cheat|hack|aimbot|wallhack|ffh4x|mod\.menu|injector|cracked|mitmproxy)/i;
-    if (organization && cheatRegex.test(organization)) alertF(`Organization tem keyword cheat: ${organization}`);
-    if (displayName && cheatRegex.test(displayName))   alertF(`Display Name tem keyword cheat: ${displayName}`);
-    if (identifier && cheatRegex.test(identifier))     alertF(`Identifier tem keyword cheat: ${identifier}`);
+    // Cheat keywords + PROFILE_ORG_KEYWORDS (agente)
+    const orgLower = (organization || "").toLowerCase();
+    const dnLower = (displayName || "").toLowerCase();
+    const idLower = (identifier || "").toLowerCase();
+    for (const kw of PROFILE_ORG_KEYWORDS) {
+        if (orgLower.includes(kw)) {
+            alertF(`[CRITICAL][CERT] Profile Organization tem keyword '${kw}': ${organization}`);
+            break;
+        }
+        if (dnLower.includes(kw)) {
+            alertF(`[HIGH] Profile DisplayName tem keyword '${kw}': ${displayName}`);
+            break;
+        }
+        if (idLower.includes(kw)) {
+            alertF(`[HIGH] Profile Identifier tem keyword '${kw}': ${identifier}`);
+            break;
+        }
+    }
 
     return { payloadTypes: unique, hostNames, proxyServers, proxyPACs };
 }
