@@ -194,27 +194,42 @@ a:hover { color: var(--text); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* FIGlet antigo (oculto — SVG é mais limpo) */
-.logo-art { display: none; }
+/* SVG oculto (voltamos pro FIGlet ASCII) */
+.logo-svg { display: none; }
 
-/* SVG A4THER — letras limpas, glow circular via feGaussianBlur */
-.logo-svg {
-    display: block;
-    width: 100%;
-    max-width: 540px;
-    height: auto;
+/* FIGlet ASCII — usa filter: drop-shadow (glow segue a SHAPE final, não cada caractere) */
+.logo-art {
+    color: var(--purple);
+    font-family: 'SF Mono', Menlo, 'JetBrains Mono', monospace;
+    font-size: clamp(0.36rem, 1.55vw, 0.78rem);
+    font-weight: normal;
+    line-height: 1.1;
+    white-space: pre;
+    display: inline-block;
+    text-align: left;
     margin: 0 auto;
+    max-width: 100%;
+    /* drop-shadow desenha glow em volta da SHAPE composta — não fica retangular */
+    filter:
+        drop-shadow(0 0 1.5px var(--purple))
+        drop-shadow(0 0 8px var(--purple-glow))
+        drop-shadow(0 0 22px rgba(179, 136, 255, 0.35));
     animation: glow-pulse 4.5s ease-in-out infinite;
     user-select: none;
 }
-.logo-svg text {
-    font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
-    font-weight: 800;
-    fill: var(--purple);
-}
 @keyframes glow-pulse {
-    0%, 100% { opacity: 0.92; transform: scale(1); }
-    50%      { opacity: 1;    transform: scale(1.012); }
+    0%, 100% {
+        filter:
+            drop-shadow(0 0 1.5px var(--purple))
+            drop-shadow(0 0 8px var(--purple-glow))
+            drop-shadow(0 0 22px rgba(179, 136, 255, 0.35));
+    }
+    50% {
+        filter:
+            drop-shadow(0 0 2px var(--purple))
+            drop-shadow(0 0 12px var(--purple-glow))
+            drop-shadow(0 0 32px rgba(179, 136, 255, 0.5));
+    }
 }
 
 /* logo-text só como fallback semântico para a11y — visualmente oculto */
@@ -510,18 +525,14 @@ a:hover { color: var(--text); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* DROPZONE — sem border (anti L-curves no Safari iOS); usa box-shadow inset */
+/* DROPZONE — SEM border, SEM inset highlight (zero L-curves visíveis nos cantos) */
 .dropzone {
     position: relative;
     border: none;
     border-radius: var(--radius-xl);
     padding: 3.5rem 2rem;
     text-align: center;
-    background:
-        linear-gradient(180deg, rgba(32, 24, 54, 0.7), rgba(22, 16, 40, 0.7));
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.04),
-        0 4px 24px rgba(0, 0, 0, 0.35);
+    background: rgba(28, 22, 48, 0.55);
     backdrop-filter: blur(24px);
     -webkit-backdrop-filter: blur(24px);
     transition: var(--transition);
@@ -539,10 +550,8 @@ a:hover { color: var(--text); }
     pointer-events: none;
 }
 .dropzone:hover, .dropzone.dragging {
-    background: linear-gradient(180deg, rgba(46, 36, 76, 0.78), rgba(32, 24, 54, 0.78));
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.06),
-        0 8px 32px var(--purple-glow);
+    background: rgba(46, 36, 76, 0.7);
+    box-shadow: 0 8px 32px var(--purple-glow);
     transform: translateY(-2px);
 }
 .dropzone:hover::before, .dropzone.dragging::before { opacity: 0.4; }
@@ -590,15 +599,12 @@ a:hover { color: var(--text); }
     cursor: pointer;
 }
 
-/* HELP BOX — strip lateral roxa de volta */
+/* HELP BOX — strip lateral roxa, SEM inset shadow nos cantos */
 .help-box {
     position: relative;
     margin-top: 1.25rem;
     padding: 1.25rem 1.5rem 1.25rem 1.85rem;
-    background: linear-gradient(180deg, rgba(28, 22, 48, 0.5), rgba(20, 16, 36, 0.5));
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.04),
-        0 2px 12px rgba(0, 0, 0, 0.25);
+    background: rgba(22, 18, 38, 0.45);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-radius: var(--radius-lg);
@@ -1088,28 +1094,17 @@ footer a:hover {
 
 <!-- ─── HERO A4THER ─── -->
 <header class="hero">
-    <svg class="logo-svg" viewBox="0 0 540 130" xmlns="http://www.w3.org/2000/svg" aria-label="A4THER" role="img">
-        <defs>
-            <filter id="a4ther-glow" x="-30%" y="-30%" width="160%" height="160%">
-                <feGaussianBlur stdDeviation="2.5" result="b1"/>
-                <feGaussianBlur stdDeviation="8"   result="b2"/>
-                <feGaussianBlur stdDeviation="18"  result="b3"/>
-                <feMerge>
-                    <feMergeNode in="b3"/>
-                    <feMergeNode in="b2"/>
-                    <feMergeNode in="b1"/>
-                    <feMergeNode in="SourceGraphic"/>
-                </feMerge>
-            </filter>
-        </defs>
-        <text x="50%" y="58%" text-anchor="middle" dominant-baseline="middle"
-              font-size="96" letter-spacing="8" filter="url(#a4ther-glow)">A4THER</text>
-    </svg>
+    <pre class="logo-art" aria-hidden="true">    █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗
+   ██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗
+   ███████║███████║   ██║   ███████║█████╗  ██████╔╝
+   ██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗
+   ██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║
+   ╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</pre>
     <h1 class="logo-text">A4THER</h1>
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v3.3.4</span>
+        <span id="version">v3.3.5</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1325,7 +1320,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "3.3.4";
+const VERSION = "3.3.5";
 
 /* ============================================================
    BLACKLIST API (configurar quando seu backend estiver no ar)
