@@ -178,7 +178,7 @@ a:hover { color: var(--text); }
 /* ============================================================
    HEADER
    ============================================================ */
-/* HERO — A4ther FIGlet original com glow + entrada animada */
+/* HERO — A4THER em letras grandes (block letter style) com glow roxo */
 .hero {
     text-align: center;
     padding: 1.5rem 0 3.5rem;
@@ -191,51 +191,38 @@ a:hover { color: var(--text); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-.logo-art {
-    color: var(--cyan);
+/* FIGlet removido — exibe só o logo-text */
+.logo-art { display: none; }
+
+.logo-text {
+    display: block;
     font-family: var(--mono);
-    font-size: clamp(0.45rem, 1.1vw, 0.75rem);
-    line-height: 1.15;
-    white-space: pre;
-    display: inline-block;
-    text-align: left;
-    margin: 0 auto;
-    text-shadow:
-        0 0 8px var(--cyan-glow),
-        0 0 24px rgba(179, 136, 255, 0.25),
-        0 0 48px rgba(179, 136, 255, 0.1);
-    animation: glow-pulse 4s ease-in-out infinite;
+    font-size: clamp(3rem, 11vw, 5.75rem);
+    font-weight: 800;
+    color: var(--purple);
+    letter-spacing: 0.06em;
+    margin: 0 0 0.5rem;
+    line-height: 1;
     user-select: none;
+    text-shadow:
+        0 0 18px var(--purple-glow),
+        0 0 44px rgba(179, 136, 255, 0.32),
+        0 0 88px rgba(179, 136, 255, 0.16);
+    animation: glow-pulse 4s ease-in-out infinite;
 }
 @keyframes glow-pulse {
     0%, 100% {
         text-shadow:
-            0 0 8px var(--cyan-glow),
-            0 0 24px rgba(179, 136, 255, 0.25),
-            0 0 48px rgba(179, 136, 255, 0.1);
+            0 0 18px var(--purple-glow),
+            0 0 44px rgba(179, 136, 255, 0.32),
+            0 0 88px rgba(179, 136, 255, 0.16);
     }
     50% {
         text-shadow:
-            0 0 12px var(--cyan-glow),
-            0 0 32px rgba(179, 136, 255, 0.4),
-            0 0 64px rgba(179, 136, 255, 0.2);
+            0 0 24px var(--purple-glow),
+            0 0 58px rgba(179, 136, 255, 0.48),
+            0 0 116px rgba(179, 136, 255, 0.26);
     }
-}
-
-.logo-text {
-    display: none;
-    font-family: var(--mono);
-    font-size: clamp(2.5rem, 9vw, 5rem);
-    font-weight: 800;
-    color: var(--cyan);
-    letter-spacing: 0.12em;
-    text-shadow: 0 0 30px var(--cyan-glow);
-    margin: 0 0 0.5rem;
-    line-height: 1;
-}
-@media (max-width: 640px) {
-    .logo-art { display: none; }
-    .logo-text { display: block; }
 }
 
 .tagline {
@@ -1152,12 +1139,6 @@ footer a:hover {
 
 <!-- ─── HERO A4THER ─── -->
 <header class="hero">
-    <pre class="logo-art" aria-hidden="true">    █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗
-   ██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗
-   ███████║███████║   ██║   ███████║█████╗  ██████╔╝
-   ██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗
-   ██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║
-   ╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</pre>
     <h1 class="logo-text">A4THER</h1>
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
