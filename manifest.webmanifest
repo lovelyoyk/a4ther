@@ -1,0 +1,20 @@
+{
+    "name": "A4ther Systems · Anti-Cheat Scanner",
+    "short_name": "A4ther",
+    "description": "Free Fire Anti-Cheat Scanner — Análise forense de sysdiagnose iOS e Android",
+    "lang": "pt-BR",
+    "dir": "ltr",
+    "start_url": "./?source=pwa",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "portrait",
+    "background_color": "#07060d",
+    "theme_color": "#07060d",
+    "categories": ["security", "utilities", "developer"],
+    "icons": [
+        { "src": "icon.svg",            "type": "image/svg+xml", "sizes": "any",      "purpose": "any" },
+        { "src": "apple-touch-icon.png", "type": "image/png",     "sizes": "180x180", "purpose": "any" },
+        { "src": "icon-192.png",         "type": "image/png",     "sizes": "192x192", "purpose": "any maskable" },
+        { "src": "icon-512.png",         "type": "image/png",     "sizes": "512x512", "purpose": "any maskable" }
+    ]
+}

@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="3.3.0"
+VERSION="3.6.0"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -412,7 +412,7 @@ for MODDIR in /data/adb/modules /data/adb/ksu/modules /data/adb/ap/modules; do
             [ -z "$M" ] && continue
             case "$M" in
                 .core|core|.disable|update|.update|disable) ;;
-                *shamiko*|*hide*|*denylist*|*frida*|*inject*|*lsposed*|*riru*|*zygisk*|*ssl*|*pinning*|*magiskhide*|*safetynet*|*tricky*|*pif*|*susfs*)
+                *shamiko*|*hide*|*denylist*|*frida*|*inject*|*lsposed*|*riru*|*zygisk*|*ssl*|*pinning*|*magiskhide*|*safetynet*|*tricky*|*pif*|*susfs*|*vector*|*hma_oss*|*playintegrityfork*|*zygisk_assist*|*zygisk_next*|*rezygisk*|*fakerunlocker*)
                     emit "${CR}[ALERTA]${CN}  Módulo suspeito: $M" ;;
                 *) emit "${CY}[AVISO]${CN}   Módulo: $M" ;;
             esac
@@ -431,6 +431,27 @@ for L in /data/adb/lspd/config/modules.list /data/misc/lspd/config/modules.list;
     fi
 done
 [ "$MOD_HITS" = "0" ] && ok "Sem módulos Magisk/LSPosed/KSU"
+
+# TrickyStore keybox.xml — assinatura forte de Strong Integrity bypass (2026 threat intel)
+for KBX in /data/adb/tricky_store/keybox.xml /data/adb/modules/tricky_store/keybox.xml \
+           /data/adb/tricky_store/keybox /data/adb/tricky_store/persist; do
+    if [ -r "$KBX" ] 2>/dev/null; then
+        emit "${CR}[ALERTA]${CN}  TrickyStore keybox.xml detectado em $KBX"
+        emit "${CR}[CRITICAL]${CN}  Indicador forte de bypass PlayIntegrity Strong Integrity"
+    fi
+done
+
+# Vector module (LSPosed rename 2026)
+for VEC in /data/adb/modules/vector /data/adb/modules/jingmatrix_vector; do
+    [ -d "$VEC" ] && emit "${CR}[ALERTA]${CN}  Vector module (LSPosed rename + Dobby) em $VEC"
+done
+
+# FFH4X / Panel FF / Teambot caches — Android cheat injectors 2026
+for FFC in /sdcard/FFH4X /sdcard/Panel /sdcard/Teambot /sdcard/MSTeam /sdcard/NG_Injector /sdcard/TB71 /sdcard/OP999; do
+    if [ -d "$FFC" ] 2>/dev/null; then
+        emit "${CR}[ALERTA]${CN}  Cache de cheat injector: $FFC"
+    fi
+done
 
 # ============================================================
 #  5. FRAMEWORKS DE HOOK (Frida / Xposed / LSPosed / LSPatch / Substrate)
@@ -1053,7 +1074,17 @@ fi
 # ============================================================
 header "MEMORY EDITORS"
 
-MEM_PKGS="com.gameguardian com.gg.intersec gg.intersec catch_.me_.if_.you_.can_ com.cih.game_cih com.cih.gamecih2 com.glasswire.cih com.gtarcade.cih ru.org.amse.android.gamekiller com.taogame.taogame com.felixheller.sharedprefsedit com.android.helloworld com.cheatengine.android"
+MEM_PKGS="com.gameguardian com.gg.intersec gg.intersec catch_.me_.if_.you_.can_ com.cih.game_cih com.cih.gamecih2 com.glasswire.cih com.gtarcade.cih ru.org.amse.android.gamekiller com.taogame.taogame com.felixheller.sharedprefsedit com.android.helloworld com.cheatengine.android com.kuhakupixel.acethegame com.tonicboomerkewl.tonicguardian"
+# Virtual sandboxes (permitem GG sem root — vetor stealth 2026)
+VSPACE_PKGS="io.virtualapp com.lbe.parallel.intl com.parallel.space.lite com.excelliance.dualaid com.ludashi.dualspace com.icecold.gomultiple me.weishu.exp"
+for PKG in $VSPACE_PKGS; do
+    [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Virtual sandbox (permite GG sem root): $PKG"; MEM_HITS=$((MEM_HITS+1)); }
+done
+# FFH4X family + injectors Android FF 2026
+FFCHEAT_PKGS="com.ffh4x com.ff.injector com.op999.injector com.teambot.injector com.tb71.injector com.ng.injector com.panelff.app com.novaesp app.mantispro.gamepad app.mantispro.mouse mantis.mouse.pro.beta tn.loukious.fakerunlocker com.rise.automatic.autoclicker.clicker"
+for PKG in $FFCHEAT_PKGS; do
+    [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Cheat injector/macro FF: $PKG"; MEM_HITS=$((MEM_HITS+1)); }
+done
 MEM_HITS=0
 if [ -n "$ALL_PKGS" ]; then
     for PKG in $MEM_PKGS; do

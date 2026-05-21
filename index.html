@@ -7,12 +7,21 @@
 <meta name="description" content="A4ther Systems - Free Fire Anti-Cheat Scanner. Análise de sysdiagnose, App Privacy Report e Configuration Profiles iOS." />
 <title>A4ther Systems · FF Anti-Cheat Scanner</title>
 
+<!-- PWA — manifest + Apple meta tags (instalável no iPhone) -->
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" type="image/svg+xml" href="icon.svg" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="A4ther" />
+<meta name="mobile-web-app-capable" content="yes" />
+
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@700;800;900&display=swap" rel="stylesheet" />
 
-<!-- Lenis smooth scroll -->
-<script src="https://cdn.jsdelivr.net/gh/studio-freight/lenis@1.0.42/bundled/lenis.min.js"></script>
+<!-- Lenis smooth scroll (npm CDN — content-type correto, não bloqueado por nosniff) -->
+<script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js"></script>
 
 <style>
 /* ============================================================
@@ -99,58 +108,10 @@ body {
     letter-spacing: -0.01em;
 }
 
-/* Aurora animada — sutil, atmosfera */
-body::before {
-    content: '';
-    position: fixed;
-    inset: -10%;
-    background:
-        radial-gradient(circle at 20% 30%, rgba(179, 136, 255, 0.07), transparent 40%),
-        radial-gradient(circle at 80% 70%, rgba(122, 78, 255, 0.06), transparent 40%);
-    filter: blur(60px);
-    z-index: 0;
-    animation: aurora-shift 18s ease-in-out infinite alternate;
-    pointer-events: none;
-}
-@keyframes aurora-shift {
-    0%   { transform: translate3d(0,0,0) rotate(0deg);    opacity: 0.7; }
-    50%  { transform: translate3d(2%, -1%, 0) rotate(2deg); opacity: 1; }
-    100% { transform: translate3d(-1%, 2%, 0) rotate(-2deg); opacity: 0.8; }
-}
+/* Aurora removida — estava criando blob roxo "bugado" no canto superior esquerdo */
 
-/* Floating particles animation - sutil, decoração */
-.particles {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    overflow: hidden;
-}
-.particles span {
-    position: absolute;
-    display: block;
-    width: 2px;
-    height: 2px;
-    background: var(--cyan);
-    border-radius: 50%;
-    opacity: 0;
-    box-shadow: 0 0 8px var(--cyan);
-    animation: float-up 12s linear infinite;
-}
-.particles span:nth-child(1)  { left:  5%; animation-delay: 0s;   animation-duration: 14s; }
-.particles span:nth-child(2)  { left: 15%; animation-delay: 2s;   animation-duration: 18s; }
-.particles span:nth-child(3)  { left: 25%; animation-delay: 5s;   animation-duration: 12s; }
-.particles span:nth-child(4)  { left: 40%; animation-delay: 8s;   animation-duration: 16s; }
-.particles span:nth-child(5)  { left: 55%; animation-delay: 1s;   animation-duration: 13s; }
-.particles span:nth-child(6)  { left: 70%; animation-delay: 6s;   animation-duration: 17s; }
-.particles span:nth-child(7)  { left: 85%; animation-delay: 3s;   animation-duration: 15s; }
-.particles span:nth-child(8)  { left: 95%; animation-delay: 9s;   animation-duration: 11s; }
-@keyframes float-up {
-    0%   { transform: translateY(110vh) scale(0); opacity: 0; }
-    10%  { opacity: 0.8; transform: translateY(100vh) scale(1); }
-    90%  { opacity: 0.8; }
-    100% { transform: translateY(-10vh) scale(0); opacity: 0; }
-}
+/* particles desativadas — span no left:5% criava streak vertical "bugada" */
+.particles { display: none; }
 
 code, pre, .mono {
     font-family: var(--mono);
@@ -172,10 +133,10 @@ a:hover { color: var(--text); }
     z-index: 1;
     max-width: 1080px;
     margin: 0 auto;
-    padding: 3rem 1.5rem 5rem;
+    padding: 3rem 2rem 5rem;
 }
 @media (max-width: 640px) {
-    .container { padding: 1.5rem 1rem 3rem; }
+    .container { padding: 1.5rem 1.25rem 3rem; }
 }
 
 /* ============================================================
@@ -194,10 +155,10 @@ a:hover { color: var(--text); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* SVG oculto (voltamos pro FIGlet ASCII) */
+/* SVG oculto — voltou FIGlet ASCII */
 .logo-svg { display: none; }
 
-/* FIGlet ASCII — usa filter: drop-shadow (glow segue a SHAPE final, não cada caractere) */
+/* FIGlet ASCII A4THER — drop-shadow glow (segue shape composta, não cada char) */
 .logo-art {
     color: var(--purple);
     font-family: 'SF Mono', Menlo, 'JetBrains Mono', monospace;
@@ -209,7 +170,6 @@ a:hover { color: var(--text); }
     text-align: left;
     margin: 0 auto;
     max-width: 100%;
-    /* drop-shadow desenha glow em volta da SHAPE composta — não fica retangular */
     filter:
         drop-shadow(0 0 1.5px var(--purple))
         drop-shadow(0 0 8px var(--purple-glow))
@@ -298,7 +258,9 @@ a:hover { color: var(--text); }
    UPLOAD AREA
    ============================================================ */
 .upload-section {
-    margin-bottom: 3rem;
+    /* Centraliza TUDO da section como um bloco coeso */
+    max-width: 620px;
+    margin: 0 auto 3rem;
     animation: section-in 800ms 200ms var(--ease) both;
 }
 @keyframes section-in {
@@ -309,6 +271,7 @@ a:hover { color: var(--text); }
 /* ───────── DROPDOWN ───────── */
 .dropdown-wrap {
     position: relative;
+    width: 100%;
     margin-bottom: 1.5rem;
     z-index: 50;
 }
@@ -325,28 +288,28 @@ a:hover { color: var(--text); }
     display: block;
 }
 
+/* DROPDOWN — glass card com bg + rounded (L-curve lateral já eliminada com remoção da aurora/particles) */
 .dropdown {
     position: relative;
     width: 100%;
-    background: linear-gradient(135deg, rgba(28, 22, 48, 0.85), rgba(20, 16, 36, 0.75));
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    background:
+        linear-gradient(180deg, rgba(40, 30, 70, 0.7), rgba(22, 16, 38, 0.85));
+    border: none;
+    border-radius: 20px;
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
     cursor: pointer;
-    transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
-    /* SEM overflow: hidden — senão o menu (top:100%+8) é clipado e não abre */
+    box-shadow: 0 10px 36px rgba(0, 0, 0, 0.4);
+    transition: background 320ms var(--ease), box-shadow 320ms var(--ease), transform 320ms var(--ease);
 }
 .dropdown:hover {
-    border-color: var(--border-hi);
-    box-shadow: var(--shadow-purple);
+    background: linear-gradient(180deg, rgba(50, 38, 86, 0.78), rgba(28, 20, 48, 0.9));
+    box-shadow: 0 14px 48px rgba(0, 0, 0, 0.5), 0 0 24px var(--purple-glow);
     transform: translateY(-1px);
 }
 .dropdown.open {
-    border-color: var(--purple);
-    box-shadow:
-        0 0 0 1px var(--purple-glow),
-        var(--shadow-purple);
+    background: linear-gradient(180deg, rgba(54, 40, 92, 0.85), rgba(30, 22, 52, 0.94));
+    box-shadow: 0 14px 48px rgba(0, 0, 0, 0.55), 0 0 32px var(--purple-glow);
 }
 
 .dropdown-trigger {
@@ -361,7 +324,10 @@ a:hover { color: var(--text); }
     font-family: inherit;
     font-size: 0.95rem;
     cursor: pointer;
-    text-align: left;
+    text-align: center;
+}
+.dropdown-text {
+    text-align: center;
 }
 .dropdown-trigger:focus { outline: none; }
 
@@ -371,9 +337,9 @@ a:hover { color: var(--text); }
     height: 44px;
     display: grid;
     place-items: center;
-    border-radius: 12px;
+    border-radius: 0;
     background: linear-gradient(135deg, rgba(179, 136, 255, 0.18), rgba(122, 78, 255, 0.08));
-    border: 1px solid var(--border);
+    border: none;
     font-size: 1.4rem;
     line-height: 1;
     transition: var(--transition);
@@ -383,8 +349,16 @@ a:hover { color: var(--text); }
     transform: scale(1.05) rotate(-3deg);
 }
 
-.dropdown-text { flex: 1; min-width: 0; }
+.dropdown-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;          /* força LAYOUT VERTICAL (col) — title em cima, sub embaixo */
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+}
 .dropdown-title {
+    display: block;
     font-weight: 600;
     color: var(--text);
     font-size: 0.97rem;
@@ -394,9 +368,9 @@ a:hover { color: var(--text); }
     white-space: nowrap;
 }
 .dropdown-sub {
+    display: block;
     font-size: 0.78rem;
     color: var(--text-dim);
-    margin-top: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -411,30 +385,31 @@ a:hover { color: var(--text); }
 }
 .dropdown.open .dropdown-chevron { transform: rotate(180deg); }
 
-/* Menu de opções */
+/* Menu de opções — perfeitamente alinhado com o trigger */
 .dropdown-menu {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 10px);
     left: 0;
     right: 0;
-    background: linear-gradient(180deg, rgba(20, 16, 36, 0.98), rgba(12, 10, 24, 0.98));
-    border: 1px solid var(--border-hi);
-    border-radius: var(--radius-lg);
-    backdrop-filter: blur(30px);
-    -webkit-backdrop-filter: blur(30px);
-    box-shadow: var(--shadow-lg);
+    background: linear-gradient(180deg, rgba(22, 18, 40, 0.98), rgba(14, 10, 26, 0.98));
+    border: none;
+    border-radius: 20px;
+    backdrop-filter: blur(32px) saturate(180%);
+    -webkit-backdrop-filter: blur(32px) saturate(180%);
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
     padding: 6px;
     z-index: 100;
     opacity: 0;
-    transform: translateY(-8px) scale(0.98);
+    transform-origin: top center;    /* anima do TOPO central, fica alinhado */
+    transform: translateY(-8px) scaleY(0.92);
     visibility: hidden;
-    transition: opacity 300ms var(--ease), transform 300ms var(--ease), visibility 300ms;
+    transition: opacity 280ms var(--ease), transform 280ms var(--ease), visibility 280ms;
     max-height: 70vh;
     overflow-y: auto;
 }
 .dropdown.open .dropdown-menu {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0) scaleY(1);
     visibility: visible;
 }
 .dropdown-menu::-webkit-scrollbar { width: 6px; }
@@ -451,7 +426,7 @@ a:hover { color: var(--text); }
     border: none;
     color: var(--text);
     cursor: pointer;
-    border-radius: 12px;
+    border-radius: 0;
     text-align: left;
     font-family: inherit;
     font-size: 0.92rem;
@@ -492,18 +467,24 @@ a:hover { color: var(--text); }
     height: 36px;
     display: grid;
     place-items: center;
-    border-radius: 10px;
+    border-radius: 0;
     background: rgba(255, 255, 255, 0.04);
-    border: 1px solid var(--border-soft);
+    border: none;
     font-size: 1.1rem;
 }
 .dropdown-option.active .dropdown-option-emoji {
     background: linear-gradient(135deg, rgba(179, 136, 255, 0.25), rgba(122, 78, 255, 0.12));
-    border-color: var(--border-hi);
 }
-.dropdown-option-text { flex: 1; min-width: 0; }
-.dropdown-option-title { font-weight: 600; font-size: 0.93rem; }
-.dropdown-option-desc  { font-size: 0.76rem; color: var(--text-dim); margin-top: 2px; }
+.dropdown-option-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;          /* force VERTICAL layout: title em cima, desc embaixo */
+    flex-direction: column;
+    gap: 2px;
+    text-align: left;
+}
+.dropdown-option-title { display: block; font-weight: 600; font-size: 0.93rem; line-height: 1.3; }
+.dropdown-option-desc  { display: block; font-size: 0.76rem; color: var(--text-dim); line-height: 1.4; }
 .dropdown-option-check {
     flex-shrink: 0;
     width: 18px;
@@ -525,36 +506,22 @@ a:hover { color: var(--text); }
     to   { opacity: 1; transform: translateY(0); }
 }
 
-/* DROPZONE — SEM border, SEM inset highlight (zero L-curves visíveis nos cantos) */
+/* DROPZONE — bg transparente no rest (sem curva visível) */
 .dropzone {
     position: relative;
     border: none;
-    border-radius: var(--radius-xl);
+    border-radius: 20px;
     padding: 3.5rem 2rem;
     text-align: center;
-    background: rgba(28, 22, 48, 0.55);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    transition: var(--transition);
+    background: transparent;
+    transition: background 320ms var(--ease), box-shadow 320ms var(--ease), transform 320ms var(--ease);
     cursor: pointer;
     overflow: hidden;
 }
-/* Aura roxa interna no hover (mantém o efeito sem deixar canto bugado) */
-.dropzone::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(ellipse at center, var(--purple-glow), transparent 70%);
-    opacity: 0;
-    transition: opacity 400ms var(--ease);
-    pointer-events: none;
-}
 .dropzone:hover, .dropzone.dragging {
-    background: rgba(46, 36, 76, 0.7);
-    box-shadow: 0 8px 32px var(--purple-glow);
-    transform: translateY(-2px);
+    background: transparent;
+    transform: translateY(-3px);
 }
-.dropzone:hover::before, .dropzone.dragging::before { opacity: 0.4; }
 .dropzone.dragging {
     animation: dz-bounce 600ms ease-in-out infinite;
 }
@@ -599,15 +566,17 @@ a:hover { color: var(--text); }
     cursor: pointer;
 }
 
-/* HELP BOX — strip lateral roxa, SEM inset shadow nos cantos */
+/* HELP BOX — glass card com bg + rounded */
 .help-box {
     position: relative;
     margin-top: 1.25rem;
     padding: 1.25rem 1.5rem 1.25rem 1.85rem;
-    background: rgba(22, 18, 38, 0.45);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, rgba(26, 20, 46, 0.5), rgba(18, 12, 32, 0.6));
+    border: none;
+    border-radius: 20px;
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
     font-size: 0.9rem;
     color: var(--text-dim);
     line-height: 1.7;
@@ -712,6 +681,51 @@ a:hover { color: var(--text); }
 @keyframes pulse-text {
     0%, 100% { opacity: 0.6; }
     50%      { opacity: 1; }
+}
+
+/* Progress bar pra uploads grandes (tar.gz) */
+.loading-progress {
+    margin: 1.5rem auto 0;
+    max-width: 420px;
+    width: 100%;
+    padding: 0 1rem;
+}
+.loading-bar {
+    width: 100%;
+    height: 6px;
+    background: rgba(179, 136, 255, 0.12);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 0.6rem;
+}
+.loading-bar-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--purple-soft), var(--purple));
+    border-radius: inherit;
+    box-shadow: 0 0 12px var(--purple-glow);
+    transition: width 200ms ease-out;
+}
+.loading-meta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    letter-spacing: 0.05em;
+}
+.loading-meta .sep { color: var(--text-faint); opacity: 0.6; }
+.loading-warn {
+    margin-top: 0.8rem;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.76rem;
+    color: var(--orange);
+    background: var(--orange-bg);
+    border-radius: 8px;
+    line-height: 1.4;
+    text-align: center;
 }
 
 /* ============================================================
@@ -1081,6 +1095,45 @@ footer a:hover {
 .hidden { display: none !important; }
 .text-dim { color: var(--text-dim); }
 .text-faint { color: var(--text-faint); }
+
+/* ============================================================
+   SCROLL REVEAL MOTION
+   ============================================================ */
+[data-reveal] {
+    opacity: 0;
+    transform: translateY(28px);
+    transition:
+        opacity 700ms cubic-bezier(0.16, 1, 0.3, 1),
+        transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: opacity, transform;
+}
+[data-reveal].in-view {
+    opacity: 1;
+    transform: translateY(0);
+}
+[data-reveal="fade"]      { transform: translateY(0); }
+[data-reveal="left"]      { transform: translateX(-30px); }
+[data-reveal="right"]     { transform: translateX(30px); }
+[data-reveal="scale"]     { transform: scale(0.94); }
+[data-reveal="left"].in-view,
+[data-reveal="right"].in-view  { transform: translateX(0); }
+[data-reveal="scale"].in-view  { transform: scale(1); }
+
+/* Stagger via data-reveal-delay (até 600ms) */
+[data-reveal-delay="60"]  { transition-delay:  60ms; }
+[data-reveal-delay="120"] { transition-delay: 120ms; }
+[data-reveal-delay="180"] { transition-delay: 180ms; }
+[data-reveal-delay="240"] { transition-delay: 240ms; }
+[data-reveal-delay="300"] { transition-delay: 300ms; }
+[data-reveal-delay="360"] { transition-delay: 360ms; }
+[data-reveal-delay="420"] { transition-delay: 420ms; }
+[data-reveal-delay="480"] { transition-delay: 480ms; }
+[data-reveal-delay="540"] { transition-delay: 540ms; }
+[data-reveal-delay="600"] { transition-delay: 600ms; }
+
+@media (prefers-reduced-motion: reduce) {
+    [data-reveal] { opacity: 1; transform: none; transition: none; }
+}
 </style>
 </head>
 <body>
@@ -1104,7 +1157,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v3.3.5</span>
+        <span id="version">v4.0.0</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1117,7 +1170,7 @@ footer a:hover {
 
 <!-- ─── UPLOAD ─── -->
 <section class="upload-section" id="uploadSection">
-    <div class="dropdown-wrap">
+    <div class="dropdown-wrap" data-reveal="fade-up">
         <div class="dropdown-label">Selecione o tipo de análise</div>
         <div class="dropdown" id="modeDropdown" role="combobox" aria-haspopup="listbox" aria-expanded="false" tabindex="0">
             <button class="dropdown-trigger" type="button" id="modeTrigger" aria-label="Escolha o modo de análise">
@@ -1289,6 +1342,17 @@ footer a:hover {
 <div class="loading hidden" id="loading">
     <div class="spinner"></div>
     <div class="loading-text" id="loadingText">Analisando…</div>
+    <div class="loading-progress" id="loadingProgress" hidden>
+        <div class="loading-bar"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
+        <div class="loading-meta">
+            <span id="loadingPercent">0%</span>
+            <span class="sep">·</span>
+            <span id="loadingSize">0 MB</span>
+            <span class="sep">·</span>
+            <span id="loadingETA">…</span>
+        </div>
+        <div class="loading-warn" id="loadingWarn" hidden></div>
+    </div>
 </div>
 
 <!-- ─── RESULTS ─── -->
@@ -1308,10 +1372,6 @@ footer a:hover {
         <span class="sep">·</span>
         <strong>LS Aluguel</strong>
     </p>
-    <p class="text-faint" style="margin-top: 0.8rem;">
-        Free Fire Anti-Cheat Scanner · iOS &amp; Android<br />
-        ~130 bundles catalogados · 27 payload types · 7 tampering checks · UUID opaco detection
-    </p>
 </footer>
 
 </div>
@@ -1320,18 +1380,19 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "3.3.5";
+const VERSION = "4.0.0";
 
 /* ============================================================
-   BLACKLIST API (configurar quando seu backend estiver no ar)
+   BACKEND CONFIG — lspainel.com.br (LS Aluguel)
    ============================================================ */
+const API_BASE = "https://lspainel.com.br/api/a4ther";
 const BLACKLIST_CONFIG = {
-    // Mude pra URL do seu backend quando integrar.
-    // Espera GET /check?hwid=<HWID> retornando JSON:
-    //   { banned: true|false, reason: "cheats|proxy|sideload|...", date: "...", motivos: [...] }
-    apiUrl: "",   // ex: "https://api.a4thersystems.com/blacklist/check"
-    enabled: false, // ligar pra true quando o backend estiver pronto
-    timeoutMs: 5000,
+    apiUrl: `${API_BASE}/blacklist/check`,
+    submitUrl: `${API_BASE}/blacklist/submit`,
+    intelUrl: `${API_BASE}/intel/feed.json`,
+    scanLogUrl: `${API_BASE}/scan/log`,
+    enabled: true,
+    timeoutMs: 6000,
 };
 
 async function checkBlacklist(hwid) {
@@ -1340,13 +1401,116 @@ async function checkBlacklist(hwid) {
         const url = `${BLACKLIST_CONFIG.apiUrl}?hwid=${encodeURIComponent(hwid)}`;
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), BLACKLIST_CONFIG.timeoutMs);
-        const res = await fetch(url, { signal: ctrl.signal });
+        const res = await fetch(url, { signal: ctrl.signal, mode: 'cors' });
         clearTimeout(t);
         if (!res.ok) return null;
         return await res.json();
     } catch (e) {
         return { error: String(e) };
     }
+}
+
+/* Submete um HWID detectado como suspeito (admin-only no backend) */
+async function submitToBlacklist(hwid, reason, evidence) {
+    if (!BLACKLIST_CONFIG.enabled || !BLACKLIST_CONFIG.submitUrl) return null;
+    try {
+        const res = await fetch(BLACKLIST_CONFIG.submitUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hwid, reason, evidence, source: 'a4ther-web', ts: Date.now() }),
+            mode: 'cors',
+        });
+        return res.ok ? await res.json() : null;
+    } catch (e) { return { error: String(e) }; }
+}
+
+/* Loga resultado do scan pra analytics (opcional) */
+async function logScanResult(verdict, alertsCount, warningsCount, mode) {
+    if (!BLACKLIST_CONFIG.enabled || !BLACKLIST_CONFIG.scanLogUrl) return;
+    try {
+        await fetch(BLACKLIST_CONFIG.scanLogUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ verdict, alertsCount, warningsCount, mode, ts: Date.now() }),
+            mode: 'cors',
+            keepalive: true,
+        });
+    } catch (e) {}
+}
+
+/* Threat intel feed dinâmico — busca novas detecções do backend
+   (override do hardcoded sem precisar atualizar o site) */
+const INTEL_CACHE_KEY = 'a4ther_intel_v1';
+const INTEL_TTL_MS    = 6 * 3600 * 1000; // 6h
+async function fetchThreatIntel() {
+    if (!BLACKLIST_CONFIG.enabled || !BLACKLIST_CONFIG.intelUrl) return null;
+    try {
+        const cached = localStorage.getItem(INTEL_CACHE_KEY);
+        if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && parsed._ts && (Date.now() - parsed._ts) < INTEL_TTL_MS) {
+                return parsed;
+            }
+        }
+    } catch (e) {}
+    try {
+        const ctrl = new AbortController();
+        setTimeout(() => ctrl.abort(), BLACKLIST_CONFIG.timeoutMs);
+        const res = await fetch(BLACKLIST_CONFIG.intelUrl, { signal: ctrl.signal, mode: 'cors' });
+        if (!res.ok) return null;
+        const data = await res.json();
+        data._ts = Date.now();
+        try { localStorage.setItem(INTEL_CACHE_KEY, JSON.stringify(data)); } catch (e) {}
+        return data;
+    } catch (e) { return null; }
+}
+/* Aplica intel remoto no boot — soma com hardcoded sem perder nada */
+async function applyRemoteIntel() {
+    const intel = await fetchThreatIntel();
+    if (!intel) return;
+    let added = { bundles: 0, domains: 0, ips: 0, patterns: 0 };
+    if (intel.cheat_apps) {
+        for (const [bid, info] of Object.entries(intel.cheat_apps)) {
+            if (!CHEAT_APPS[bid]) { CHEAT_APPS[bid] = info; added.bundles++; }
+        }
+    }
+    if (intel.cheat_infra) {
+        for (const [host, desc] of Object.entries(intel.cheat_infra)) {
+            if (!KNOWN_CHEAT_INFRA[host]) { KNOWN_CHEAT_INFRA[host] = desc; added.domains++; }
+        }
+    }
+    if (intel.cheat_ips && typeof KNOWN_CHEAT_IPS !== 'undefined') {
+        for (const [ip, desc] of Object.entries(intel.cheat_ips)) {
+            if (!KNOWN_CHEAT_IPS[ip]) { KNOWN_CHEAT_IPS[ip] = desc; added.ips++; }
+        }
+    }
+    if (Array.isArray(intel.substring_patterns)) {
+        for (const p of intel.substring_patterns) {
+            if (!SUBSTRING_PATTERNS.some(x => x.needle === p.needle)) {
+                SUBSTRING_PATTERNS.push(p);
+                added.patterns++;
+            }
+        }
+    }
+    if (added.bundles + added.domains + added.ips + added.patterns > 0) {
+        console.info('[intel] +%d bundles · +%d domains · +%d ips · +%d patterns',
+            added.bundles, added.domains, added.ips, added.patterns);
+    }
+}
+/* Auto-fetch ao carregar */
+if (typeof window !== 'undefined') {
+    setTimeout(() => applyRemoteIntel(), 250);
+}
+
+/* ============================================================
+   SERVICE WORKER — PWA offline cache
+   ============================================================ */
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js', { scope: './' })
+            .then(reg => console.info('[sw] registered v' + (typeof VERSION !== 'undefined' ? VERSION : '?'), reg.scope))
+            .catch(err => console.warn('[sw] register failed', err));
+    });
 }
 document.getElementById('version').textContent = `v${VERSION}`;
 
@@ -1364,8 +1528,36 @@ document.getElementById('version').textContent = `v${VERSION}`;
 //  DEV       = developer tools (Xcode, TestFlight com profile)
 //  CLEANER   = anti-detect / log cleaner
 const CHEAT_APPS = {
+    // === Dev 34306 (Huy Nguyen) — autor de N cheats FF iOS ===
+    "com.34306.huyjit":                 { sev: "CRITICAL", name: "HuyJIT ModMenu",         cat: "CHEAT",     desc: "Template JIT mod menu IMGUI (não-JB + Dopamine)" },
+    "com.34306.filzajailedds":          { sev: "CRITICAL", name: "FilzaJailedDS",          cat: "CLEANER",   desc: "Filza jailed iOS 17-26 (DarkSword inject)" },
+
+    // === Cheat marketplaces 2026 (Fluorite, Cheto, iOSGods) — bundle re-signed mas marca distinta ===
+    "com.fluorite.app":                 { sev: "CRITICAL", name: "Fluorite IPA modded",    cat: "CHEAT",     desc: "Cheat pago Fluorite (fluorite.store/cheto.shop)" },
+    "com.cheto.freefire":               { sev: "CRITICAL", name: "Cheto FF Modded",        cat: "CHEAT",     desc: "Cheat pago Cheto (chetoshop.com)" },
+    "com.disruptor.freefire":           { sev: "CRITICAL", name: "Disruptor FF",           cat: "CHEAT",     desc: "Cheat pago Disruptor (disruptorofficial.com)" },
+    "com.crazycapy.freefire":           { sev: "CRITICAL", name: "CrazyCapy FF",           cat: "CHEAT",     desc: "Cheat pago (crazycapystore.com)" },
+    "com.iosgods.freefire":             { sev: "CRITICAL", name: "iOSGods FF Modded",      cat: "CHEAT",     desc: "IPA modded iosgodsipa.com" },
+
+    // === Sideloaders novos 2026 ===
+    "com.kdt.livecontainer":            { sev: "CRITICAL", name: "LiveContainer",          cat: "SIDELOAD",  desc: "Sideload ILIMITADO num app slot, JIT-enabled — vetor stealth 2026 dominante" },
+    "com.xyq.livecontainer":            { sev: "CRITICAL", name: "LiveContainer (XYQ)",    cat: "SIDELOAD",  desc: "LiveContainer fork (livecontainer-ios.com)" },
+    "com.SideStore.SideStore":          { sev: "HIGH",     name: "SideStore",              cat: "SIDELOAD",  desc: "Alt store + LiveContainer pra bypass 3-app limit" },
+    "com.rileytestut.AltStore.PAL":     { sev: "HIGH",     name: "AltStore PAL",           cat: "SIDELOAD",  desc: "EU first-party alt store (sideload)" },
+    "com.straight-tamago.misaka":       { sev: "CRITICAL", name: "Misaka",                 cat: "SIDELOAD",  desc: "Package manager via KFD/MDC, instala tweaks SEM JB iOS 16-17" },
+    "com.nekohaxx.ksign":               { sev: "HIGH",     name: "KSign",                  cat: "SIDELOAD",  desc: "IPA signer on-device open-source" },
+    "com.kravasign.app":                { sev: "HIGH",     name: "KravaSign",              cat: "SIDELOAD",  desc: "kravasign.com signer multi-platform" },
+    "com.opa334.TrollRestoreApp":       { sev: "CRITICAL", name: "TrollRestore",           cat: "SIDELOAD",  desc: "TrollStore restore tool — mantém installs sobrevivendo OTA" },
+
+    // === Bypass JB-detection novos ===
+    "com.lieve.vnodebypass":            { sev: "CRITICAL", name: "vnodebypass",            cat: "CLEANER",   desc: "Kernel-level hide unc0ver" },
+    "com.opa334.roothide.dopamine":     { sev: "CRITICAL", name: "Dopamine RootHide",      cat: "CLEANER",   desc: "Fork rootHide do Dopamine 2" },
+    "com.serotonin.bootstrap":          { sev: "CRITICAL", name: "Serotonin Bootstrap",    cat: "CLEANER",   desc: "Bootstrap alt (predecessor RootHide)" },
+    "com.roothide.bootstrap":           { sev: "CRITICAL", name: "RootHide Bootstrap",     cat: "CLEANER",   desc: "Substituto rootless" },
+
+    // === Originais ===
     // === FF iOS cheats específicos ===
-    "com.34306.espff":                  { sev: "CRITICAL", name: "ESP Free Fire",          cat: "CHEAT",     desc: "Substrate tweak ESP" },
+    "com.34306.espff":                  { sev: "CRITICAL", name: "ESP Free Fire",          cat: "CHEAT",     desc: "Substrate tweak ESP por Huy Nguyen (github.com/34306)" },
     "com.dts.freefireth.externalesp":   { sev: "CRITICAL", name: "External ESP FF",        cat: "CHEAT",     desc: "External ESP tweak" },
     "com.quyhoang.fxy":                 { sev: "CRITICAL", name: "Elite Luxury / Nextor",  cat: "CHEAT",     desc: "Mod menu hybrid FF/FFMax" },
     "com.phuc.aimlock":                 { sev: "CRITICAL", name: "AimLock FF",             cat: "CHEAT",     desc: "Aim Lock tweak" },
@@ -1509,11 +1701,64 @@ const CHEAT_APPS = {
 
 // SUBSTRING patterns (detecção por trecho em qualquer bundle)
 const SUBSTRING_PATTERNS = [
-    { needle: "imazing",   name: "iMazing",       cat: "DEV",      sev: "MEDIUM", desc: "Forense PC - extração via iMazing no Mac/PC" },
-    { needle: "xdark",     name: "xDark/xLeal",   cat: "SIDELOAD", sev: "HIGH",   desc: "Sideloader xDark/xLeal" },
-    { needle: "3utools",   name: "3uTools",       cat: "DEV",      sev: "MEDIUM", desc: "Ferramenta forense PC (3uTools)" },
-    { needle: "ifunbox",   name: "iFunBox",       cat: "TWEAK",    sev: "HIGH",   desc: "Gerenciador de arquivos iOS" },
-    { needle: "altserver", name: "AltServer",     cat: "SIDELOAD", sev: "HIGH",   desc: "AltStore sideload server" },
+    { needle: "imazing",       name: "iMazing",         cat: "DEV",      sev: "MEDIUM",   desc: "Forense PC - extração via iMazing no Mac/PC" },
+    { needle: "xdark",         name: "xDark/xLeal",     cat: "SIDELOAD", sev: "HIGH",     desc: "Sideloader xDark/xLeal" },
+    { needle: "3utools",       name: "3uTools",         cat: "DEV",      sev: "MEDIUM",   desc: "Ferramenta forense PC (3uTools)" },
+    { needle: "ifunbox",       name: "iFunBox",         cat: "TWEAK",    sev: "HIGH",     desc: "Gerenciador de arquivos iOS" },
+    { needle: "altserver",     name: "AltServer",       cat: "SIDELOAD", sev: "HIGH",     desc: "AltStore sideload server" },
+
+    /* === 2026 threat intel — sideloaders/cleaners novos === */
+    { needle: "livecontainer", name: "LiveContainer",   cat: "SIDELOAD", sev: "CRITICAL", desc: "Vetor stealth 2026 — IPAs ilimitados num app slot" },
+    { needle: "misaka",        name: "Misaka",          cat: "SIDELOAD", sev: "CRITICAL", desc: "Package manager KFD/MDC — tweaks sem JB" },
+    { needle: "sidestore",     name: "SideStore",       cat: "SIDELOAD", sev: "HIGH",     desc: "Alt store + LiveContainer combo" },
+    { needle: "ksign",         name: "KSign",           cat: "SIDELOAD", sev: "HIGH",     desc: "IPA signer on-device" },
+    { needle: "kravasign",     name: "KravaSign",       cat: "SIDELOAD", sev: "HIGH",     desc: "Signer multi-platform" },
+    { needle: "trollrestore",  name: "TrollRestore",    cat: "SIDELOAD", sev: "CRITICAL", desc: "Mantém TrollStore sobrevivendo OTA iOS 17+" },
+    { needle: "vnodebypass",   name: "vnodebypass",     cat: "CLEANER",  sev: "CRITICAL", desc: "Kernel-level JB hide unc0ver" },
+    { needle: "serotonin",     name: "Serotonin",       cat: "CLEANER",  sev: "CRITICAL", desc: "Bootstrap alt RootHide predecessor" },
+    { needle: "bootstrap",     name: "RootHide Bootstrap", cat: "CLEANER", sev: "HIGH",   desc: "Bootstrap rootless RootHide" },
+    { needle: "dopamine",      name: "Dopamine",        cat: "JAILBREAK", sev: "HIGH",    desc: "Dopamine jailbreak iOS 15-17 (opa334)" },
+
+    /* === Cheat dev handles (iOS FF mods 2026) === */
+    { needle: "34306",         name: "Dev 34306",       cat: "CHEAT",    sev: "CRITICAL", desc: "Huy Nguyen — dev de N cheats FF iOS (espff, HuyJIT, FilzaJailed)" },
+    { needle: "huyjit",        name: "HuyJIT ModMenu",  cat: "CHEAT",    sev: "CRITICAL", desc: "Template JIT mod menu IMGUI" },
+    { needle: "espff",         name: "ESP Free Fire",   cat: "CHEAT",    sev: "CRITICAL", desc: "ESP FF source/binary signature" },
+    { needle: "filzajailed",   name: "FilzaJailed",     cat: "CLEANER",  sev: "HIGH",     desc: "Filza file manager jailed (DarkSword inject)" },
+    { needle: "fluorite",      name: "Fluorite Cheat",  cat: "CHEAT",    sev: "CRITICAL", desc: "Cheat pago Fluorite (fluorite.store/cheto.shop)" },
+    { needle: "cheto",         name: "Cheto Cheat",     cat: "CHEAT",    sev: "CRITICAL", desc: "Cheat pago Cheto marketplace" },
+    { needle: "disruptor",     name: "Disruptor Cheat", cat: "CHEAT",    sev: "CRITICAL", desc: "Cheat pago Disruptor" },
+    { needle: "crazycapy",     name: "CrazyCapy",       cat: "CHEAT",    sev: "CRITICAL", desc: "Cheat marketplace CrazyCapy" },
+    { needle: "iosgods",       name: "iOSGods Mod",     cat: "CHEAT",    sev: "CRITICAL", desc: "iOSGods IPA modded distribution" },
+    { needle: "jailled",       name: "Jailled Mod",     cat: "CLEANER",  sev: "HIGH",     desc: "Template IPA jailed (joeyjurjens)" },
+
+    /* === Android FF injectors 2026 === */
+    { needle: "ffh4x",         name: "FFH4X Injector",  cat: "CHEAT",    sev: "CRITICAL", desc: "Aimbot/ESP/fly externo overlay (ffh4x.vip)" },
+    { needle: "op999",         name: "OP999 Injector",  cat: "CHEAT",    sev: "CRITICAL", desc: "OP999 FF injector" },
+    { needle: "teambot",       name: "Teambot Injector",cat: "CHEAT",    sev: "CRITICAL", desc: "Teambot FF cheat" },
+    { needle: "panelff",       name: "Panel FF",        cat: "CHEAT",    sev: "CRITICAL", desc: "Cheat panel FF Android" },
+    { needle: "tb71",          name: "TB71 Injector",   cat: "CHEAT",    sev: "HIGH",     desc: "TB71 FF injector" },
+    { needle: "ng_injector",   name: "NG Injector",     cat: "CHEAT",    sev: "HIGH",     desc: "NG FF injector" },
+    { needle: "nova_esp",      name: "Nova ESP",        cat: "CHEAT",    sev: "HIGH",     desc: "Nova FF ESP 2025+" },
+    { needle: "lgl_mod",       name: "LGL Mod Menu",    cat: "CHEAT",    sev: "HIGH",     desc: "LGL Mod Menu derivative" },
+    { needle: "mantispro",     name: "Mantis Pro",      cat: "CHEAT",    sev: "HIGH",     desc: "Mouse/teclado converter Android (M&K)" },
+
+    /* === Android bypass tools 2026 === */
+    { needle: "tricky_store",  name: "TrickyStore",     cat: "CLEANER",  sev: "CRITICAL", desc: "Keybox spoofing — Strong Integrity bypass" },
+    { needle: "playintegrity", name: "PlayIntegrityFix",cat: "CLEANER",  sev: "CRITICAL", desc: "Bypass PlayIntegrity API/SafetyNet" },
+    { needle: "shamiko",       name: "Shamiko",         cat: "CLEANER",  sev: "CRITICAL", desc: "Magisk Hide moderno" },
+    { needle: "zygisk_assist", name: "Zygisk Assistant",cat: "CLEANER",  sev: "HIGH",     desc: "Root hider OSS" },
+    { needle: "vector",        name: "Vector (LSPosed)",cat: "CLEANER",  sev: "HIGH",     desc: "LSPosed rename + Dobby inline hooking" },
+
+    /* === Virtual sandboxes (GG sem root) === */
+    { needle: "virtualapp",    name: "VirtualXposed",   cat: "CLEANER",  sev: "HIGH",     desc: "Sandbox que permite GG sem root" },
+    { needle: "parallel.intl", name: "Parallel Space",  cat: "CLEANER",  sev: "HIGH",     desc: "Sandbox virtual app" },
+    { needle: "dualaid",       name: "DualSpace",       cat: "CLEANER",  sev: "HIGH",     desc: "DualSpace virtual sandbox" },
+    { needle: "dualspace",     name: "DualSpace",       cat: "CLEANER",  sev: "HIGH",     desc: "DualSpace variant" },
+    { needle: "gomultiple",    name: "Go Multiple",     cat: "CLEANER",  sev: "HIGH",     desc: "Virtual sandbox" },
+    { needle: "weishu.exp",    name: "VirtualXposed",   cat: "CLEANER",  sev: "HIGH",     desc: "weishu VirtualXposed" },
+
+    /* === Spoofers/Faker === */
+    { needle: "fakerunlocker", name: "Faker Unlocker",  cat: "CLEANER",  sev: "HIGH",     desc: "LSPosed module — spoofa device fingerprint" },
 ];
 
 // Categorias (badges visuais)
@@ -1577,6 +1822,73 @@ const KNOWN_CHEAT_INFRA = {
     "api.baontq.xyz":                         "Baontq cheat API — FF",
     "ipasign.cc":                             "IPA Sign service (cert sideload)",
     "ipa.aspy.dev":                           "IPA hosting TrollStore",
+
+    // === Cheat marketplaces iOS 2026 (Fluorite/Cheto/Disruptor family) ===
+    "fluorite.store":                         "Fluorite — cheat pago FF iOS",
+    "cheto.shop":                             "Cheto — cheat marketplace FF",
+    "chetoshop.com":                          "Cheto Shop — Fluorite IPAs",
+    "crazycapystore.com":                     "CrazyCapy — cheat marketplace",
+    "disruptorofficial.com":                  "Disruptor — cheat pago iOS",
+    "kingios.com":                            "KingiOS — cheat reseller iOS",
+    "ivsofte.biz":                            "IVSofte — cheat reseller",
+    "iosgodsipa.com":                         "iOSGods IPA — FF modded distribution",
+    "ipaomtk.com":                            "IPAomtk — IPA modded host",
+    "decrypt.day":                            "Decrypt.day — decrypted IPAs host",
+    "ipa.zeejb.com":                          "ZeeJB IPA host",
+    "plati.market":                           "Plati Market — Fluorite reseller",
+
+    // === FFH4X family Android (injectors) + panel FF ===
+    "ffh4x.vip":                              "FFH4X — Android injector FF (aimbot/ESP)",
+    "ffh4x.org":                              "FFH4X — Android injector mirror",
+    "ffh4xapks.com":                          "FFH4X APK distribution",
+    "ffh4x.modfyp.com":                       "FFH4X via modfyp",
+    "ffh4x.apkrabi.com":                      "FFH4X via apkrabi",
+    "apkff.net":                              "APKFF — FFH4X injector host",
+    "panelff.com":                            "Panel FF — cheat panel Android",
+    "panelff.net":                            "Panel FF — cheat panel mirror",
+    "free-fire-panel.apkmentor.org":          "Free Fire Panel — apkmentor",
+    "apktodo.io":                             "APKTodo — OP999/Teambot injector host",
+
+    // === Cheat distribution markets (FF mods) ===
+    "freefireheadshothackmodapk.com":         "FF Headshot Hack — distribution",
+    "freefiremodmenu.net":                    "FF Mod Menu distribution",
+    "freefiremodmenus.com":                   "FF Mod Menus mirror",
+    "liteapks.com":                           "LiteAPKs — modded apps",
+    "cheatermad.com":                         "CheaterMad — cheat distribution",
+    "ytricks.co":                             "YTricks — cheat tutorials/links",
+    "getmodsapk.com":                         "GetModsAPK — mod distribution",
+    "apkals.com":                             "APKAls — TB71/cheat injector host",
+    "apkmentor.org":                          "APKMentor — cheat panels",
+    "modyolo.com":                            "Modyolo — modded APK",
+    "modder.me":                              "Modder.me — cheat mod host",
+    "platinmods.com":                         "PlatinMods — cheat marketplace",
+    "hackerbot.net":                          "HackerBot — cheat distribution",
+    "gamecheetah.org":                        "GameCheetah — cheat tutorials",
+    "cheatseller.com":                        "Cheat Seller — marketplace",
+    "elitepvpers.com":                        "Elite PvPers — cheat forum",
+
+    // === IOCs CONFIRMADOS via sysdiagnose real (v3.7.0) ===
+    "purplevioleto.com":                      "[REAL] Proxy MITM — version.ffmax.purplevioleto.com substitui CDN oficial Garena (cheat dump 20-mai-2026)",
+    "version.ffmax.purplevioleto.com":        "[REAL] Endpoint version-check FALSO do FF Max (proxy redirect Garena → cheat)",
+    "ffmax.purplevioleto.com":                "[REAL] Subdomain FF Max proxy MITM",
+    "easebot.app":                            "[REAL] EaseBot — botware suspeito (api2/ecloud subdomains acessados)",
+    "api2.easebot.app":                       "[REAL] EaseBot API (FF panel botware)",
+    "ecloud.easebot.app":                     "[REAL] EaseBot cloud (FF panel botware)",
+    "linkcdn.cc":                             "[REAL] linkcdn.cc TLD suspeito (fly.linkcdn.cc no APR)",
+    "fly.linkcdn.cc":                         "[REAL] fly.linkcdn.cc — subdomain CDN tipo cheat",
+    "clique.ink":                             "[REAL] clique.ink (.ink TLD suspeito)",
+
+    // === Sideload tutorial hubs (marcadores não-cheat mas indicador de intent) ===
+    "livecontainer-ios.com":                  "LiveContainer official — vetor stealth iOS 2026",
+    "trollstoreapp.com":                      "TrollStore distribution",
+    "trollstore.org":                         "TrollStore official",
+    "onejailbreak.com":                       "OneJailbreak — JB tools",
+    "zeejb.com":                              "ZeeJB — JB tutorials",
+    "iexmo.com":                              "iExmo — sideload tutorials",
+    "iospack.com":                            "iOSPack — sideload hub",
+    "idevicecentral.com":                     "iDeviceCentral — JB/sideload",
+    "silisko.com":                            "Silisko — sideload hub",
+    "senumy.com":                             "Senumy — Portal Signer host",
 };
 
 const FALSE_POSITIVE_IPS = new Set([
@@ -1590,6 +1902,13 @@ const FALSE_POSITIVE_IPS = new Set([
     "23.192.36.217","23.221.214.168","54.69.69.125","92.223.118.254",
     "1.1.1.1",
 ]);
+
+// IPs hardcoded em FF que NÃO são Garena (proxy/MITM) — confirmados via APR real
+const KNOWN_CHEAT_IPS = {
+    "154.223.134.14": "[REAL] CDS Global Cloud BR — FF chamando IP non-Garena (APR 20-mai-2026)",
+    "154.223.134.24": "[REAL] CDS Global Cloud BR — FF chamando IP non-Garena (APR 20-mai-2026)",
+    "46.202.145.85":  "Fatality Cheats — servidor confirmado",
+};
 
 const TELEMETRY_DOMAINS = [
     "sentry.io", "ingest.sentry.io",
@@ -1651,10 +1970,12 @@ const SCRIPT_URL_PATTERNS = [
 ];
 
 const SUSPICIOUS_TLDS = [
-    ".site", ".store", ".netlify.app", ".netlify", ".xyz", ".pw",
+    ".site", ".store", ".shop", ".netlify.app", ".netlify", ".xyz", ".pw",
     ".top", ".click", ".bid", ".win", ".stream", ".download",
     ".icu", ".gq", ".cf", ".ml", ".ga", ".tk",
     ".monster", ".fun", ".rest", ".bar", ".lol",
+    /* 2026 threat intel */
+    ".vip", ".modfyp.com", ".modyolo.com", ".modcombo.com", ".apktodo.io",
 ];
 
 const SUSPECT_KEYWORDS = [
@@ -1747,28 +2068,72 @@ function renderItem(item, color) {
 function showLoading(text) {
     $('#loading').classList.remove('hidden');
     $('#loadingText').textContent = text || 'Analisando…';
+    $('#loadingProgress').hidden = true;
+    $('#loadingWarn').hidden = true;
     $('#results').classList.add('hidden');
     $('#actions').classList.add('hidden');
 }
 function hideLoading() {
     $('#loading').classList.add('hidden');
+    $('#loadingProgress').hidden = true;
+    $('#loadingWarn').hidden = true;
+}
+/* Estado de progresso pra uploads grandes */
+let _progressState = { startMs: 0, totalBytes: 0 };
+function startProgress(totalBytes, warnText) {
+    _progressState.startMs   = Date.now();
+    _progressState.totalBytes = totalBytes;
+    $('#loadingProgress').hidden = false;
+    $('#loadingBarFill').style.width = '0%';
+    $('#loadingPercent').textContent = '0%';
+    $('#loadingSize').textContent = `${(totalBytes / (1024*1024)).toFixed(1)} MB`;
+    $('#loadingETA').textContent = 'calculando…';
+    if (warnText) {
+        $('#loadingWarn').hidden = false;
+        $('#loadingWarn').textContent = warnText;
+    }
+}
+function updateProgress(bytesDone) {
+    const total = _progressState.totalBytes || 1;
+    const pct   = Math.min(100, Math.max(0, (bytesDone / total) * 100));
+    $('#loadingBarFill').style.width = pct.toFixed(1) + '%';
+    $('#loadingPercent').textContent = pct.toFixed(0) + '%';
+    // ETA estimate
+    const elapsed = (Date.now() - _progressState.startMs) / 1000;
+    if (elapsed > 1 && bytesDone > 0) {
+        const rate = bytesDone / elapsed;                // bytes/s
+        const remaining = (total - bytesDone) / rate;    // segundos
+        const eta = remaining > 60
+            ? `~${Math.ceil(remaining/60)}min restantes`
+            : `~${Math.ceil(remaining)}s restantes`;
+        $('#loadingETA').textContent = eta;
+    }
+}
+function finishProgress() {
+    $('#loadingBarFill').style.width = '100%';
+    $('#loadingPercent').textContent = '100%';
+    $('#loadingETA').textContent = 'finalizando…';
 }
 
 function renderResults(stats) {
     hideLoading();
     lastStats = stats;
-    let verdict, color, icon, subtitle;
+    let verdict, color, icon, subtitle, verdictKey;
     // Verdict: W.O (vermelho) ou LIMPO (verde)
     if (alerts.length > 0) {
-        verdict = 'W . O'; color = 'red'; icon = '✗';
+        verdict = 'W . O'; verdictKey = 'W.O'; color = 'red'; icon = '✗';
         subtitle = `${alerts.length} alerta${alerts.length !== 1 ? 's' : ''} crítico${alerts.length !== 1 ? 's' : ''} · aplicar W.O / BAN`;
     } else if (warnings.length > 0) {
-        verdict = 'REVISAR'; color = 'orange'; icon = '⚠';
+        verdict = 'REVISAR'; verdictKey = 'REVISAR'; color = 'orange'; icon = '⚠';
         subtitle = `${warnings.length} aviso${warnings.length !== 1 ? 's' : ''} a checar manualmente`;
     } else {
-        verdict = 'L I M P O'; color = 'green'; icon = '✓';
+        verdict = 'L I M P O'; verdictKey = 'LIMPO'; color = 'green'; icon = '✓';
         subtitle = 'Device aprovado · nenhum indicador suspeito';
     }
+    // Telemetria pro backend (fire-and-forget, não bloqueia render)
+    try {
+        logScanResult(verdictKey, alerts.length, warnings.length, (stats && stats.mode) || 'unknown');
+    } catch (e) {}
 
     // Stats: Apps Instalados | Cheats | Perfis MDM
     let cheatCount = 0, profileCount = 0;
@@ -2446,6 +2811,14 @@ function untarBytes(bytes) {
 async function handleTarGz(file) {
     showLoading(`Descompactando ${file.name}…`);
     reset();
+
+    // Aviso de tempo conforme tamanho do arquivo
+    const fileMb = file.size / (1024 * 1024);
+    let warnText = '';
+    if (fileMb > 150) warnText = `⏱ Arquivo grande (${fileMb.toFixed(0)} MB) — pode levar 1-3 minutos. Não feche a aba.`;
+    else if (fileMb > 50) warnText = `⏱ Pode levar até 1 minuto. Aguarde…`;
+    startProgress(file.size, warnText);
+
     try {
         await ensurePako();
     } catch (e) {
@@ -2453,7 +2826,9 @@ async function handleTarGz(file) {
         renderResults({});
         return;
     }
+    updateProgress(file.size * 0.10); // 10% após pako load
     const buf = await file.arrayBuffer();
+    updateProgress(file.size * 0.25); // 25% após read into memory
     const compressed = new Uint8Array(buf);
 
     // ─── chkH: extrai gzip mtime do header (bytes 4-7, little-endian) ───
@@ -2462,7 +2837,9 @@ async function handleTarGz(file) {
         gzipMtime = (compressed[4] | (compressed[5] << 8) | (compressed[6] << 16) | (compressed[7] << 24)) * 1000;
     }
 
-    showLoading(`Inflando gzip (${(file.size / 1024 / 1024).toFixed(1)} MB)…`);
+    showLoading(`Inflando gzip (${fileMb.toFixed(1)} MB)…`);
+    startProgress(file.size, warnText);
+    updateProgress(file.size * 0.25);
     let tarBytes;
     try {
         tarBytes = window.pako.inflate(compressed);
@@ -2471,8 +2848,12 @@ async function handleTarGz(file) {
         renderResults({});
         return;
     }
+    updateProgress(file.size * 0.65); // 65% após inflate
     showLoading(`Parseando tar (${(tarBytes.length / 1024 / 1024).toFixed(1)} MB descompactados)…`);
+    startProgress(file.size, warnText);
+    updateProgress(file.size * 0.65);
     const tarFiles = untarBytes(tarBytes);
+    updateProgress(file.size * 0.85); // 85% após untar
     ok(`tar.gz extraído: ${tarFiles.length} arquivos`);
     if (gzipMtime > 0) {
         ok(`gzip mtime: ${new Date(gzipMtime).toISOString()}`);
@@ -2703,11 +3084,45 @@ async function handleSysdiagnose(filesList, opts) {
         if (combined) {
             const bundleSet = new Set();
             let installs = 0, uninstalls = 0;
-            for (const line of combined.split('\n')) {
+            // Track FF reinstall frequency (v3.7.0 — IOC real do dump 20-mai-2026)
+            const ffInstallTimestamps = [];
+            const ffUninstallTimestamps = [];
+            const FF_BUNDLES = ['com.dts.freefireth','com.dts.freefiremax'];
+            // Format real log: "Mon May 18 18:42:24 2026 ... Install successful for (Customer:com.dts.freefireth) [Distributor: com.apple.AppStore]"
+            const lines = combined.split('\n');
+            for (const line of lines) {
                 let m = line.match(/Install succeeded for ([a-zA-Z0-9._-]+)/i);
                 if (m) { bundleSet.add(m[1]); installs++; continue; }
                 m = line.match(/Uninstall succeeded for ([a-zA-Z0-9._-]+)/i);
                 if (m) { bundleSet.add(m[1]); uninstalls++; continue; }
+                // Real format do log: "Install successful for (Customer:bundle.id) [Distributor: xxx]"
+                m = line.match(/Install successful for \([^:]+:([a-zA-Z0-9._-]+)\)\s*\[Distributor:\s*([^\]]+)\]/i);
+                if (m) {
+                    bundleSet.add(m[1]);
+                    installs++;
+                    if (FF_BUNDLES.includes(m[1])) {
+                        // tenta extrair timestamp do início da linha
+                        const tsm = line.match(/^([A-Z][a-z]{2}\s+[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2}\s+\d{4})/);
+                        if (tsm) ffInstallTimestamps.push(new Date(tsm[1]).getTime());
+                        // Distributor não-AppStore = sideload direto
+                        const dist = m[2].trim();
+                        if (dist && !dist.match(/^com\.apple\.AppStore$/i) && dist !== "Unknown") {
+                            alertF(`[CRITICAL] FF instalado via SIDELOAD (distributor=${dist}): ${m[1]}`,
+                                "Distributor ≠ App Store = IPA sideloaded (TrollStore/SideStore/AltStore/Esign/Feather)");
+                        }
+                    }
+                    continue;
+                }
+                m = line.match(/Uninstall(?:ing)? identifier ([a-zA-Z0-9._-]+)/i);
+                if (m) {
+                    uninstalls++;
+                    bundleSet.add(m[1]);
+                    if (FF_BUNDLES.includes(m[1])) {
+                        const tsm = line.match(/^([A-Z][a-z]{2}\s+[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2}\s+\d{4})/);
+                        if (tsm) ffUninstallTimestamps.push(new Date(tsm[1]).getTime());
+                    }
+                    continue;
+                }
                 const bm = line.match(/\b([a-z][a-z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,})\b/i);
                 if (bm && !bm[1].includes('/')) bundleSet.add(bm[1]);
             }
@@ -2715,6 +3130,27 @@ async function handleSysdiagnose(filesList, opts) {
             for (const b of bundleSet) {
                 const c = classifyBundle(b);
                 if (c) alertF(`[${c.sev}] App em install log: ${b}`, c.desc);
+            }
+
+            // v3.7.0 — REINSTALL PATTERN: FF reinstalado >= 3x em < 24h = HWID reset / IPA modded swap
+            const allFFEvents = [...ffInstallTimestamps, ...ffUninstallTimestamps].sort((a,b) => a-b);
+            if (ffInstallTimestamps.length >= 3) {
+                const spanHours = (Math.max(...allFFEvents) - Math.min(...allFFEvents)) / 3600000;
+                if (spanHours < 48) {
+                    alertF(`[CRITICAL][BEHAVIOR] FF reinstalado ${ffInstallTimestamps.length}x em ${spanHours.toFixed(1)}h`,
+                        "Padrão de HWID-reset / swap de IPA modificada — cheat behavior confirmado em dump real");
+                } else if (ffInstallTimestamps.length >= 5) {
+                    warn(`[HIGH][BEHAVIOR] FF reinstalado ${ffInstallTimestamps.length}x em ${spanHours.toFixed(0)}h (suspeito)`);
+                }
+            }
+            // Reinstall rápido: install logo após uninstall (< 60s) = sideload swap
+            for (let i = 0; i < allFFEvents.length - 1; i++) {
+                const delta = (allFFEvents[i+1] - allFFEvents[i]) / 1000;
+                if (delta > 0 && delta < 60) {
+                    alertF(`[HIGH][BEHAVIOR] FF reinstalado ${delta.toFixed(0)}s após operação anterior`,
+                        "Reinstall em segundos = impossível via App Store, indica swap de IPA");
+                    break;
+                }
             }
         }
     }
@@ -3224,6 +3660,65 @@ $('#btn-share').addEventListener('click', async () => {
 
     // Exposto pra debug/uso futuro
     window.__lenis = lenis;
+})();
+
+/* ============================================================
+   SCROLL REVEAL MOTION (IntersectionObserver)
+   ============================================================ */
+(function setupReveals() {
+    if (!('IntersectionObserver' in window)) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const io = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('in-view');
+                io.unobserve(entry.target);
+            }
+        }
+    }, {
+        root: null,
+        rootMargin: '0px 0px -8% 0px',
+        threshold: 0.08,
+    });
+
+    // Aplica em qualquer elemento que ganhou [data-reveal]
+    function observeAll() {
+        document.querySelectorAll('[data-reveal]:not(.in-view)').forEach(el => io.observe(el));
+    }
+    observeAll();
+
+    /* Auto-anota seções/items dos resultados (criados dinamicamente)
+       Stagger automático nos primeiros 10 items */
+    const mo = new MutationObserver((muts) => {
+        let stagger = 0;
+        for (const mut of muts) {
+            for (const node of mut.addedNodes) {
+                if (node.nodeType !== 1) continue;
+                // Section header + items dentro de .results e .stats
+                if (node.matches?.('.section, .stat, .item, .verdict')) {
+                    node.setAttribute('data-reveal', 'fade-up');
+                    if (node.matches('.item, .stat')) {
+                        const delay = Math.min(stagger * 60, 600);
+                        node.setAttribute('data-reveal-delay', String(delay));
+                        stagger++;
+                    }
+                }
+                // Recurse children
+                node.querySelectorAll?.('.section, .stat, .item, .verdict').forEach((c, idx) => {
+                    if (!c.hasAttribute('data-reveal')) {
+                        c.setAttribute('data-reveal', 'fade-up');
+                        if (c.matches('.item, .stat')) {
+                            const d = Math.min(idx * 50, 600);
+                            c.setAttribute('data-reveal-delay', String(d));
+                        }
+                    }
+                });
+            }
+        }
+        observeAll();
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
 })();
 </script>
 

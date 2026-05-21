@@ -1,0 +1,24 @@
+# A4ther API rewrite — Apache (.htaccess)
+# Coloque na raiz onde mora a pasta api/
+
+RewriteEngine On
+
+# Bloqueia acesso direto aos arquivos de config/schema/logs
+RewriteRule ^_config\.php$ - [F,L]
+RewriteRule ^_schema\.sql$ - [F,L]
+RewriteRule ^_logs/   - [F,L]
+
+# URLs limpas (sem .php no path)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^api/a4ther/blacklist/check/?$  api/a4ther/blacklist/check.php   [L,QSA]
+RewriteRule ^api/a4ther/blacklist/submit/?$ api/a4ther/blacklist/submit.php  [L,QSA]
+RewriteRule ^api/a4ther/intel/feed\.json$   api/a4ther/intel/feed.php        [L,QSA]
+RewriteRule ^api/a4ther/scan/log/?$         api/a4ther/scan/log.php          [L,QSA]
+
+# Security headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "DENY"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
