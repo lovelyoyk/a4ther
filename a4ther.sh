@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v3.3.0 | LS Aluguel
+#  A4ther Systems v4.1.0 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="3.6.0"
+VERSION="4.1.0"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -348,13 +348,19 @@ header "ROOT / SU / SUPERUSER"
 
 ROOT_HITS=0
 
-# Paths su (todas variantes conhecidas)
+# Paths su (todas variantes conhecidas + DuckDetector findings)
 for P in /system/bin/su /system/xbin/su /sbin/su /system/sbin/su \
          /vendor/bin/su /su/bin/su /system/sd/xbin/su /data/magisk \
          /system/app/Superuser.apk /system/etc/init.d/99SuperSUDaemon \
-         /cache/su /dev/su /system/usr/we-need-root \
+         /cache/su /dev/su /system/usr/we-need-root /system/usr/we-need-root/su-backup \
          /system/xbin/daemonsu /system/xbin/busybox /system/bin/busybox \
-         /system/bin/.ext /system/etc/.has_su_daemon /system/bin/.has_su; do
+         /system/bin/.ext /system/bin/.ext/.su /system/etc/.has_su_daemon /system/bin/.has_su \
+         /system/bin/failsafe/su /system/su /system/xbin/mu \
+         /data/local/bin/su /data/local/su /data/local/xbin/su /data/adb/su \
+         /data/adb/ksu/bin/su /data/adb/ksu/ksud \
+         /data/adb/ap/apd /data/adb/apd /data/adb/ap/bin/su \
+         /data/adb/magisk/su /data/adb/magisk/.magisk/su \
+         /data/adb/magisk/magiskd /data/adb/magiskd; do
     exists "$P" && { alert "Caminho su/root: $P"; ROOT_HITS=$((ROOT_HITS+1)); }
 done
 
@@ -368,18 +374,39 @@ for SU_VAR in su64 su32 su-back __su off.su Bksu susu su.sh supersu; do
     done
 done
 
-# Pacotes de root manager
+# Pacotes de root manager (lista expandida via DuckDetector 1.9.10)
 for PKG in com.topjohnwu.magisk io.github.vvb2060.magisk io.github.huskydg.magisk \
            com.kingroot.kinguser com.kingo.root eu.chainfire.supersu \
            com.koushikdutta.superuser com.noshufou.android.su com.thirdparty.superuser \
            com.zachspong.temprootremovejb me.weishu.kernelsu com.rifsxd.ksunext \
+           com.sukisu.ultra com.smedialink.oneclickroot \
            me.bmax.apatch com.dergoogler.mmrl \
            com.formyhm.hideroot com.devadvance.rootcloak com.devadvance.rootcloakplus \
            com.amphoras.hidemyroot com.amphoras.hidemyrootadfree com.yellowes.su \
            ru.fond3.installer stericson.busybox \
            com.zhiqupk.root.global org.checkroot.checkroot \
-           com.googleplay.ndkvs; do
-    pkg_installed "$PKG" && { alert "App de root: $PKG"; ROOT_HITS=$((ROOT_HITS+1)); }
+           com.googleplay.ndkvs \
+           com.tsng.hidemyapplist com.tsng.pzyhrx.hma com.topmiaohan.hidebllist \
+           com.houvven.guise com.houvven.impad com.lerist.fakelocation \
+           com.zhufucyd.motion_emulator com.yuanwofei.cardemulator.pro \
+           com.luckyzyx.luckytool com.mio.kitchen com.modify.installer com.junge.algorithmAidePro \
+           com.fankes.tsbattery com.demo.serendipity com.didjdk.adbhelper \
+           com.fkzhang.wechatxposed com.fuck.android.rimet com.hchai.rescueplan \
+           com.hchen.appretention com.hchen.switchfreeform com.kooritea.fcmfix \
+           com.nnnen.plusne com.omarea.vtools com.padi.hook.hookqq com.parallelc.micts \
+           com.qq.qcxm com.rkg.IAMRKG com.sevtinge.hyperceiler com.syyf.quickpay \
+           com.tencent.JYNB com.tencent.jingshi com.twifucker.hachidori com.wei.vip \
+           com.wn.app.np com.xayah.databackup.foss com.apocalua.run com.byyoung.setting \
+           com.bug.hookvip com.cshlolss.vipkill com.dna.tools com.coderstory.toolkit \
+           com.chelpus.lackypatch \
+           me.bingyue.IceCore me.gm.cleaner me.hd.wauxv me.iacn.biliroaming \
+           me.teble.xposed.autodaily \
+           io.github.libxposed io.github.qauxv io.va.exposed \
+           io.github.a13e300.ksuwebui io.github.Retmon403.oppotheme \
+           io.chaldeaprjkt.gamespace \
+           com.elderdrivers.riru.edxp \
+           me.piebridge.brevent; do
+    pkg_installed "$PKG" && { alert "App de root/hide/hook: $PKG"; ROOT_HITS=$((ROOT_HITS+1)); }
 done
 
 WHICH_SU=$(command -v su 2>/dev/null)
@@ -452,6 +479,54 @@ for FFC in /sdcard/FFH4X /sdcard/Panel /sdcard/Teambot /sdcard/MSTeam /sdcard/NG
         emit "${CR}[ALERTA]${CN}  Cache de cheat injector: $FFC"
     fi
 done
+
+# Custom ROM detection (DuckDetector findings — ROMs custom = kernel modificável)
+ROM_FRAMEWORKS="/system/framework/co.aospa.framework-res.apk /system/framework/crdroid-res.apk
+                /system/framework/org.lineageos.platform-res.apk /system/framework/org.evolution.framework-res.apk
+                /system/framework/org.pixelexperience.platform-res.apk
+                /system/framework/oat/arm64/org.lineageos.platform.odex"
+for RF in $ROM_FRAMEWORKS; do
+    if exists "$RF"; then
+        case "$RF" in
+            *crdroid*)        warn "Custom ROM detectada: crDroid ($RF)" ;;
+            *aospa*)          warn "Custom ROM detectada: AOSPA / Paranoid Android ($RF)" ;;
+            *lineageos*)      warn "Custom ROM detectada: LineageOS ($RF)" ;;
+            *evolution*)      warn "Custom ROM detectada: Evolution X ($RF)" ;;
+            *pixelexperience*) warn "Custom ROM detectada: PixelExperience ($RF)" ;;
+        esac
+    fi
+done
+
+# Scene daemon (do DuckDetector — performance tweaker, sinal de ROM modificada)
+for SCENE in /dev/scene /dev/cpuset/scene-daemon /dev/memcg/scene_active /dev/memcg/scene_idle; do
+    exists "$SCENE" && warn "Scene daemon ativo: $SCENE (ROM tweaker)"
+done
+
+# MT Manager 2 / NP Manager paths (DuckDetector — reverse eng tools cache)
+for MTNPDIR in /sdcard/MT2 /sdcard/NP /sdcard/xinhao /sdcard/Download/advanced; do
+    if [ -d "$MTNPDIR" ] 2>/dev/null; then
+        warn "Reverse eng cache dir: $MTNPDIR (MT/NP Manager footprint)"
+    fi
+done
+
+# MIUI Backup hide vector (DG7 SS finding — Xiaomi backup folder = vetor de esconder cheats)
+MIUI_BACKUP="/sdcard/MIUI/backup/AllBackup"
+if [ -d "$MIUI_BACKUP" ] 2>/dev/null; then
+    MIUI_FILES=$(find "$MIUI_BACKUP" -type f 2>/dev/null | wc -l)
+    [ "$MIUI_FILES" -gt 0 ] && warn "MIUI Backup folder com $MIUI_FILES arquivos — possível vetor hide"
+    # Binários suspeitos no backup
+    SUS_BIN=$(find "$MIUI_BACKUP" -type f \( -iname "*.so" -o -iname "*.bin" -o -iname "*.dat" \) 2>/dev/null | head -5)
+    [ -n "$SUS_BIN" ] && {
+        alert "Binários suspeitos em MIUI Backup:"
+        echo "$SUS_BIN" | while IFS= read -r LN; do alert "  $LN"; done
+    }
+    # Nomes suspeitos no backup
+    SUS_NAMES=$(find "$MIUI_BACKUP" -type f 2>/dev/null | grep -iE 'cheat|mod|menu|hack|inject|gg|esp|aimbot|ffh4x|panel' | head -5)
+    [ -n "$SUS_NAMES" ] && {
+        alert "Arquivos com nome suspeito em MIUI Backup:"
+        echo "$SUS_NAMES" | while IFS= read -r LN; do alert "  $LN"; done
+    }
+fi
 
 # ============================================================
 #  5. FRAMEWORKS DE HOOK (Frida / Xposed / LSPosed / LSPatch / Substrate)
@@ -594,6 +669,13 @@ for PKG in $FF_PKGS; do
             [ -n "$FIRST" ] && info "  install:   $FIRST"
             [ -n "$UPD" ]   && info "  update:    $UPD"
             [ -n "$INST" ]  && info "  installer: $INST"
+            # DG7 SS: versão FF Max esperada (ajustar conforme nova OB)
+            if [ "$PKG" = "com.dts.freefiremax" ] && [ -n "$VER" ]; then
+                case "$VER" in
+                    1.120.*|1.121.*|1.122.*) ok "  versão FF Max no range esperado (OB ativo)" ;;
+                    *) warn "  versão FF Max FORA do range esperado (esperado 1.120-1.122, encontrado $VER) — verificar oficial Garena" ;;
+                esac
+            fi
             # Verificação crítica: Free Fire deve vir da Play Store (com.android.vending)
             case "$INST" in
                 com.android.vending)
@@ -798,6 +880,18 @@ for PKG in $FF_PKGS; do
                     fi ;;
             esac
         done
+        # DG7 SS: tamanho do shader esperado é 1-3MB; fora disso = suspeito
+        LATEST_SHADER=$(ls -t "$GAB_DIR"/shaders* 2>/dev/null | head -1)
+        if [ -n "$LATEST_SHADER" ]; then
+            SH_SIZE_MB=$(du -m "$LATEST_SHADER" 2>/dev/null | awk '{print $1}')
+            if [ -n "$SH_SIZE_MB" ]; then
+                if [ "$SH_SIZE_MB" -lt 1 ] || [ "$SH_SIZE_MB" -gt 3 ] 2>/dev/null; then
+                    alert "Shader com tamanho SUSPEITO (${SH_SIZE_MB}MB, esperado 1-3MB): $LATEST_SHADER"
+                else
+                    ok "Shader size sanity: ${SH_SIZE_MB}MB (1-3MB esperado) ✓"
+                fi
+            fi
+        fi
     fi
 done
 # GFX tools
@@ -858,6 +952,30 @@ for PKG in $FF_PKGS; do
         LAST_FILE_MOD=$(find "$RDIR" -maxdepth 1 -type f -printf '%T@\n' 2>/dev/null | sort -n | tail -n 1 | cut -d. -f1)
         if [ -n "$FOLDER_MOD" ] && [ -n "$LAST_FILE_MOD" ] && [ "$FOLDER_MOD" -gt "$LAST_FILE_MOD" ] 2>/dev/null; then
             warn "  Folder Modify > último file Modify (replay deletado?)"
+        fi
+        # === DG7 SS finding: group ownership check ===
+        # Replays criados in-game = grupo do app FF
+        # Group 1015 (sdcard_rw) ou 9997 (everybody) = arquivo veio de fora (WhatsApp/SHAREit transfer)
+        ls -nl "$RDIR" 2>/dev/null | awk '
+            NR>1 && $4 ~ /^(1015|9997)$/ {
+                printf "EXTERN_REPLAY|%s|gid=%s|%s\n", $NF, $4, $1
+            }
+            NR>1 && $1 ~ /x/ && $NF ~ /\.(bin|json)$/ {
+                printf "EXEC_REPLAY|%s|%s\n", $NF, $1
+            }' 2>/dev/null | while IFS='|' read -r KIND FNAME GID PERMS; do
+            case "$KIND" in
+                EXTERN_REPLAY) alert "Replay com origem externa (group=$(echo $GID|sed 's/gid=//')): $FNAME — transferido entre devices?" ;;
+                EXEC_REPLAY)   alert "Replay com permissão de EXECUÇÃO: $FNAME (perms=$GID) — arquivo alterado/injetado" ;;
+            esac
+        done
+        # === DG7 SS: replay antes do boot do sistema = replay copiado ===
+        LATEST_BIN=$(ls -t "$RDIR"/*.bin 2>/dev/null | head -1)
+        if [ -n "$LATEST_BIN" ]; then
+            REPLAY_TS=$(stat -c '%Y' "$LATEST_BIN" 2>/dev/null)
+            BOOT_TS=$(grep btime /proc/stat 2>/dev/null | awk '{print $2}')
+            if [ -n "$REPLAY_TS" ] && [ -n "$BOOT_TS" ] && [ "$REPLAY_TS" -lt "$BOOT_TS" ] 2>/dev/null; then
+                alert "Replay mais recente é ANTERIOR ao boot do sistema — possível passador de replay"
+            fi
         fi
     fi
 done
@@ -1542,6 +1660,27 @@ done
 
 TMP_LS=$(ls -la /data/local/tmp 2>/dev/null | tail -n +2 | grep -v '^total')
 [ -n "$TMP_LS" ] && { info "/data/local/tmp:"; echo "$TMP_LS" | while IFS= read -r L; do info "  $L"; done; }
+
+# DG7 SS: scan ATIVO de scripts/binários em /data/local/tmp e /sdcard/tmp
+for TMPDIR in /data/local/tmp /sdcard/tmp; do
+    [ -d "$TMPDIR" ] || continue
+    # Arquivos suspeitos (so/sh/bin/lua)
+    SUS_TMP=$(find "$TMPDIR" -type f \( -iname "*.so" -o -iname "*.sh" -o -iname "*.bin" -o -iname "*.lua" -o -iname "*.dex" \) 2>/dev/null | head -10)
+    if [ -n "$SUS_TMP" ]; then
+        echo "$SUS_TMP" | while IFS= read -r F; do
+            [ -n "$F" ] && alert "TMP binário/script: $F"
+        done
+        DATA_HITS=$((DATA_HITS+1))
+    fi
+    # Atividade recente (< 20min) — DG7 SS heuristic
+    RECENT_TMP=$(find "$TMPDIR" -type f -mmin -20 2>/dev/null | head -5)
+    if [ -n "$RECENT_TMP" ]; then
+        echo "$RECENT_TMP" | while IFS= read -r F; do
+            [ -n "$F" ] && alert "TMP atividade recente (<20min): $F"
+        done
+        DATA_HITS=$((DATA_HITS+1))
+    fi
+done
 
 for PKG in $CHEAT_PKGS $MEM_PKGS; do
     [ -d "/data/data/$PKG" ] && { alert "Dir cheat em /data/data: $PKG"; DATA_HITS=$((DATA_HITS+1)); }
