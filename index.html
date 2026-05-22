@@ -1157,7 +1157,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.0.0</span>
+        <span id="version">v4.3.0</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1380,7 +1380,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.0.0";
+const VERSION = "4.3.0";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -2599,6 +2599,24 @@ function extractStrings(raw, minLen) {
     return strings;
 }
 
+/* extractStrings pra Uint8Array (binários: knowledgeC.db, PowerLog, fseventsd, plist binário) */
+function extractStringsFromBytes(buf, minLen) {
+    minLen = minLen || 4;
+    const strings = [];
+    let cur = '';
+    for (let i = 0; i < buf.length; i++) {
+        const c = buf[i];
+        if (c >= 32 && c < 127) {
+            cur += String.fromCharCode(c);
+        } else {
+            if (cur.length >= minLen) strings.push(cur);
+            cur = '';
+        }
+    }
+    if (cur.length >= minLen) strings.push(cur);
+    return strings;
+}
+
 async function readSafe(file, maxBytes) {
     maxBytes = maxBytes || 20 * 1024 * 1024;
     if (file.size > maxBytes) return null;
@@ -2650,6 +2668,20 @@ function fileType(file) {
     if (name.endsWith('/swcutil_show.txt')) return 'swcutil';
     if (name.includes('crashes_and_spins/') && name.endsWith('.ips')) return 'crashIPS';
     if (name.endsWith('.mobileconfig') || name.endsWith('.stub')) return 'profile';
+
+    /* === v4.3.0 DFIR deep iOS — paridade com Android === */
+    if (name.includes('knowledge/knowledgec.db')) return 'knowledgeC'; /* app/inFocus events */
+    if (name.includes('powerlogs/currentpowerlog.plsql')) return 'powerLog'; /* CPU energy audit */
+    if (name.includes('wifi/com.apple.wifi.known-networks.plist')) return 'wifiKnown'; /* SSID history */
+    if (name.includes('wifi/com.apple.wifi.plist')) return 'wifiPlist'; /* current config + proxy */
+    if (name.includes('com.apple.networkextension.uuidcache.plist')) return 'neUUIDCache'; /* VPN tunnel UUIDs */
+    if (name.endsWith('containers.sqlite3') || name.includes('mobilecontainermanager/containers.sqlite3')) return 'containersDb'; /* AppGroups */
+    if (name.includes('shared/appgroup/') && name.endsWith('metadata.plist')) return 'appGroupMeta';
+    if (name.includes('.fseventsd/')) return 'fsEvents'; /* file creation/delete recent */
+    if (name.includes('shutdown.log')) return 'shutdownLog'; /* jailbreakd SIGTERM */
+    if (name.includes('tailspindb/uuidtobinarylocations.bplist')) return 'tailspin'; /* binary paths with /var/jb */
+    if (name.includes('itunesstored/downloads.28.sqlitedb')) return 'storeDownloads'; /* App Store download history */
+
     if (name.endsWith('.plist')) return 'plist';
     if (name.endsWith('.txt') || name.endsWith('.log') || name.endsWith('.log.0') || name.endsWith('.log.1')) return 'text';
     if (name.endsWith('.json')) return 'json';
@@ -3285,6 +3317,160 @@ async function handleSysdiagnose(filesList, opts) {
 
             if (installed.size === 0 && uninstalled.size === 0 && payloadTypes.size === 0) {
                 ok("MCProfileEvents: sem eventos de profile suspeitos");
+            }
+        }
+    }
+
+    // ─── SCAN PASS 2.7: knowledgeC.db — bundles em /app/inFocus durante session FF ───
+    // (binário SQLite; sem decoder JS, mas strings ASCII revelam bundle IDs)
+    if (byType.knowledgeC) {
+        const SIDELOAD_HINTS = ['LiveContainer','SideStore','TrollStore','Sileo','Cydia','Zebra','Taurine','Dopamine','iGameGod','Filza','Misaka','KSign','KravaSign','AltStore','TrollRestore','vnodebypass'];
+        for (const f of byType.knowledgeC) {
+            const buf = new Uint8Array(await f.arrayBuffer());
+            const text = extractStringsFromBytes(buf, 5);
+            const bundles = new Set();
+            for (const s of text) {
+                if (/^[a-z][a-z0-9._-]+\.(app|live|tweak|store)$/i.test(s)) bundles.add(s);
+                if (/^[a-z][a-z0-9._-]+(\.[a-z0-9._-]+){2,}$/i.test(s) && s.length < 80) bundles.add(s);
+                // matches diretas com brand names
+                for (const hint of SIDELOAD_HINTS) {
+                    if (s.includes(hint)) {
+                        alertF(`[CRITICAL] knowledgeC.db contém referência a sideload tool: "${hint}"`,
+                               `Bundle ${s} esteve em foco durante sessões — string em ${f.name}`);
+                    }
+                }
+            }
+            ok(`knowledgeC.db: ${bundles.size} bundle IDs detectados em strings`);
+            for (const b of bundles) {
+                const c = classifyBundle(b);
+                if (c) alertF(`[${c.sev}] knowledgeC trace: ${b}`, c.desc + " (estava em foco durante sessão)");
+            }
+        }
+    }
+
+    // ─── SCAN PASS 2.8: PowerLog — CPU anomalies (mod menu overlay deixa pegada) ───
+    if (byType.powerLog) {
+        for (const f of byType.powerLog) {
+            const buf = new Uint8Array(await f.arrayBuffer());
+            const text = extractStringsFromBytes(buf, 5);
+            // Procura bundle IDs com energy_audit (apps que consumiram bateria)
+            const seen = new Set();
+            for (const s of text) {
+                if (/^[a-z][a-z0-9._-]+(\.[a-z0-9._-]+){2,}$/i.test(s) && s.length < 80) seen.add(s);
+            }
+            ok(`PowerLog: ${seen.size} bundle IDs no histórico de energy`);
+            for (const b of seen) {
+                const c = classifyBundle(b);
+                if (c && c.sev === 'CRITICAL') {
+                    alertF(`[CRITICAL] PowerLog energy_audit: ${b}`, c.desc + " (consumiu CPU/bateria — overlay ativo)");
+                }
+            }
+        }
+    }
+
+    // ─── SCAN PASS 2.9: WiFi known-networks — SSIDs suspeitos (CheatCafe, etc.) ───
+    if (byType.wifiKnown) {
+        for (const f of byType.wifiKnown) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            // SSIDString aparece como <key>SSIDString</key><string>NomeDaRede</string>
+            const ssids = [...raw.matchAll(/<key>SSIDString<\/key>\s*<string>([^<]+)<\/string>/g)].map(m => m[1]);
+            ok(`WiFi known-networks: ${ssids.length} SSIDs no histórico`);
+            for (const ssid of ssids) {
+                if (/(cheat|mod|panel|mitm|proxy|hack|rooted|trolls|sileo|injector|ffh4x|teambot|panelff)/i.test(ssid)) {
+                    alertF(`[HIGH] SSID SUSPEITO no histórico de redes: "${ssid}"`,
+                           "Rede já conectada com nome indicador de cheat infra");
+                }
+            }
+        }
+    }
+
+    // ─── SCAN PASS 2.10: WiFi proxy config ───
+    if (byType.wifiPlist) {
+        for (const f of byType.wifiPlist) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            // HTTPProxy / HTTPSProxy / SOCKSProxy em wifi.plist
+            if (/<key>HTTPProxy<\/key>|<key>HTTPSProxy<\/key>|<key>SOCKSProxy<\/key>/i.test(raw)) {
+                const proxyMatch = raw.match(/<key>HTTP[S]?Proxy<\/key>\s*<string>([^<]+)<\/string>/i);
+                alertF(`[CRITICAL] WiFi com PROXY configurado`,
+                       proxyMatch ? `proxy=${proxyMatch[1]} — TODO tráfego do FF passa por aqui` : 'Proxy ativo na rede WiFi');
+            }
+        }
+    }
+
+    // ─── SCAN PASS 2.11: AppGroup containers (LiveContainer, SideStore footprint) ───
+    if (byType.appGroupMeta) {
+        const cheatGroups = ['LiveContainer','SideStore','TrollStore','AltStore','Misaka','RootHide','Dopamine'];
+        for (const f of byType.appGroupMeta) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            for (const hint of cheatGroups) {
+                if (raw.includes(hint)) {
+                    alertF(`[CRITICAL] AppGroup container com referência: ${hint}`,
+                           `Path: ${f.webkitRelativePath || f.name} — JB/sideload tool deixou shared container`);
+                }
+            }
+        }
+    }
+
+    // ─── SCAN PASS 2.12: FSEvents — criação recente de dylibs (tweak inject) ───
+    if (byType.fsEvents) {
+        let dylibCreates = 0;
+        for (const f of byType.fsEvents) {
+            const buf = new Uint8Array(await f.arrayBuffer());
+            const text = extractStringsFromBytes(buf, 5);
+            for (const s of text) {
+                if (/\.dylib$/i.test(s) && /(MobileSubstrate|TweakInject|Frameworks\/[^\/]+\.dylib|LiveContainer|SideStore)/i.test(s)) {
+                    alertF(`[HIGH] FSEvents — criação suspeita de dylib: ${s.slice(0, 200)}`, `em ${f.name}`);
+                    dylibCreates++;
+                }
+                if (/\.ipa$/i.test(s) && /Inbox/i.test(s)) {
+                    warn(`[MEDIUM] FSEvents — IPA sideload via Inbox: ${s.slice(0, 200)}`);
+                }
+            }
+            if (dylibCreates > 0) break; // 1 fseventsd file já é suficiente
+        }
+    }
+
+    // ─── SCAN PASS 2.13: shutdown.log — jailbreakd SIGTERM ===
+    if (byType.shutdownLog) {
+        for (const f of byType.shutdownLog) {
+            const raw = await readSafe(f);
+            if (!raw) continue;
+            const jbProcs = (raw.match(/(jailbreakd|launchdhook|substituted|bootstrapd|dopamine-init|palera1nd)/gi) || []);
+            const setProcs = [...new Set(jbProcs.map(s => s.toLowerCase()))];
+            for (const p of setProcs) {
+                alertF(`[CRITICAL] shutdown.log mostra processo de JB: ${p}`, "Device estava com jailbreak ativo durante último shutdown");
+            }
+        }
+    }
+
+    // ─── SCAN PASS 2.14: tailspin/UUIDToBinaryLocations — paths /var/jb/ visíveis ===
+    if (byType.tailspin) {
+        for (const f of byType.tailspin) {
+            const buf = new Uint8Array(await f.arrayBuffer());
+            const text = extractStringsFromBytes(buf, 5);
+            const jbPaths = text.filter(s => /(\/var\/jb\/|LiveContainer\.app|TrollStore\.app|Sileo\.app|Zebra\.app|Cydia\.app|MobileSubstrate)/i.test(s));
+            const seen = new Set();
+            for (const p of jbPaths.slice(0, 15)) {
+                if (seen.has(p)) continue; seen.add(p);
+                alertF(`[CRITICAL] Binary path com JB indicator: ${p.slice(0, 200)}`);
+            }
+        }
+    }
+
+    // ─── SCAN PASS 2.15: itunesstored downloads.28.sqlitedb (origem real do FF) ===
+    if (byType.storeDownloads) {
+        for (const f of byType.storeDownloads) {
+            const buf = new Uint8Array(await f.arrayBuffer());
+            const text = extractStringsFromBytes(buf, 5);
+            const hasFF = text.some(s => /com\.dts\.freefire/i.test(s));
+            if (!hasFF) {
+                // FF instalado mas downloads.28.sqlitedb não tem registro = não veio da App Store
+                warn(`[HIGH] FF presente mas SEM registro em downloads.28.sqlitedb — sideload puro (App Store não baixou)`);
+            } else {
+                ok("downloads.28.sqlitedb tem registro de FF (instalação via App Store legítima)");
             }
         }
     }
