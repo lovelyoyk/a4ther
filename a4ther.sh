@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.1.0 | LS Aluguel
+#  A4ther Systems v4.2.0 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.1.0"
+VERSION="4.2.0"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -891,6 +891,43 @@ for PKG in $FF_PKGS; do
                     ok "Shader size sanity: ${SH_SIZE_MB}MB (1-3MB esperado) ✓"
                 fi
             fi
+
+            # === OlhosDoCapeta2: shader perm + UID + nano forensics ===
+            # Permissão esperada: 660 (rw-rw----). Qualquer outra = manipulação
+            SH_PERM=$(stat -c '%a' "$LATEST_SHADER" 2>/dev/null)
+            if [ -n "$SH_PERM" ]; then
+                case "$SH_PERM" in
+                    660|0660) ok "Shader perm: 660 ✓" ;;
+                    *) alert "Shader perm ANORMAL: $SH_PERM (esperado 660) — modificado manualmente" ;;
+                esac
+            fi
+            # UID 2000 = shell/adb (transferido via ADB push)
+            SH_UID=$(stat -c '%u' "$LATEST_SHADER" 2>/dev/null)
+            if [ "$SH_UID" = "2000" ]; then
+                alert "Shader UID=2000 (shell/ADB) — transferido via ADB push, não criado in-game"
+            fi
+            # Modify != Change = alteração manual posterior
+            SH_MOD=$(stat -c '%Y' "$LATEST_SHADER" 2>/dev/null)
+            SH_CHG=$(stat -c '%Z' "$LATEST_SHADER" 2>/dev/null)
+            if [ -n "$SH_MOD" ] && [ -n "$SH_CHG" ] && [ "$SH_MOD" != "$SH_CHG" ]; then
+                # Diff pequeno (alguns segundos) é normal por atime; diff > 60s = alteração
+                DIFF=$((SH_CHG - SH_MOD))
+                [ "$DIFF" -lt 0 ] && DIFF=$((-DIFF))
+                if [ "$DIFF" -gt 60 ] 2>/dev/null; then
+                    alert "Shader Modify != Change (delta ${DIFF}s) — alteração manual"
+                fi
+            fi
+            # Nanos com pattern 999 ou zeroed = bypass timestamp
+            SH_ANANO=$(stat "$LATEST_SHADER" 2>/dev/null | grep 'Access:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
+            case "$SH_ANANO" in
+                000000000) alert "Shader nanos ZERADOS — bypass de timestamp" ;;
+            esac
+            echo "$SH_ANANO" | grep -qE '[0-9]999[0-9]' && alert "Shader nanos pattern '999' (manipulação): $SH_ANANO"
+            # Múltiplos shaders detectados (legítimo cria UM por sessão; vários = limpou só algum)
+            SH_COUNT=$(ls "$GAB_DIR"/shaders* 2>/dev/null | wc -l)
+            if [ -n "$SH_COUNT" ] && [ "$SH_COUNT" -gt 1 ] 2>/dev/null; then
+                warn "Múltiplos shaders detectados ($SH_COUNT) — esperado 1 por sessão"
+            fi
         fi
     fi
 done
@@ -970,11 +1007,55 @@ for PKG in $FF_PKGS; do
         done
         # === DG7 SS: replay antes do boot do sistema = replay copiado ===
         LATEST_BIN=$(ls -t "$RDIR"/*.bin 2>/dev/null | head -1)
+        LATEST_JSON=$(ls -t "$RDIR"/*.json 2>/dev/null | head -1)
         if [ -n "$LATEST_BIN" ]; then
             REPLAY_TS=$(stat -c '%Y' "$LATEST_BIN" 2>/dev/null)
             BOOT_TS=$(grep btime /proc/stat 2>/dev/null | awk '{print $2}')
             if [ -n "$REPLAY_TS" ] && [ -n "$BOOT_TS" ] && [ "$REPLAY_TS" -lt "$BOOT_TS" ] 2>/dev/null; then
                 alert "Replay mais recente é ANTERIOR ao boot do sistema — possível passador de replay"
+            fi
+        fi
+
+        # === OlhosDoCapeta2: NANOSECOND FORENSICS ===
+        # Bypass de timestamp deixa nanos zerados (000000000) ou pattern 999
+        # Replay legítimo: A=M=C (Access/Modify/Change identicos) + nanos BIN ~ JSON
+        if [ -n "$LATEST_BIN" ] && [ -n "$LATEST_JSON" ]; then
+            ABIN=$(stat "$LATEST_BIN"  2>/dev/null | grep 'Access:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
+            MBIN=$(stat "$LATEST_BIN"  2>/dev/null | grep 'Modify:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
+            CBIN=$(stat "$LATEST_BIN"  2>/dev/null | grep 'Change:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
+            AJSON=$(stat "$LATEST_JSON" 2>/dev/null | grep 'Access:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
+            MJSON=$(stat "$LATEST_JSON" 2>/dev/null | grep 'Modify:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
+            CJSON=$(stat "$LATEST_JSON" 2>/dev/null | grep 'Change:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
+
+            # Nanos zerados em qualquer = bypass
+            for N in "$ABIN" "$MBIN" "$CBIN" "$AJSON" "$MJSON" "$CJSON"; do
+                case "$N" in
+                    000000000) alert "Replay nanos ZERADOS — bypass de timestamp" ;;
+                esac
+            done
+            # Pattern 999 em qualquer nano = manipulação
+            for N in "$ABIN" "$MBIN" "$CBIN" "$AJSON" "$MJSON" "$CJSON"; do
+                echo "$N" | grep -qE '[0-9]999[0-9]' && alert "Replay nanos com pattern '999' (manipulação): $N"
+            done
+            # BIN: Modify != Change = alteração manual após criação
+            if [ -n "$MBIN" ] && [ -n "$CBIN" ] && [ "$MBIN" != "$CBIN" ]; then
+                alert "Replay BIN: Modify != Change (nanos) — alteração manual"
+            fi
+            # JSON: Modify != Change
+            if [ -n "$MJSON" ] && [ -n "$CJSON" ] && [ "$MJSON" != "$CJSON" ]; then
+                alert "Replay JSON: Modify != Change (nanos) — alteração manual"
+            fi
+            # BIN/JSON primeiro dígito: replay legítimo gera os 2 ao mesmo tempo → 1o digito do nano BATE
+            BF=$(echo "$ABIN"  | cut -c1)
+            JF=$(echo "$AJSON" | cut -c1)
+            if [ -n "$BF" ] && [ -n "$JF" ] && [ "$BF" != "$JF" ]; then
+                alert "Replay BIN+JSON nanos divergentes — NÃO foram gerados juntos"
+            fi
+            # Timezone consistency (offset do stat)
+            TZ_BIN=$(stat "$LATEST_BIN" 2>/dev/null | grep 'Modify:' | tail -1 | sed 's/.*\([-+][0-9][0-9][0-9][0-9]\)$/\1/')
+            TZ_DEV=$(date +%z 2>/dev/null)
+            if [ -n "$TZ_BIN" ] && [ -n "$TZ_DEV" ] && [ "$TZ_BIN" != "$TZ_DEV" ]; then
+                alert "Timezone do REPLAY ($TZ_BIN) ≠ device atual ($TZ_DEV) — replay de outro fuso (transferido?)"
             fi
         fi
     fi
@@ -1081,6 +1162,62 @@ if [ -d /sdcard/MIUI/backup/AllBackup ]; then
     [ -n "$MIUI_BK" ] && echo "$MIUI_BK" | while IFS= read -r L; do
         [ -n "$L" ] && warn "APK em MIUI backup: $L"
     done
+fi
+
+# === OlhosDoCapeta2: SMART CHEAT KEYWORD SCAN ===
+# Procura arquivos com nomes de cheats em /sdcard inteiro (modificados em 2026)
+# Lista de keywords expandida (silent_aim, neck_aim, drip, luxe, hgmods, etc.)
+if have find; then
+    SMART_IGNORE='Android/data|Android/obb|DCIM|Pictures|Movies|Music|WhatsApp|Telegram|\.thumbnails|FreeFire|com\.dts\.'
+    SMART_KEYS='aim(bot|lock|assist)|silent.?aim|neck.?aim|no.?recoil|recoil.?off|wall.?(view|hack)|visionhack|overlayhack|injector|memoryhack|memhack|speedhack|bypass|mod.?menu|cheat.?panel|vip.?tool|ff.?tool|macro.?fire|script.?aim|passador|replay.?(tool|edit)|drip.?mod|luxe.?mod|hgmods|shizuku.?ff|mt.?manager.?ff|ffh4x|fatality|polar.?bear|teambot|op999|panelff|nova.?esp|huyjit|esp.?ff|gameguardian|gg.?script|lua.?ff'
+    SMART_RES=$(find /storage/emulated/0 -type f -newermt "2026-01-01" 2>/dev/null \
+        | grep -viE "$SMART_IGNORE" \
+        | grep -iE "$SMART_KEYS" \
+        | head -20)
+    if [ -n "$SMART_RES" ]; then
+        echo "$SMART_RES" | while IFS= read -r L; do
+            [ -n "$L" ] && alert "Smart keyword match: $L"
+        done
+    else
+        ok "Smart keyword scan limpo"
+    fi
+fi
+
+# === OlhosDoCapeta2: ATIVIDADE PÓS-PARTIDA ===
+# Arquivos em MReplays/gameassetbundles modificados < 5min = mexeram após a partida
+for FFPKG in com.dts.freefireth com.dts.freefiremax; do
+    REPLAYS_DIR="/storage/emulated/0/Android/data/$FFPKG/files/MReplays"
+    GAB_DIR_CHECK="/storage/emulated/0/Android/data/$FFPKG/files/contentcache/Optional/android/gameassetbundles"
+    POS_PARTIDA=""
+    [ -d "$REPLAYS_DIR" ]   && POS_PARTIDA=$(find "$REPLAYS_DIR" -type f -mmin -5 2>/dev/null | head -3)
+    [ -d "$GAB_DIR_CHECK" ] && POS_PARTIDA="$POS_PARTIDA
+$(find "$GAB_DIR_CHECK" -type f -mmin -5 2>/dev/null | head -3)"
+    [ -n "$POS_PARTIDA" ] && echo "$POS_PARTIDA" | while IFS= read -r L; do
+        [ -n "$L" ] && warn "Arquivo modificado < 5min (pós-partida): $L"
+    done
+done
+
+# === OlhosDoCapeta2: HORA AUTOMÁTICA DESLIGADA ===
+# Usuário desliga hora automática pra spoofar timestamp dos replays
+AUTO_TIME=$(settings get global auto_time 2>/dev/null)
+AUTO_TZ=$(settings get global auto_time_zone 2>/dev/null)
+if [ "$AUTO_TIME" = "0" ]; then
+    alert "Hora automática DESATIVADA (auto_time=0) — usuário pode spoofar timestamps"
+fi
+if [ "$AUTO_TZ" = "0" ]; then
+    warn "Fuso automático DESATIVADO (auto_time_zone=0)"
+fi
+# Inconsistência boot vs uptime (alteração manual da hora durante a sessão)
+BTIME_NOW=$(grep btime /proc/stat 2>/dev/null | awk '{print $2}')
+NOW_TS=$(date +%s)
+UPTIME_S=$(cut -d. -f1 /proc/uptime)
+if [ -n "$BTIME_NOW" ] && [ -n "$UPTIME_S" ]; then
+    EXPECTED_UP=$((NOW_TS - BTIME_NOW))
+    DIFF_UP=$((EXPECTED_UP - UPTIME_S))
+    [ "$DIFF_UP" -lt 0 ] && DIFF_UP=$((-DIFF_UP))
+    if [ "$DIFF_UP" -gt 120 ] 2>/dev/null; then
+        alert "Inconsistência tempo: uptime vs (now-boot) diferem em ${DIFF_UP}s — hora foi alterada manualmente"
+    fi
 fi
 
 # ============================================================
