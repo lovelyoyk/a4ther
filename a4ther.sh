@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.3.0 | LS Aluguel
+#  A4ther Systems v4.4.1 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.3.0"
+VERSION="4.4.1"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -3437,5 +3437,161 @@ else
 fi
 emit ""
 emit "  ${CC}›${CN} Relatório salvo em: ${CW}$REPORT${CN}"
+emit ""
+
+# ============================================================
+#  COLETA DE DUMP COMPLETO (estilo KellerDump — 62+ arquivos raw)
+#  Gera tar.gz com TODOS os logs/dumpsys/settings pra reanálise
+# ============================================================
+if [ "$REPORT" != "/dev/null" ]; then
+    REPORT_DIR=$(dirname "$REPORT")
+    DUMP_DIR="$REPORT_DIR/a4ther_dump_${TS}"
+    DUMP_TAR="$REPORT_DIR/a4ther_dump_${TS}.tar.gz"
+
+    if mkdir -p "$DUMP_DIR" 2>/dev/null; then
+        emit "${CC}›${CN} Coletando dump completo (logs+dumpsys+settings)…"
+
+        # ─ Device info + sistema ─
+        cat > "$DUMP_DIR/device_info.txt" <<EOF
+versao_android:$(getprop ro.build.version.release 2>/dev/null)
+sdk:$(getprop ro.build.version.sdk 2>/dev/null)
+modelo:$(getprop ro.product.model 2>/dev/null)
+fabricante:$(getprop ro.product.brand 2>/dev/null)
+device:$(getprop ro.product.device 2>/dev/null)
+serial:$(getprop ro.serialno 2>/dev/null || getprop ro.boot.serialno 2>/dev/null)
+hwid:$(settings get secure android_id 2>/dev/null)
+fingerprint:$(getprop ro.build.fingerprint 2>/dev/null)
+build_date:$(getprop ro.build.date 2>/dev/null)
+hardware:$(getprop ro.hardware 2>/dev/null)
+cpu_abi:$(getprop ro.product.cpu.abi 2>/dev/null)
+cpu_abilist:$(getprop ro.product.cpu.abilist 2>/dev/null)
+EOF
+        # Integridade props (root/bootloader detection)
+        cat > "$DUMP_DIR/integridade_props.txt" <<EOF
+fingerprint:$(getprop ro.build.fingerprint 2>/dev/null)
+tags:$(getprop ro.build.tags 2>/dev/null)
+debuggable:$(getprop ro.debuggable 2>/dev/null)
+secure:$(getprop ro.secure 2>/dev/null)
+verifiedbootstate:$(getprop ro.boot.verifiedbootstate 2>/dev/null)
+veritymode:$(getprop ro.boot.veritymode 2>/dev/null)
+flash_locked:$(getprop ro.boot.flash.locked 2>/dev/null)
+warranty_bit:$(getprop ro.boot.warranty_bit 2>/dev/null)
+vbmeta_device_state:$(getprop ro.boot.vbmeta.device_state 2>/dev/null)
+avb_version:$(getprop ro.boot.avb_version 2>/dev/null)
+service_adb_root:$(getprop service.adb.root 2>/dev/null)
+bootmode:$(getprop ro.bootmode 2>/dev/null)
+cpu_abi:$(getprop ro.product.cpu.abi 2>/dev/null)
+cpu_abilist:$(getprop ro.product.cpu.abilist 2>/dev/null)
+hardware:$(getprop ro.hardware 2>/dev/null)
+EOF
+        # Properties completas
+        getprop > "$DUMP_DIR/propriedades.txt" 2>/dev/null
+
+        # ─ /proc snapshots ─
+        cat /proc/cpuinfo  > "$DUMP_DIR/cpuinfo.txt"  2>/dev/null
+        cat /proc/meminfo  > "$DUMP_DIR/meminfo.txt"  2>/dev/null
+        cat /proc/mounts   > "$DUMP_DIR/mounts.txt"   2>/dev/null
+        cat /proc/loadavg  > "$DUMP_DIR/loadavg.txt"  2>/dev/null
+        cat /proc/version  > "$DUMP_DIR/kernel.txt"   2>/dev/null
+        uptime             > "$DUMP_DIR/uptime.txt"   2>/dev/null
+        date               > "$DUMP_DIR/data_hora.txt" 2>/dev/null
+        df -h              > "$DUMP_DIR/disco.txt"    2>/dev/null
+        free -h 2>/dev/null > "$DUMP_DIR/memoria.txt"
+        top -n 1 -b 2>/dev/null > "$DUMP_DIR/top.txt"
+        ps -A              > "$DUMP_DIR/processos.txt" 2>/dev/null
+
+        # ─ SELinux ─
+        getenforce > "$DUMP_DIR/selinux.txt" 2>/dev/null
+        ls -lZ /system/bin/su 2>/dev/null > "$DUMP_DIR/selinux_root.txt"
+
+        # ─ Network (proxy/dns/route) ─
+        ip addr               > "$DUMP_DIR/ip.txt"           2>/dev/null
+        ip route              > "$DUMP_DIR/route.txt"        2>/dev/null
+        netstat -an 2>/dev/null > "$DUMP_DIR/netstat.txt"
+        cat /proc/net/tcp     >  "$DUMP_DIR/netstat.txt"     2>/dev/null
+        cat /proc/net/tcp6    >> "$DUMP_DIR/netstat.txt"     2>/dev/null
+        cat > "$DUMP_DIR/http_proxy.txt" <<EOF
+global.http_proxy:$(settings get global http_proxy 2>/dev/null)
+global.global_http_proxy_host:$(settings get global global_http_proxy_host 2>/dev/null)
+global.global_http_proxy_port:$(settings get global global_http_proxy_port 2>/dev/null)
+global.global_http_proxy_pac_url:$(settings get global global_http_proxy_pac_url 2>/dev/null)
+global.private_dns_mode:$(settings get global private_dns_mode 2>/dev/null)
+global.private_dns_specifier:$(settings get global private_dns_specifier 2>/dev/null)
+EOF
+
+        # ─ Settings (3 namespaces) ─
+        settings list global > "$DUMP_DIR/settings_global.txt" 2>/dev/null
+        settings list secure > "$DUMP_DIR/settings_secure.txt" 2>/dev/null
+        settings list system > "$DUMP_DIR/settings_system.txt" 2>/dev/null
+
+        # ─ Accessibility (overlay/macro) ─
+        settings get secure enabled_accessibility_services > "$DUMP_DIR/enabled_accessibility_services.txt" 2>/dev/null
+        settings get secure accessibility_enabled > "$DUMP_DIR/accessibility_enabled.txt" 2>/dev/null
+
+        # ─ Kernel ring buffer (dmesg) ─
+        dmesg 2>/dev/null > "$DUMP_DIR/dmesg.txt"
+
+        # ─ Packages ─
+        pm list packages -f 2>/dev/null > "$DUMP_DIR/pacotes_com_caminho.txt"
+        pm list packages    2>/dev/null > "$DUMP_DIR/pacotes.txt"
+
+        # ─ Logcat (4 buffers + crash) ─
+        logcat -d -b main   -t 10000 2>/dev/null > "$DUMP_DIR/logcat_main.txt"
+        logcat -d -b system -t 10000 2>/dev/null > "$DUMP_DIR/logcat_system.txt"
+        logcat -d -b events -t 5000  2>/dev/null > "$DUMP_DIR/logcat_events.txt"
+        logcat -d -b radio  -t 5000  2>/dev/null > "$DUMP_DIR/logcat_radio.txt"
+        logcat -d -b crash           2>/dev/null > "$DUMP_DIR/logcat_crash.txt"
+        logcat -d -v threadtime -t 5000 2>/dev/null > "$DUMP_DIR/logcat_all_threadtime_tail.txt"
+
+        # ─ Dumpsys (18 serviços + FF específico) ─
+        for SVC in activity alarm appops audio battery batterystats connectivity \
+                   cpuinfo diskstats display input jobscheduler location meminfo \
+                   netstats notification package power procstats usb wifi window; do
+            dumpsys "$SVC" 2>/dev/null > "$DUMP_DIR/dumpsys_${SVC}.txt"
+        done
+        # FF específico
+        dumpsys package com.dts.freefireth 2>/dev/null > "$DUMP_DIR/dumpsys_package_freefireth.txt"
+        dumpsys package com.dts.freefiremax 2>/dev/null > "$DUMP_DIR/dumpsys_package_freefiremax.txt"
+
+        # ─ Overlays (ESP detection dedicado) ─
+        dumpsys window windows 2>/dev/null | grep -E 'Window #|mOwnerUid|mPackage|TYPE_(APPLICATION_OVERLAY|PHONE|SYSTEM_ALERT)' > "$DUMP_DIR/overlays_dumpsys.txt"
+        dumpsys appops 2>/dev/null | grep -B5 'SYSTEM_ALERT_WINDOW: allow' > "$DUMP_DIR/overlays_cmd.txt"
+
+        # ─ Usage stats (sequence apps abertos) ─
+        dumpsys usagestats 2>/dev/null | head -2000 > "$DUMP_DIR/usagestats_tail.txt"
+
+        # ─ Resumo ─
+        cat > "$DUMP_DIR/resumo.txt" <<EOF
+=== A4THER DUMP RESUMO ===
+Coletado em: $(date)
+Dispositivo: $(getprop ro.product.brand) $(getprop ro.product.model)
+Android: $(getprop ro.build.version.release) (API $(getprop ro.build.version.sdk))
+Kernel: $(uname -a 2>/dev/null)
+SELinux: $(getenforce 2>/dev/null)
+Uptime:  $(uptime 2>/dev/null)
+Veredito do scan: ${RC} (0=LIMPO 1=REVISAR 2=W.O)
+Alertas: ${ALERTS} · Avisos: ${WARNINGS}
+EOF
+
+        # Inclui o próprio relatório TXT no dump (forensics: análise + raw juntos)
+        cp "$REPORT" "$DUMP_DIR/a4ther_relatorio.txt" 2>/dev/null
+
+        # ─ Pack em tar.gz ─
+        cd "$REPORT_DIR" 2>/dev/null && \
+            tar -czf "$DUMP_TAR" "$(basename "$DUMP_DIR")" 2>/dev/null && \
+            rm -rf "$DUMP_DIR" 2>/dev/null
+        if [ -f "$DUMP_TAR" ]; then
+            DUMP_SIZE=$(du -h "$DUMP_TAR" 2>/dev/null | awk '{print $1}')
+            DUMP_COUNT=$(tar -tzf "$DUMP_TAR" 2>/dev/null | wc -l)
+            emit "  ${CG}›${CN} Dump completo: ${CW}$DUMP_TAR${CN} (${DUMP_SIZE}, $DUMP_COUNT arquivos)"
+            emit "  ${CC}›${CN} Pra enviar pro analista:"
+            emit "      ${CW}cp \"$DUMP_TAR\" /sdcard/Download/${CN}"
+            emit "      depois abra Files no Android → /sdcard/Download/ → compartilhar"
+        else
+            emit "  ${CY}›${CN} Dump tar.gz falhou (sem espaço/permissão?), pasta: $DUMP_DIR"
+        fi
+    fi
+fi
+
 emit ""
 exit "$RC"
