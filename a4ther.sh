@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.2.0 | LS Aluguel
+#  A4ther Systems v4.3.0 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.2.0"
+VERSION="4.3.0"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -590,6 +590,195 @@ if have find; then
 fi
 
 [ "$HOOK_HITS" = "0" ] && ok "Sem framework de hook"
+
+# ============================================================
+#  5.5 DFIR DEEP FORENSICS (process inspection)
+#  proc/maps, sockets, dumpsys, dropbox, comm/cmdline spoof
+# ============================================================
+header "DFIR DEEP — Process / Memory / Sockets / Crashes"
+
+DFIR_HITS=0
+FF_PID=$(pidof com.dts.freefireth 2>/dev/null)
+[ -z "$FF_PID" ] && FF_PID=$(pidof com.dts.freefiremax 2>/dev/null)
+
+# /proc/<FF>/maps — libs injetadas (Frida gadget, Substrate, Dobby, xhook, sandhook)
+if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/maps" ]; then
+    INJECTED=$(grep -iE '(frida|gadget|substrate|libdobby|libxhook|libgum|libwhale|libsandhook|libepic|libDexposed|libsubstitute|libellekit|libhooker|cydia|tweak)' "/proc/$FF_PID/maps" 2>/dev/null | awk '{print $6}' | sort -u | head -10)
+    if [ -n "$INJECTED" ]; then
+        alert "Libs INJETADAS no processo FF (PID $FF_PID):"
+        echo "$INJECTED" | while IFS= read -r L; do [ -n "$L" ] && alert "  → $L"; done
+        DFIR_HITS=$((DFIR_HITS+1))
+    fi
+    # Sections com RWX (JIT inject típico de Frida/Substrate)
+    RWX_COUNT=$(grep -c ' rwx[ps]' "/proc/$FF_PID/maps" 2>/dev/null || echo 0)
+    if [ "$RWX_COUNT" -gt 5 ] 2>/dev/null; then
+        warn "FF tem $RWX_COUNT sections RWX (JIT inject ou cheat dynamic patcher)"
+        DFIR_HITS=$((DFIR_HITS+1))
+    fi
+    # Libs fora dos paths legítimos (sideload manual)
+    SUS_LIB_PATHS=$(awk '$6!="" && $6!~/\/(system|apex|vendor|data\/app|data\/dalvik-cache|memfd|dev)/ {print $6}' "/proc/$FF_PID/maps" 2>/dev/null | sort -u | head -5)
+    if [ -n "$SUS_LIB_PATHS" ]; then
+        warn "Libs de paths não-legítimos no FF:"
+        echo "$SUS_LIB_PATHS" | while IFS= read -r L; do [ -n "$L" ] && warn "  → $L"; done
+    fi
+fi
+
+# /proc/net/unix — abstract socket @frida (signature estável Frida server)
+FRIDA_SOCKETS=$(cat /proc/net/unix 2>/dev/null | grep -iE '@(frida|gum-js|linjector)' | head -5)
+if [ -n "$FRIDA_SOCKETS" ]; then
+    alert "Frida abstract socket ATIVO em /proc/net/unix:"
+    echo "$FRIDA_SOCKETS" | while IFS= read -r L; do alert "  $L"; done
+    DFIR_HITS=$((DFIR_HITS+1))
+fi
+
+# Threads do FF com nomes Frida (gum-js-loop, gmain, pool-frida-*)
+if [ -n "$FF_PID" ] && [ -d "/proc/$FF_PID/task" ]; then
+    FRIDA_THREADS=$(for T in /proc/$FF_PID/task/*/comm; do cat "$T" 2>/dev/null; done | grep -iE '^(gum-js-loop|gmain|pool-frida|linjector|frida)' | head -5)
+    if [ -n "$FRIDA_THREADS" ]; then
+        alert "Threads de Frida/Gum encontradas no FF:"
+        echo "$FRIDA_THREADS" | sort -u | while IFS= read -r L; do alert "  thread=$L"; done
+        DFIR_HITS=$((DFIR_HITS+1))
+    fi
+fi
+
+# /proc/<pid>/comm vs cmdline spoof check (MagiskHide-style hidden processes)
+SPOOF_PROCS=""
+for P in /proc/[0-9]*; do
+    [ -r "$P/comm" ] || continue
+    COMM=$(cat "$P/comm" 2>/dev/null)
+    CMD=$(cat "$P/cmdline" 2>/dev/null | tr '\0' ' ' | awk '{print $1}')
+    [ -z "$COMM" ] || [ -z "$CMD" ] && continue
+    CMD_BIN=$(basename "$CMD" 2>/dev/null)
+    # Mismatch: comm não é prefixo de cmdline binname
+    case "$CMD_BIN" in
+        "$COMM"*|kworker*|kthread*|init|swapper*|systemd*) ;;
+        *) [ "${#COMM}" -gt 3 ] && [ "${#CMD_BIN}" -gt 3 ] && \
+           SPOOF_PROCS="$SPOOF_PROCS
+pid=$(basename $P) comm=$COMM cmd=$CMD_BIN" ;;
+    esac
+done
+SPOOF_LIST=$(echo "$SPOOF_PROCS" | head -5 | grep -v '^$')
+if [ -n "$SPOOF_LIST" ]; then
+    echo "$SPOOF_LIST" | while IFS= read -r L; do
+        [ -n "$L" ] && warn "Process comm≠cmdline (spoof?): $L"
+    done
+fi
+
+# /proc/<pid>/cgroup — cheat process executando em uid_2000 (adb shell)
+ADB_PROCS=$(grep -l 'uid_2000' /proc/[0-9]*/cgroup 2>/dev/null | head -5)
+if [ -n "$ADB_PROCS" ]; then
+    echo "$ADB_PROCS" | while IFS= read -r CGFILE; do
+        PID=$(echo "$CGFILE" | sed 's|/proc/||;s|/cgroup||')
+        CMD=$(cat "/proc/$PID/cmdline" 2>/dev/null | tr '\0' ' ' | head -c 120)
+        [ -n "$CMD" ] && warn "Process em uid_2000 (ADB shell forked): pid=$PID cmd=$CMD"
+    done
+fi
+
+# Dropbox crash history (persiste mais que tombstones)
+if [ -d /data/system/dropbox ]; then
+    DROPBOX_CHEAT=$(ls /data/system/dropbox/system_app_*crash* /data/system/dropbox/system_app_*anr* 2>/dev/null | head -10 | while IFS= read -r F; do
+        [ -z "$F" ] && continue
+        grep -lE '(libfrida|libsubstrate|libdobby|libxhook|libgum|libsandhook|libwhale)' "$F" 2>/dev/null
+    done)
+    if [ -n "$DROPBOX_CHEAT" ]; then
+        echo "$DROPBOX_CHEAT" | while IFS= read -r F; do
+            [ -n "$F" ] && alert "Crash histórico (dropbox) com libs cheat: $(basename $F)"
+        done
+        DFIR_HITS=$((DFIR_HITS+1))
+    fi
+fi
+
+# logcat ring buffer crash (window curto mas alta confidence)
+if have logcat; then
+    LOGCAT_CHEAT=$(logcat -d -b crash 2>/dev/null | grep -iE '(libfrida|libsubstrate|libdobby|libxhook|gum-js|FATAL.*com\.dts\.freefire|injector\.so|tweak\.so)' | head -5)
+    if [ -n "$LOGCAT_CHEAT" ]; then
+        echo "$LOGCAT_CHEAT" | while IFS= read -r L; do alert "logcat crash: $(echo "$L" | head -c 150)"; done
+        DFIR_HITS=$((DFIR_HITS+1))
+    fi
+fi
+
+# dumpsys window — overlays ativos POR CIMA do FF (ESP/aimbot draw)
+if have dumpsys; then
+    OVERLAYS=$(dumpsys window windows 2>/dev/null | awk '/Window #/,/mOwnerUid/' | grep -E '(mPackage|TYPE_APPLICATION_OVERLAY|TYPE_PHONE)' 2>/dev/null | head -20)
+    if [ -n "$OVERLAYS" ]; then
+        SUS_OVR=$(echo "$OVERLAYS" | grep -iE 'panel|injector|ffh4x|mod|cheat|esp|gameguardian|teambot|vipkill|fatality' | head -3)
+        [ -n "$SUS_OVR" ] && echo "$SUS_OVR" | while IFS= read -r L; do alert "Overlay SUSPEITO: $L"; done
+    fi
+    # appops SYSTEM_ALERT_WINDOW granted pra apps random (não-system)
+    APPOPS_DRAW=$(dumpsys appops 2>/dev/null | awk '/SYSTEM_ALERT_WINDOW: allow/' RS= ORS= | grep -B5 'SYSTEM_ALERT_WINDOW: allow' 2>/dev/null | head -30)
+    if [ -n "$APPOPS_DRAW" ]; then
+        # Lista os pacotes com permissão
+        PKGS_WITH_OVERLAY=$(dumpsys appops 2>/dev/null | grep -B100 'SYSTEM_ALERT_WINDOW: allow' | grep -E '^[a-zA-Z0-9_\.]+\s*:\s*\(uid=' 2>/dev/null | awk '{print $1}' | sort -u | head -10)
+        echo "$PKGS_WITH_OVERLAY" | while IFS= read -r PKG; do
+            [ -z "$PKG" ] && continue
+            case "$PKG" in
+                # Whitelist apps system + FF
+                com.android.*|com.google.*|com.miui.*|com.samsung.*|com.dts.freefiremax|com.dts.freefireth) ;;
+                *) warn "App com permissão SYSTEM_ALERT_WINDOW (overlay): $PKG" ;;
+            esac
+        done
+    fi
+fi
+
+# /data/system/usagestats — qual app antes/depois do FF (sequence forense)
+if [ -d /data/system/usagestats/0/daily ]; then
+    SUS_RECENT=$(ls -t /data/system/usagestats/0/daily/ 2>/dev/null | head -3 | while IFS= read -r F; do
+        strings "/data/system/usagestats/0/daily/$F" 2>/dev/null
+    done | grep -iE '(gameguardian|catch.me.if.you.can|lulubox|virtualxposed|panel|injector|ffh4x|mod.menu|cheat.panel|lsposed|magisk)' | sort -u | head -10)
+    if [ -n "$SUS_RECENT" ]; then
+        echo "$SUS_RECENT" | while IFS= read -r L; do alert "Usagestats — app cheat usado recentemente: $L"; done
+        DFIR_HITS=$((DFIR_HITS+1))
+    fi
+fi
+
+# pm dump installerPackageName + initiatingPackageName (Android 11+ revela installer real)
+for PKG in com.dts.freefireth com.dts.freefiremax; do
+    if pkg_installed "$PKG"; then
+        DUMP_INST=$(pm dump "$PKG" 2>/dev/null | grep -E 'installerPackageName|initiatingPackageName|originatingPackageName')
+        if [ -n "$DUMP_INST" ]; then
+            INITIATING=$(echo "$DUMP_INST" | grep initiatingPackageName | sed 's/.*=//')
+            INSTALLER=$(echo "$DUMP_INST" | grep installerPackageName | sed 's/.*=//')
+            # Real installer (initiating) deve ser Play Store
+            case "$INITIATING" in
+                com.android.vending|com.google.market) ok "  $PKG initiatingPackageName: $INITIATING (Play Store legit)" ;;
+                ""|"null") warn "  $PKG initiatingPackageName VAZIO" ;;
+                *) alert "  $PKG REAL installer (initiating): $INITIATING ≠ Play Store" ;;
+            esac
+            # Spoof check: installer != initiating = renomeado
+            if [ -n "$INSTALLER" ] && [ -n "$INITIATING" ] && [ "$INSTALLER" != "$INITIATING" ]; then
+                alert "  $PKG installerPackageName ($INSTALLER) ≠ initiatingPackageName ($INITIATING) — REAL installer foi spoofed"
+            fi
+        fi
+        # MD5 do APK base — flag se diferir da release oficial Garena (allowlist no scanner)
+        APK_BASE=$(pm path "$PKG" 2>/dev/null | head -1 | sed 's|package:||')
+        if [ -f "$APK_BASE" ] && have md5sum; then
+            APK_MD5=$(md5sum "$APK_BASE" 2>/dev/null | awk '{print $1}')
+            info "  $PKG APK MD5: $APK_MD5 ($APK_BASE)"
+            # NOTE: pra production manter allowlist de MD5 oficial Garena por release
+        fi
+    fi
+done
+
+# /data/misc/profiles/cur/0/com.dts.freefireth/primary.prof — execution profile alterado
+for PKG in com.dts.freefireth com.dts.freefiremax; do
+    PROFFILE="/data/misc/profiles/cur/0/$PKG/primary.prof"
+    if [ -r "$PROFFILE" ]; then
+        PROF_MOD=$(stat -c '%Y' "$PROFFILE" 2>/dev/null)
+        APK_BASE_PATH=$(pm path "$PKG" 2>/dev/null | head -1 | sed 's|package:||')
+        if [ -n "$PROF_MOD" ] && [ -f "$APK_BASE_PATH" ]; then
+            APK_MOD=$(stat -c '%Y' "$APK_BASE_PATH" 2>/dev/null)
+            if [ -n "$APK_MOD" ]; then
+                # Profile mais recente que APK por > 1 dia = AOT rewritten (mod alterou hot methods)
+                DIFF_DAYS=$(( (PROF_MOD - APK_MOD) / 86400 ))
+                if [ "$DIFF_DAYS" -gt 1 ] 2>/dev/null; then
+                    warn "  $PKG primary.prof reescrito $DIFF_DAYS dias após APK install (AOT profile altered)"
+                fi
+            fi
+        fi
+    fi
+done
+
+[ "$DFIR_HITS" = "0" ] && ok "DFIR deep: sem libs/sockets/crashes de hook"
 
 # ============================================================
 #  6. ESCALAÇÃO DE PRIVILÉGIO sem-root (Shizuku / Brevent / Hunter)
