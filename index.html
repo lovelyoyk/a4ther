@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.0</span>
+        <span id="version">v4.4.1</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1514,10 +1514,17 @@ footer a:hover {
                 <button class="dump-copy" type="button" data-target=".dump-cmd code">Copiar comando</button>
                 <ol class="dump-step-ol" start="3">
                     <li>Aguarde o scan terminar (~30-60s)</li>
-                    <li>O scanner salva em <code>~/a4ther_reports/scan_*.txt</code></li>
-                    <li>Compartilhe o <code>.txt</code> aqui pelo modo "<strong>Android · scan TXT</strong>"</li>
+                    <li>O <code>.txt</code> salva em <code>~/a4ther_reports/scan_AAAAMMDD_HHMMSS.txt</code> (= <code>/data/data/com.termux/files/home/a4ther_reports/</code>)</li>
+                    <li><strong>Pra compartilhar do Termux pro WhatsApp/Telegram</strong>, rode:</li>
                 </ol>
-                <div class="dump-tip">📋 Comando único copia / cola direto no Termux. O scanner é open source — fonte: <a href="https://github.com/lovelyoyk/a4ther" target="_blank" rel="noopener">github.com/lovelyoyk/a4ther</a></div>
+                <pre class="dump-cmd"><code>cp ~/a4ther_reports/scan_*.txt /sdcard/Download/ &amp;&amp; termux-open /sdcard/Download/$(ls -t ~/a4ther_reports/ | head -1)</code></pre>
+                <button class="dump-copy" type="button" data-target=".dump-cmd:nth-of-type(2) code">Copiar comando</button>
+                <ol class="dump-step-ol" start="6">
+                    <li>Abre o picker do Android — escolhe WhatsApp/Telegram/iCloud — manda pra cá</li>
+                    <li>Faz upload aqui pelo modo "<strong>Android · scan TXT</strong>"</li>
+                </ol>
+                <div class="dump-tip">📋 Atalho: <code>termux-share</code> também funciona (precisa app <code>Termux:API</code>). Sem ele, o <code>cp</code> pra <code>/sdcard/Download/</code> + abrir Files já permite mandar pro WhatsApp.</div>
+                <div class="dump-tip">📦 Source open: <a href="https://github.com/lovelyoyk/a4ther" target="_blank" rel="noopener">github.com/lovelyoyk/a4ther</a></div>
             </div>
 
             <div class="dump-step">
@@ -1580,7 +1587,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.0";
+const VERSION = "4.4.1";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3678,122 +3685,147 @@ async function handleSysdiagnose(filesList, opts) {
         }
     }
 
-    // ─── SCAN PASS 2.5: MCProfileEvents / MDMProfileEvents (install/uninstall + proxy) ───
-    // v4.3.4: parser refeito — MCProfileEvents é PLIST BINÁRIO (bplist00), não texto
+    // ─── SCAN PASS 2.5: MCProfileEvents — XML-aware parser (v4.4.1) ───
+    // Captura TODOS os profile UUIDs (SHA256+SHA256-UUID) com install/remove + timestamp
     if (byType.mcProfileEvents) {
         for (const f of byType.mcProfileEvents) {
             const buf = new Uint8Array(await f.arrayBuffer());
             ok(`MCProfileEvents: ${f.name} · ${buf.length} bytes`);
 
-            // Detecta bplist binário vs XML plist vs texto
             const isBplist = buf.length > 8 &&
                 buf[0] === 0x62 && buf[1] === 0x70 && buf[2] === 0x6c && buf[3] === 0x69 &&
-                buf[4] === 0x73 && buf[5] === 0x74; // "bplist"
-            const isXmlPlist = buf.length > 5 && buf[0] === 0x3c; // '<'
+                buf[4] === 0x73 && buf[5] === 0x74;
+            const isXmlPlist = buf.length > 5 && buf[0] === 0x3c;
 
-            const installed   = new Set();
-            const uninstalled = new Set();
+            const profileOps  = new Map(); // pid -> {installs: [], removes: [], lastSeen}
             const proxyHosts  = new Set();
             const proxyIps    = new Set();
             const payloadTypes= new Set();
             const httpUrls    = new Set();
             let suspicious    = 0;
 
-            // Decode pra texto/strings (depende do formato)
+            // Decode pra texto + string pool
             let textForRegex = '';
             let stringPool = [];
-            if (isBplist) {
-                stringPool = extractStringsFromBytes(buf, 5);
-                textForRegex = stringPool.join('\n');
-                ok(`  formato: bplist binário · ${stringPool.length} strings extraídas`);
-            } else if (isXmlPlist) {
+            if (isXmlPlist) {
                 try { textForRegex = new TextDecoder('utf-8', { fatal: false }).decode(buf); } catch (e) {}
                 stringPool = textForRegex.split(/[<>\s"]+/).filter(s => s.length >= 5);
                 ok(`  formato: XML plist · ${textForRegex.length} bytes`);
+            } else if (isBplist) {
+                stringPool = extractStringsFromBytes(buf, 5);
+                textForRegex = stringPool.join('\n');
+                ok(`  formato: bplist binário · ${stringPool.length} strings`);
             } else {
                 try { textForRegex = new TextDecoder('utf-8', { fatal: false }).decode(buf); } catch (e) {}
                 stringPool = textForRegex.split(/\s+/).filter(s => s.length >= 5);
                 ok(`  formato: texto · ${textForRegex.length} bytes`);
             }
 
-            // ═══════════════ STRING-POOL SCAN ═══════════════
-            // Procura padrões em CADA string do plist (mais robusto que regex em raw)
+            // ═══════════════ XML STRUCTURED PARSE (preferido) ═══════════════
+            // Estrutura real: <key>SHA256-UUID</key><dict><key>Operation</key><string>install|remove</string>
+            //                                                <key>Process</key><string>...</string>
+            //                                                <key>Timestamp</key><date>...</date></dict>
+            //
+            // Regex captura cada bloco completo (dict aninhado)
+            const profileBlockRegex = /<key>([a-f0-9]{40,68}(?:-[0-9A-Fa-f]{4,12}){0,5})<\/key>\s*<dict>([\s\S]*?)<\/dict>/gi;
+            let blockMatch;
+            while ((blockMatch = profileBlockRegex.exec(textForRegex)) !== null) {
+                const pid = blockMatch[1];
+                const inner = blockMatch[2];
+                const opM = inner.match(/<key>Operation<\/key>\s*<string>(install|remove|update|activate|deactivate|disable|enable)<\/string>/i);
+                const procM = inner.match(/<key>Process<\/key>\s*<string>([^<]+)<\/string>/i);
+                const tsM = inner.match(/<key>Timestamp<\/key>\s*<date>([^<]+)<\/date>/i);
+                if (!opM) continue;
+                if (!profileOps.has(pid)) profileOps.set(pid, { installs: [], removes: [], updates: [], processes: new Set(), lastSeen: null });
+                const entry = profileOps.get(pid);
+                const op = opM[1].toLowerCase();
+                const tsStr = tsM ? tsM[1] : null;
+                const ts = tsStr ? new Date(tsStr).getTime() : null;
+                if (op === 'install' || op === 'activate' || op === 'enable')   entry.installs.push({ ts, tsStr, proc: procM ? procM[1] : null });
+                else if (op === 'remove' || op === 'deactivate' || op === 'disable') entry.removes.push({ ts, tsStr, proc: procM ? procM[1] : null });
+                else                                                            entry.updates.push({ ts, tsStr, proc: procM ? procM[1] : null });
+                if (procM) entry.processes.add(procM[1]);
+                if (ts && (!entry.lastSeen || ts > entry.lastSeen)) entry.lastSeen = ts;
+            }
+
+            // ═══════════════ STRING POOL SCAN (fallback + IPs/hosts/payloads) ═══════════════
             for (const s of stringPool) {
-                // SHA256-UUID format (padrão de profile install): 64hex-8-4-4-4-12
-                if (/^[a-f0-9]{60,68}-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/i.test(s)) {
-                    installed.add(s); // dump real mostrou todos como install events
+                // SHA256+UUID format (long): 60-68hex-UUID
+                if (/^[a-f0-9]{40,68}-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/i.test(s)) {
+                    if (!profileOps.has(s)) profileOps.set(s, { installs: [], removes: [], updates: [], processes: new Set(), lastSeen: null, fromStringPool: true });
                 }
-                // PayloadType — TODOS as variantes que indicam interceptação de rede
-                if (/^com\.apple\.(proxy|globalproxy|http\.proxy|vpn|dnsProxy|dns|relay\.managed|networkextension|wifi(\.managed)?|carrier|webClip|hotspothelper|trustsettings|certificate|security\.root-certificate|security\.pkcs12|managed|mdm|hotspotcaptive)\.?[a-zA-Z0-9_.\-]*$/i.test(s)) {
+                // SHA256-only (sem UUID suffix) — formato curto do MCSettingsEvents
+                if (/^[a-f0-9]{60,68}$/i.test(s) && s.length >= 60) {
+                    if (!profileOps.has(s)) profileOps.set(s, { installs: [], removes: [], updates: [], processes: new Set(), lastSeen: null, fromStringPool: true, shortFormat: true });
+                }
+                // PayloadType (interceptação de rede)
+                if (/^com\.apple\.(proxy|globalproxy|http\.proxy|vpn|dnsProxy|dns|relay\.managed|networkextension|wifi(\.managed)?|carrier|webClip|hotspothelper|trustsettings|certificate|security\.root-certificate|security\.pkcs12|managed|mdm|hotspotcaptive)/i.test(s)) {
                     payloadTypes.add(s);
                 }
-                // Catch ALL com.apple.proxy.* / com.apple.dnsProxy variations
-                if (/^com\.apple\.(proxy|globalproxy|dnsProxy|relay\.managed|http\.proxy)/i.test(s)) {
-                    payloadTypes.add(s);
-                }
-                // Hostnames suspeitos (não-Apple não-Garena)
+                // Hostnames (filtra Apple/Garena allowlist)
                 if (/^[a-zA-Z0-9.-]+\.[a-z]{2,}(?::\d+)?$/.test(s) && s.length < 80 && s.includes('.')) {
-                    // Filtra Apple/Garena oficiais via FF_PROXY_LOGIN_DOMAINS allowlist
                     const host = s.split(':')[0].toLowerCase();
                     if (host && !host.endsWith('.apple.com') && !host.endsWith('.icloud.com') &&
                         !host.endsWith('.garena.com') && !host.endsWith('.freefiremobile.com') &&
                         !host.endsWith('.ggblueshark.com') && !host.endsWith('.ggpolarbear.com') &&
                         !host.endsWith('.ggwhitehawk.com') && !host.endsWith('.garenanow.com') &&
-                        !host.endsWith('.googleapis.com') && !host.endsWith('.gstatic.com')) {
+                        !host.endsWith('.googleapis.com') && !host.endsWith('.gstatic.com') &&
+                        !host.endsWith('.cdn-apple.com') && !host.endsWith('.mzstatic.com')) {
                         proxyHosts.add(host);
                     }
                 }
-                // IPv4 hardcoded no plist
+                // IPv4 público
                 if (/^(\d{1,3}\.){3}\d{1,3}(?::\d+)?$/.test(s)) {
                     const ip = s.split(':')[0];
-                    // Ignora ranges privados/locais (não-cheat infra)
                     if (!/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.|169\.254\.|0\.|255\.)/.test(ip)) {
                         proxyIps.add(s);
                     }
                 }
-                // URL http(s)
                 if (/^https?:\/\//i.test(s)) httpUrls.add(s);
             }
 
-            // ═══════════════ TEXT-REGEX SCAN (XML/texto + fallback) ═══════════════
+            // ═══════════════ TEXT-LEVEL HEURISTICS (fallback) ═══════════════
             const lines = textForRegex.split('\n');
             for (const line of lines) {
-                // Profile installed / activated / removed (apenas XML/texto)
-                let m = line.match(/(?:profile|payload)[^"']*?(?:install|activat|enable|appl)(?:ed|ing)?[^a-z]+([a-zA-Z][a-zA-Z0-9._-]{4,200})/i);
-                if (m) installed.add(m[1]);
-                m = line.match(/(?:profile|payload)[^"']*?(?:remov|uninstall|disabl|delete)(?:ed|ing)?[^a-z]+([a-zA-Z][a-zA-Z0-9._-]{4,200})/i);
-                if (m) uninstalled.add(m[1]);
-
-                // Proxy server / DNS server keys (XML plist)
-                // <key>ProxyServer</key> <string>10.0.0.1</string>
                 const proxyKvm = line.match(/(?:Proxy|DNS|VPN|Server)(?:Server|Host|Address|Hostname|IP)?[":>=\s]+["<]?([a-zA-Z0-9.\-]+(?:\.[a-z]{2,})?(?::\d+)?)/gi);
-                if (proxyKvm) {
-                    proxyKvm.forEach(p => {
-                        const h = p.match(/[a-zA-Z0-9.\-]+\.[a-z]{2,}|(\d{1,3}\.){3}\d{1,3}/i);
-                        if (h) proxyHosts.add(h[0]);
-                    });
-                }
-
-                // Padrões suspeitos
+                if (proxyKvm) proxyKvm.forEach(p => {
+                    const h = p.match(/[a-zA-Z0-9.\-]+\.[a-z]{2,}|(\d{1,3}\.){3}\d{1,3}/i);
+                    if (h) proxyHosts.add(h[0]);
+                });
                 if (/MITM|self.signed|untrusted CA|cert.*rejected|unauthor|tamper|jailbreak|cheat/i.test(line)) suspicious++;
             }
 
-            if (installed.size > 0)   ok(`  → ${installed.size} profile install events`);
-            if (uninstalled.size > 0) warn(`  → ${uninstalled.size} profile uninstall events (cheat removendo rastros?)`);
+            // ═══════════════ REPORT — todos profile UUIDs com timeline ═══════════════
+            ok(`  → ${profileOps.size} profile UUIDs únicos detectados`);
+            if (profileOps.size > 0) {
+                const sortedIds = Array.from(profileOps.entries())
+                    .sort((a, b) => (b[1].lastSeen || 0) - (a[1].lastSeen || 0));
+                for (const [pid, entry] of sortedIds) {
+                    const iCount = entry.installs.length;
+                    const rCount = entry.removes.length;
+                    const uCount = entry.updates.length;
+                    const procs = Array.from(entry.processes).join(', ') || '?';
+                    const lastSeenStr = entry.lastSeen ? new Date(entry.lastSeen).toISOString() : '(sem ts)';
+                    const eventsLine = `${iCount}× install · ${rCount}× remove${uCount ? ` · ${uCount}× update` : ''} · process: ${procs}`;
+                    const shortPid = pid.length > 60 ? pid.substring(0, 60) + '…' : pid;
 
-            // Cross-check com classifyBundle
-            for (const pid of installed) {
-                const c = classifyBundle(pid);
-                if (c) {
-                    alertF(`[${c.sev}] MCProfileEvents instalou: ${pid}`, c.desc + " (registrado no log de eventos)");
-                } else if (pid.match(/profile-[0-9A-Fa-f-]{20,}/i)) {
-                    alertF(`[CRITICAL] Profile UUID opaco no log MCProfileEvents: ${pid}`,
-                        "Profile com identifier sem owner aparente — típico de reseller DNS/proxy/cheat");
-                }
-            }
-            for (const pid of uninstalled) {
-                if (pid.match(/profile-[0-9A-Fa-f-]{20,}/i)) {
-                    warn(`[HIGH] Profile UUID opaco REMOVIDO recentemente: ${pid} (esconder rastros?)`);
+                    // Classify severity
+                    if (iCount > 0 && rCount > 0) {
+                        // Install + remove = profile foi posto E retirado (típico cheat panel temporário)
+                        alertF(`[CRITICAL] Profile UUID opaco INSTALADO+REMOVIDO: ${shortPid}`,
+                            `${eventsLine} · lastSeen: ${lastSeenStr} — Cheat panel? (instalado pra jogar, removido pra esconder)`);
+                    } else if (iCount >= 2) {
+                        alertF(`[CRITICAL] Profile UUID instalado ${iCount}x: ${shortPid}`,
+                            `${eventsLine} · lastSeen: ${lastSeenStr}`);
+                    } else if (iCount > 0) {
+                        alertF(`[HIGH] Profile UUID opaco instalado: ${shortPid}`,
+                            `${eventsLine} · lastSeen: ${lastSeenStr} · profile sem owner aparente (reseller DNS/proxy/cheat?)`);
+                    } else if (rCount > 0) {
+                        warn(`[HIGH] Profile removido (sem install no log): ${shortPid}`,
+                            `${eventsLine} · lastSeen: ${lastSeenStr} — log truncated ou removido pré-export`);
+                    } else {
+                        warn(`[MEDIUM] Profile UUID detectado: ${shortPid} (${eventsLine})`);
+                    }
                 }
             }
 
