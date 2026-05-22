@@ -1097,6 +1097,138 @@ footer a:hover {
 .text-faint { color: var(--text-faint); }
 
 /* ============================================================
+   DUMP TUTORIAL (tab-panel data-panel="dump")
+   ============================================================ */
+.dump-tutorial {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.dump-step {
+    position: relative;
+    padding: 1.25rem 1.5rem 1.25rem 1.85rem;
+    background: linear-gradient(180deg, rgba(26, 20, 46, 0.5), rgba(18, 12, 32, 0.6));
+    border-radius: 20px;
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+.dump-step::before {
+    content: '';
+    position: absolute;
+    left: 10px; top: 14%; bottom: 14%;
+    width: 2px;
+    background: linear-gradient(180deg,
+        transparent 0%, var(--purple) 25%, var(--purple) 75%, transparent 100%);
+    box-shadow: 0 0 10px var(--purple-glow);
+    border-radius: 2px;
+    opacity: 0.85;
+    pointer-events: none;
+}
+.dump-step-head {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin-bottom: 0.9rem;
+}
+.dump-step-icon {
+    font-size: 1.6rem;
+    line-height: 1;
+    filter: drop-shadow(0 0 12px var(--purple-glow));
+}
+.dump-step-title {
+    flex: 1;
+    font-weight: 700;
+    font-size: 1.02rem;
+    color: var(--text);
+}
+.dump-step-sub {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    letter-spacing: 0.04em;
+}
+.dump-step-ol {
+    margin: 0;
+    padding-left: 1.4rem;
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    line-height: 1.65;
+    counter-reset: dump-step;
+    list-style: none;
+}
+.dump-step-ol li {
+    position: relative;
+    padding-left: 0.4rem;
+    margin-bottom: 0.5rem;
+    counter-increment: dump-step;
+}
+.dump-step-ol li::before {
+    content: counter(dump-step);
+    position: absolute;
+    left: -1.4rem;
+    top: 1px;
+    width: 20px;
+    height: 20px;
+    background: rgba(179, 136, 255, 0.14);
+    color: var(--purple);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.dump-step-ol a { color: var(--purple); text-decoration: underline; text-decoration-color: rgba(179, 136, 255, 0.3); }
+.dump-step-ol a:hover { text-decoration-color: var(--purple); }
+.dump-cmd {
+    margin: 0.7rem 0 0;
+    padding: 0.85rem 1rem;
+    background: rgba(7, 6, 13, 0.6);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--purple);
+    overflow-x: auto;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.dump-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.6rem 0 0.4rem;
+    padding: 0.5rem 0.9rem;
+    background: linear-gradient(135deg, rgba(179, 136, 255, 0.18), rgba(122, 78, 255, 0.08));
+    border: 1px solid var(--border-hi);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: var(--transition);
+}
+.dump-copy:hover { background: linear-gradient(135deg, rgba(179, 136, 255, 0.28), rgba(122, 78, 255, 0.15)); box-shadow: 0 0 16px var(--purple-glow); }
+.dump-copy.copied { background: var(--green-bg); border-color: var(--green-border); color: var(--green); }
+.dump-tip {
+    margin-top: 0.85rem;
+    padding: 0.7rem 0.95rem;
+    background: rgba(255, 181, 71, 0.06);
+    border-left: 2px solid var(--orange);
+    border-radius: 0 8px 8px 0;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    line-height: 1.55;
+}
+.dump-tip a { color: var(--purple); text-decoration: underline; text-decoration-color: rgba(179, 136, 255, 0.3); }
+
+/* ============================================================
    SCROLL REVEAL MOTION
    ============================================================ */
 [data-reveal] {
@@ -1157,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.3.3</span>
+        <span id="version">v4.4.0</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1229,6 +1361,16 @@ footer a:hover {
                     <span class="dropdown-option-text">
                         <span class="dropdown-option-title">Android · scan TXT</span>
                         <span class="dropdown-option-desc">Relatório gerado pelo <code>a4ther.sh</code></span>
+                    </span>
+                    <svg class="dropdown-option-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+                <button class="dropdown-option" data-tab="dump" role="option" type="button">
+                    <span class="dropdown-option-emoji">📝</span>
+                    <span class="dropdown-option-text">
+                        <span class="dropdown-option-title">Gerar dump (tutorial)</span>
+                        <span class="dropdown-option-desc">Como o jogador faz o dump — iOS + Android</span>
                     </span>
                     <svg class="dropdown-option-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1336,6 +1478,64 @@ footer a:hover {
             </ol>
         </div>
     </div>
+
+    <!-- TUTORIAL: como o jogador gera o dump -->
+    <div class="tab-panel" data-panel="dump">
+        <div class="dump-tutorial">
+            <div class="dump-step">
+                <div class="dump-step-head">
+                    <span class="dump-step-icon">🍎</span>
+                    <div class="dump-step-title">iPhone / iPad</div>
+                    <div class="dump-step-sub">Sysdiagnose (.tar.gz) — recomendado, sem JB</div>
+                </div>
+                <ol class="dump-step-ol">
+                    <li>Aperte simultaneamente: <code>Volume + + Volume - + Botão Lateral</code> (1 segundo)</li>
+                    <li>Sinta uma vibração leve confirmando · continue usando o iPhone normalmente</li>
+                    <li>Aguarde <strong>~5 minutos</strong> (o iOS está gerando o dump)</li>
+                    <li>Vá em <code>Ajustes → Privacidade → Análise &amp; Melhorias → Dados de Análise</code></li>
+                    <li>Procure <code>sysdiagnose_AAAA.MM.DD_*.tar.gz</code> (mais recente)</li>
+                    <li>Toque no arquivo → <strong>Compartilhar</strong> → envie via AirDrop / Files / iCloud / WhatsApp</li>
+                    <li>Suba aqui pelo modo "<strong>iOS · sysdiagnose .tar.gz</strong>"</li>
+                </ol>
+                <div class="dump-tip">⚡ Se travar no upload: extraia localmente no iPhone (Files → toque longo no .tar.gz → <code>Uncompress</code>) e use o modo "<strong>iOS · sysdiagnose (pasta)</strong>".</div>
+            </div>
+
+            <div class="dump-step">
+                <div class="dump-step-head">
+                    <span class="dump-step-icon">🤖</span>
+                    <div class="dump-step-title">Android</div>
+                    <div class="dump-step-sub">Via Termux (sem root) — gera <code>.txt</code></div>
+                </div>
+                <ol class="dump-step-ol">
+                    <li>Instale o <strong>Termux</strong> pelo F-Droid (NÃO use o do Play Store — abandonado): <a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener">f-droid.org/packages/com.termux/</a></li>
+                    <li>Abra o Termux e cole esse comando único:</li>
+                </ol>
+                <pre class="dump-cmd"><code>pkg update -y &amp;&amp; pkg install -y curl &amp;&amp; rm -f a4ther.sh &amp;&amp; curl -L -o a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh &amp;&amp; chmod +x a4ther.sh &amp;&amp; sh a4ther.sh</code></pre>
+                <button class="dump-copy" type="button" data-target=".dump-cmd code">Copiar comando</button>
+                <ol class="dump-step-ol" start="3">
+                    <li>Aguarde o scan terminar (~30-60s)</li>
+                    <li>O scanner salva em <code>~/a4ther_reports/scan_*.txt</code></li>
+                    <li>Compartilhe o <code>.txt</code> aqui pelo modo "<strong>Android · scan TXT</strong>"</li>
+                </ol>
+                <div class="dump-tip">📋 Comando único copia / cola direto no Termux. O scanner é open source — fonte: <a href="https://github.com/lovelyoyk/a4ther" target="_blank" rel="noopener">github.com/lovelyoyk/a4ther</a></div>
+            </div>
+
+            <div class="dump-step">
+                <div class="dump-step-head">
+                    <span class="dump-step-icon">📊</span>
+                    <div class="dump-step-title">iOS sem sysdiagnose</div>
+                    <div class="dump-step-sub">App Privacy Report (.ndjson)</div>
+                </div>
+                <ol class="dump-step-ol">
+                    <li>Ative em <code>Ajustes → Privacidade → App Privacy Report → Ativar</code></li>
+                    <li>Jogue Free Fire por <strong>5-10 minutos</strong> (popula o log)</li>
+                    <li>Volte em <code>App Privacy Report</code> → toque <strong>Salvar App Privacy Report</strong></li>
+                    <li>Compartilhe o <code>.ndjson</code> aqui no modo "<strong>iOS · App Privacy Report</strong>"</li>
+                </ol>
+                <div class="dump-tip">💡 Útil quando o jogador não consegue gerar sysdiagnose (iOS antigo, espaço em disco baixo).</div>
+            </div>
+        </div>
+    </div>
 </section>
 
 <!-- ─── LOADING ─── -->
@@ -1380,7 +1580,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.3.3";
+const VERSION = "4.4.0";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3479,41 +3679,103 @@ async function handleSysdiagnose(filesList, opts) {
     }
 
     // ─── SCAN PASS 2.5: MCProfileEvents / MDMProfileEvents (install/uninstall + proxy) ───
+    // v4.3.4: parser refeito — MCProfileEvents é PLIST BINÁRIO (bplist00), não texto
     if (byType.mcProfileEvents) {
         for (const f of byType.mcProfileEvents) {
-            const raw = await readSafe(f);
-            if (!raw) continue;
-            ok(`MCProfileEvents: ${f.name} · ${raw.length} bytes`);
+            const buf = new Uint8Array(await f.arrayBuffer());
+            ok(`MCProfileEvents: ${f.name} · ${buf.length} bytes`);
 
-            const lines = raw.split('\n');
+            // Detecta bplist binário vs XML plist vs texto
+            const isBplist = buf.length > 8 &&
+                buf[0] === 0x62 && buf[1] === 0x70 && buf[2] === 0x6c && buf[3] === 0x69 &&
+                buf[4] === 0x73 && buf[5] === 0x74; // "bplist"
+            const isXmlPlist = buf.length > 5 && buf[0] === 0x3c; // '<'
+
             const installed   = new Set();
             const uninstalled = new Set();
             const proxyHosts  = new Set();
+            const proxyIps    = new Set();
             const payloadTypes= new Set();
             const httpUrls    = new Set();
             let suspicious    = 0;
 
+            // Decode pra texto/strings (depende do formato)
+            let textForRegex = '';
+            let stringPool = [];
+            if (isBplist) {
+                stringPool = extractStringsFromBytes(buf, 5);
+                textForRegex = stringPool.join('\n');
+                ok(`  formato: bplist binário · ${stringPool.length} strings extraídas`);
+            } else if (isXmlPlist) {
+                try { textForRegex = new TextDecoder('utf-8', { fatal: false }).decode(buf); } catch (e) {}
+                stringPool = textForRegex.split(/[<>\s"]+/).filter(s => s.length >= 5);
+                ok(`  formato: XML plist · ${textForRegex.length} bytes`);
+            } else {
+                try { textForRegex = new TextDecoder('utf-8', { fatal: false }).decode(buf); } catch (e) {}
+                stringPool = textForRegex.split(/\s+/).filter(s => s.length >= 5);
+                ok(`  formato: texto · ${textForRegex.length} bytes`);
+            }
+
+            // ═══════════════ STRING-POOL SCAN ═══════════════
+            // Procura padrões em CADA string do plist (mais robusto que regex em raw)
+            for (const s of stringPool) {
+                // SHA256-UUID format (padrão de profile install): 64hex-8-4-4-4-12
+                if (/^[a-f0-9]{60,68}-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/i.test(s)) {
+                    installed.add(s); // dump real mostrou todos como install events
+                }
+                // PayloadType — TODOS as variantes que indicam interceptação de rede
+                if (/^com\.apple\.(proxy|globalproxy|http\.proxy|vpn|dnsProxy|dns|relay\.managed|networkextension|wifi(\.managed)?|carrier|webClip|hotspothelper|trustsettings|certificate|security\.root-certificate|security\.pkcs12|managed|mdm|hotspotcaptive)\.?[a-zA-Z0-9_.\-]*$/i.test(s)) {
+                    payloadTypes.add(s);
+                }
+                // Catch ALL com.apple.proxy.* / com.apple.dnsProxy variations
+                if (/^com\.apple\.(proxy|globalproxy|dnsProxy|relay\.managed|http\.proxy)/i.test(s)) {
+                    payloadTypes.add(s);
+                }
+                // Hostnames suspeitos (não-Apple não-Garena)
+                if (/^[a-zA-Z0-9.-]+\.[a-z]{2,}(?::\d+)?$/.test(s) && s.length < 80 && s.includes('.')) {
+                    // Filtra Apple/Garena oficiais via FF_PROXY_LOGIN_DOMAINS allowlist
+                    const host = s.split(':')[0].toLowerCase();
+                    if (host && !host.endsWith('.apple.com') && !host.endsWith('.icloud.com') &&
+                        !host.endsWith('.garena.com') && !host.endsWith('.freefiremobile.com') &&
+                        !host.endsWith('.ggblueshark.com') && !host.endsWith('.ggpolarbear.com') &&
+                        !host.endsWith('.ggwhitehawk.com') && !host.endsWith('.garenanow.com') &&
+                        !host.endsWith('.googleapis.com') && !host.endsWith('.gstatic.com')) {
+                        proxyHosts.add(host);
+                    }
+                }
+                // IPv4 hardcoded no plist
+                if (/^(\d{1,3}\.){3}\d{1,3}(?::\d+)?$/.test(s)) {
+                    const ip = s.split(':')[0];
+                    // Ignora ranges privados/locais (não-cheat infra)
+                    if (!/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|127\.|169\.254\.|0\.|255\.)/.test(ip)) {
+                        proxyIps.add(s);
+                    }
+                }
+                // URL http(s)
+                if (/^https?:\/\//i.test(s)) httpUrls.add(s);
+            }
+
+            // ═══════════════ TEXT-REGEX SCAN (XML/texto + fallback) ═══════════════
+            const lines = textForRegex.split('\n');
             for (const line of lines) {
-                // Profile installed / activated / removed
+                // Profile installed / activated / removed (apenas XML/texto)
                 let m = line.match(/(?:profile|payload)[^"']*?(?:install|activat|enable|appl)(?:ed|ing)?[^a-z]+([a-zA-Z][a-zA-Z0-9._-]{4,200})/i);
                 if (m) installed.add(m[1]);
                 m = line.match(/(?:profile|payload)[^"']*?(?:remov|uninstall|disabl|delete)(?:ed|ing)?[^a-z]+([a-zA-Z][a-zA-Z0-9._-]{4,200})/i);
                 if (m) uninstalled.add(m[1]);
 
-                // Payload types do profile
-                const ptm = line.match(/com\.apple\.(proxy|vpn|dns|carrier|webClip|wifi|globalproxy|hotspothelper|trustsettings|mdm|caldav|carddav|exchange)\.[a-zA-Z]+/gi);
-                if (ptm) ptm.forEach(p => payloadTypes.add(p));
+                // Proxy server / DNS server keys (XML plist)
+                // <key>ProxyServer</key> <string>10.0.0.1</string>
+                const proxyKvm = line.match(/(?:Proxy|DNS|VPN|Server)(?:Server|Host|Address|Hostname|IP)?[":>=\s]+["<]?([a-zA-Z0-9.\-]+(?:\.[a-z]{2,})?(?::\d+)?)/gi);
+                if (proxyKvm) {
+                    proxyKvm.forEach(p => {
+                        const h = p.match(/[a-zA-Z0-9.\-]+\.[a-z]{2,}|(\d{1,3}\.){3}\d{1,3}/i);
+                        if (h) proxyHosts.add(h[0]);
+                    });
+                }
 
-                // Proxy host:port no log
-                const proxym = line.match(/(?:proxy|host|server)["':=\s]+([a-zA-Z0-9.\-]+\.[a-z]{2,})(?::(\d+))?/gi);
-                if (proxym) proxym.forEach(p => proxyHosts.add(p));
-
-                // URLs http(s)://
-                const urlm = line.match(/https?:\/\/[a-zA-Z0-9.\-]+\.[a-z]{2,}[a-zA-Z0-9_.\-/?=&%]*/g);
-                if (urlm) urlm.forEach(u => httpUrls.add(u));
-
-                // Padrões suspeitos no log linha-a-linha
-                if (/MITM|self.signed|untrusted CA|cert.*rejected|unauthor/i.test(line)) suspicious++;
+                // Padrões suspeitos
+                if (/MITM|self.signed|untrusted CA|cert.*rejected|unauthor|tamper|jailbreak|cheat/i.test(line)) suspicious++;
             }
 
             if (installed.size > 0)   ok(`  → ${installed.size} profile install events`);
@@ -3553,19 +3815,39 @@ async function handleSysdiagnose(filesList, opts) {
                 }
             }
 
-            // Hosts/URLs no log — match com infra de cheat
+            // Stats globais
+            ok(`  → ${proxyHosts.size} hosts non-Apple/non-Garena · ${proxyIps.size} IPs públicos · ${payloadTypes.size} payload types · ${httpUrls.size} URLs`);
+
+            // Hosts no log — match com infra de cheat
             const allTargets = new Set([...proxyHosts, ...httpUrls]);
             for (const tgt of allTargets) {
-                const host = tgt.replace(/^https?:\/\//, '').split('/')[0].split(':')[0].toLowerCase();
+                const host = String(tgt).replace(/^https?:\/\//, '').split('/')[0].split(':')[0].toLowerCase();
+                if (!host) continue;
                 if (typeof KNOWN_CHEAT_INFRA !== 'undefined' && KNOWN_CHEAT_INFRA[host]) {
-                    alertF(`[CRITICAL] MCProfileEvents APONTA pra infra de cheat: ${host}`, KNOWN_CHEAT_INFRA[host]);
-                } else if (typeof SUSPECT_TLDS !== 'undefined' && SUSPECT_TLDS.some(tld => host.endsWith(tld))) {
-                    warn(`[MEDIUM] Profile aponta pra TLD suspeito: ${host}`);
+                    alertF(`[CRITICAL] MCProfileEvents → infra de cheat: ${host}`, KNOWN_CHEAT_INFRA[host]);
+                } else if (typeof SUSPICIOUS_TLDS !== 'undefined' && SUSPICIOUS_TLDS.some(tld => host.endsWith(tld))) {
+                    warn(`[MEDIUM] MCProfileEvents → TLD suspeito: ${host}`);
+                } else {
+                    // Host genérico mas não-Apple/Garena = potencial proxy desconhecido
+                    warn(`[MEDIUM] MCProfileEvents → host non-Apple/Garena no profile: ${host}`);
+                }
+            }
+
+            // IPs hardcoded — cross-check com KNOWN_CHEAT_IPS
+            for (const ip of proxyIps) {
+                const cleanIp = ip.split(':')[0];
+                if (typeof KNOWN_CHEAT_IPS !== 'undefined' && KNOWN_CHEAT_IPS[cleanIp]) {
+                    alertF(`[CRITICAL] MCProfileEvents → IP cheat conhecido: ${ip}`, KNOWN_CHEAT_IPS[cleanIp]);
+                } else if (typeof FALSE_POSITIVE_IPS !== 'undefined' && FALSE_POSITIVE_IPS.has(cleanIp)) {
+                    // CDN legítimo (Akamai/Cloudflare etc) — silencia
+                } else {
+                    alertF(`[HIGH] MCProfileEvents → IP HARDCODED em profile: ${ip}`,
+                        "Profile com IP raw (não FQDN) é típico de proxy MITM — Apple/Garena usam domínios");
                 }
             }
 
             if (suspicious > 0) {
-                warn(`[HIGH] ${suspicious} linhas no MCProfileEvents com indícios MITM/cert-untrusted`);
+                warn(`[HIGH] ${suspicious} strings no MCProfileEvents com indícios MITM/cert-untrusted/tamper`);
             }
 
             if (installed.size === 0 && uninstalled.size === 0 && payloadTypes.size === 0) {
@@ -4104,6 +4386,42 @@ $('#btn-share').addEventListener('click', async () => {
 /* ============================================================
    SCROLL REVEAL MOTION (IntersectionObserver)
    ============================================================ */
+/* ============================================================
+   DUMP TUTORIAL — copy button
+   ============================================================ */
+(function setupDumpCopy() {
+    document.addEventListener('click', async (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('.dump-copy');
+        if (!btn) return;
+        const sel = btn.getAttribute('data-target');
+        if (!sel) return;
+        const target = btn.parentElement.querySelector(sel) || document.querySelector(sel);
+        if (!target) return;
+        const text = target.textContent || '';
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                // Fallback pra browsers sem clipboard API
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed'; ta.style.top = '-1000px';
+                document.body.appendChild(ta); ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            const orig = btn.textContent;
+            btn.textContent = '✓ Copiado';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1800);
+        } catch (err) {
+            console.warn('clipboard write falhou:', err);
+            btn.textContent = '✗ Falhou';
+            setTimeout(() => { btn.textContent = 'Copiar comando'; }, 1800);
+        }
+    });
+})();
+
 (function setupReveals() {
     if (!('IntersectionObserver' in window)) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
