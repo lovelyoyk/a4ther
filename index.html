@@ -1157,7 +1157,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.3.2</span>
+        <span id="version">v4.3.3</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1380,7 +1380,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.3.2";
+const VERSION = "4.3.3";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3346,30 +3346,38 @@ async function handleSysdiagnose(filesList, opts) {
         if (combined) {
             const bundleSet = new Set();
             let installs = 0, uninstalls = 0;
-            // Track FF reinstall frequency (v3.7.0 — IOC real do dump 20-mai-2026)
-            const ffInstallTimestamps = [];
+            // Track FF install events (v4.3.3 — distingue Placeholder vs Customer)
+            //   - Placeholder: Apple cria stub enquanto baixa (não é install completo)
+            //   - Customer:    download terminou, app instalado de fato
+            //   - Reinstall real = Customer NOVO após Uninstall (não Placeholder→Customer transition)
+            const ffCustomerInstalls   = []; // só Customer (install completo)
+            const ffPlaceholderInstalls = []; // pra correlacionar com Customer
             const ffUninstallTimestamps = [];
             const FF_BUNDLES = ['com.dts.freefireth','com.dts.freefiremax'];
-            // Format real log: "Mon May 18 18:42:24 2026 ... Install successful for (Customer:com.dts.freefireth) [Distributor: com.apple.AppStore]"
             const lines = combined.split('\n');
             for (const line of lines) {
                 let m = line.match(/Install succeeded for ([a-zA-Z0-9._-]+)/i);
                 if (m) { bundleSet.add(m[1]); installs++; continue; }
                 m = line.match(/Uninstall succeeded for ([a-zA-Z0-9._-]+)/i);
                 if (m) { bundleSet.add(m[1]); uninstalls++; continue; }
-                // Real format do log: "Install successful for (Customer:bundle.id) [Distributor: xxx]"
-                m = line.match(/Install successful for \([^:]+:([a-zA-Z0-9._-]+)\)\s*\[Distributor:\s*([^\]]+)\]/i);
+                // Real format: "Install successful for (Placeholder|Customer:bundle.id) [Distributor: xxx]"
+                m = line.match(/Install successful for \((Placeholder|Customer):([a-zA-Z0-9._-]+)\)\s*\[Distributor:\s*([^\]]+)\]/i);
                 if (m) {
-                    bundleSet.add(m[1]);
+                    const kind   = m[1];   // "Placeholder" | "Customer"
+                    const bundle = m[2];
+                    const dist   = m[3].trim();
+                    bundleSet.add(bundle);
                     installs++;
-                    if (FF_BUNDLES.includes(m[1])) {
-                        // tenta extrair timestamp do início da linha
+                    if (FF_BUNDLES.includes(bundle)) {
                         const tsm = line.match(/^([A-Z][a-z]{2}\s+[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2}\s+\d{4})/);
-                        if (tsm) ffInstallTimestamps.push(new Date(tsm[1]).getTime());
-                        // Distributor não-AppStore = sideload direto
-                        const dist = m[2].trim();
-                        if (dist && !dist.match(/^com\.apple\.AppStore$/i) && dist !== "Unknown") {
-                            alertF(`[CRITICAL] FF instalado via SIDELOAD (distributor=${dist}): ${m[1]}`,
+                        const ts = tsm ? new Date(tsm[1]).getTime() : null;
+                        if (ts) {
+                            if (kind === 'Customer')         ffCustomerInstalls.push(ts);
+                            else if (kind === 'Placeholder') ffPlaceholderInstalls.push(ts);
+                        }
+                        // Distributor não-AppStore = sideload direto (só alerta em Customer pra evitar dupla)
+                        if (kind === 'Customer' && dist && !dist.match(/^com\.apple\.AppStore$/i) && dist !== "Unknown") {
+                            alertF(`[CRITICAL] FF instalado via SIDELOAD (distributor=${dist}): ${bundle}`,
                                 "Distributor ≠ App Store = IPA sideloaded (TrollStore/SideStore/AltStore/Esign/Feather)");
                         }
                     }
@@ -3394,23 +3402,38 @@ async function handleSysdiagnose(filesList, opts) {
                 if (c) alertF(`[${c.sev}] App em install log: ${b}`, c.desc);
             }
 
-            // v3.7.0 — REINSTALL PATTERN: FF reinstalado >= 3x em < 24h = HWID reset / IPA modded swap
-            const allFFEvents = [...ffInstallTimestamps, ...ffUninstallTimestamps].sort((a,b) => a-b);
-            if (ffInstallTimestamps.length >= 3) {
-                const spanHours = (Math.max(...allFFEvents) - Math.min(...allFFEvents)) / 3600000;
-                if (spanHours < 48) {
-                    alertF(`[CRITICAL][BEHAVIOR] FF reinstalado ${ffInstallTimestamps.length}x em ${spanHours.toFixed(1)}h`,
-                        "Padrão de HWID-reset / swap de IPA modificada — cheat behavior confirmado em dump real");
-                } else if (ffInstallTimestamps.length >= 5) {
-                    warn(`[HIGH][BEHAVIOR] FF reinstalado ${ffInstallTimestamps.length}x em ${spanHours.toFixed(0)}h (suspeito)`);
+            // === v4.3.3 — REINSTALL PATTERN (fix falso positivo)
+            // Conta apenas REINSTALLS REAIS = Customer install precedido por Uninstall
+            // (updates do App Store geram Placeholder→Customer mas SEM Uninstall entre)
+            // Threshold aumentado: 4+ reinstalls em 24h (3 era falso positivo comum)
+            const realReinstalls = [];
+            for (const installTs of ffCustomerInstalls) {
+                // Procura uninstall < 30 min ANTES desse install
+                const hasUninstallBefore = ffUninstallTimestamps.some(u =>
+                    u < installTs && (installTs - u) < 30 * 60 * 1000
+                );
+                if (hasUninstallBefore) realReinstalls.push(installTs);
+            }
+            const customerCount = ffCustomerInstalls.length;
+            const reinstallCount = realReinstalls.length;
+            ok(`FF install events: ${customerCount} Customer · ${ffPlaceholderInstalls.length} Placeholder · ${ffUninstallTimestamps.length} Uninstall · ${reinstallCount} REinstall (real)`);
+            if (reinstallCount >= 4) {
+                const spanHours = (Math.max(...realReinstalls) - Math.min(...realReinstalls)) / 3600000;
+                if (spanHours < 24) {
+                    alertF(`[CRITICAL][BEHAVIOR] FF REinstalado ${reinstallCount}x (com uninstall entre) em ${spanHours.toFixed(1)}h`,
+                        "Padrão de HWID-reset / swap de IPA modificada");
+                } else if (reinstallCount >= 6) {
+                    warn(`[HIGH][BEHAVIOR] FF REinstalado ${reinstallCount}x em ${spanHours.toFixed(0)}h (suspeito)`);
                 }
             }
-            // Reinstall rápido: install logo após uninstall (< 60s) = sideload swap
-            for (let i = 0; i < allFFEvents.length - 1; i++) {
-                const delta = (allFFEvents[i+1] - allFFEvents[i]) / 1000;
-                if (delta > 0 && delta < 60) {
-                    alertF(`[HIGH][BEHAVIOR] FF reinstalado ${delta.toFixed(0)}s após operação anterior`,
-                        "Reinstall em segundos = impossível via App Store, indica swap de IPA");
+            // Reinstall MUITO rápido APÓS uninstall (< 30s) = swap forçado (suspeito)
+            // EXCLUI Placeholder→Customer transition (normal, ~10s no App Store download)
+            for (const uninstallTs of ffUninstallTimestamps) {
+                const nextCustomer = ffCustomerInstalls.find(i => i > uninstallTs && (i - uninstallTs) < 30 * 1000);
+                if (nextCustomer) {
+                    const delta = (nextCustomer - uninstallTs) / 1000;
+                    alertF(`[HIGH][BEHAVIOR] FF reinstalado ${delta.toFixed(0)}s após UNINSTALL`,
+                        "Reinstall em <30s pós-uninstall = impossível via App Store (precisaria re-baixar) — sideload swap");
                     break;
                 }
             }
