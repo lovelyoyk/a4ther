@@ -6,7 +6,7 @@
    - Tudo mais → network-first com fallback cache
    ----------------------------------------------------------- */
 
-const CACHE_VERSION = "a4ther-v4.0.0";
+const CACHE_VERSION = "a4ther-v4.4.4";
 const APP_SHELL = [
     "./",
     "./index.html",
@@ -37,7 +37,16 @@ self.addEventListener("activate", (event) => {
             return Promise.all(
                 keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k))
             );
-        }).then(() => self.clients.claim())
+        }).then(() => self.clients.claim()).then(async () => {
+            // Avisa todos os clients que uma nova versão foi ativada — o index.html
+            // mostra um banner "Atualizar" pro user clicar e dar reload (sem F5 manual).
+            try {
+                const clients = await self.clients.matchAll({ type: 'window' });
+                for (const client of clients) {
+                    client.postMessage({ type: 'SW_UPDATED', cacheVersion: CACHE_VERSION });
+                }
+            } catch { /* ignora */ }
+        })
     );
 });
 

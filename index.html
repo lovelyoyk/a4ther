@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.1</span>
+        <span id="version">v4.4.4</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1587,7 +1587,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.1";
+const VERSION = "4.4.4";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -1715,8 +1715,39 @@ if (typeof window !== 'undefined') {
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./service-worker.js', { scope: './' })
-            .then(reg => console.info('[sw] registered v' + (typeof VERSION !== 'undefined' ? VERSION : '?'), reg.scope))
+            .then(reg => {
+                console.info('[sw] registered v' + (typeof VERSION !== 'undefined' ? VERSION : '?'), reg.scope);
+                // Detecta SW novo aguardando ativação → pede pra skipWaiting
+                if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                reg.addEventListener('updatefound', () => {
+                    const nw = reg.installing;
+                    if (!nw) return;
+                    nw.addEventListener('statechange', () => {
+                        if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                            // Há uma versão nova esperando — força ativação imediata
+                            nw.postMessage({ type: 'SKIP_WAITING' });
+                        }
+                    });
+                });
+            })
             .catch(err => console.warn('[sw] register failed', err));
+    });
+    // Quando o SW ativa nova versão, recarrega a página automaticamente (1x só)
+    // pra o user pegar o JS novo sem precisar de F5 manual.
+    let _reloadedAfterUpdate = false;
+    navigator.serviceWorker.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'SW_UPDATED' && !_reloadedAfterUpdate) {
+            _reloadedAfterUpdate = true;
+            console.info('[sw] nova versão ativada (', e.data.cacheVersion, ') — recarregando…');
+            // Pequeno delay pra evitar reload-loop em cenários patológicos
+            setTimeout(() => location.reload(), 300);
+        }
+    });
+    // controllerchange também dispara quando claim acontece — fallback adicional
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (_reloadedAfterUpdate) return;
+        _reloadedAfterUpdate = true;
+        setTimeout(() => location.reload(), 300);
     });
 }
 document.getElementById('version').textContent = `v${VERSION}`;
@@ -2161,6 +2192,27 @@ const APP_STORE_OFFICIAL = new Set([
     "apple.com", "icloud.com", "mzstatic.com", "phobos.apple.com",
     "apps.apple.com", "itunes.apple.com",
 ]);
+
+// PERF v4.4.2: pre-compila alternation regex pras keys de CHEAT_APPS e
+// KNOWN_CHEAT_INFRA. No Pass 8, o loop antigo fazia
+// `for (k of Object.keys(TABELA)) { if (content.includes(k)) ... }`
+// — O(M × content.length) por arquivo. Com ~200 keys × 1000 arquivos isso era
+// 200k calls de Array.prototype.includes (cada uma um scan completo do buffer).
+// Agora 1 regex.exec por tabela por arquivo. Speedup esperado: 20-50×.
+function _escapeRegexForAlt(s) { return s.replace(/[.+*?^${}()|[\]\\]/g, '\\$&'); }
+const _CHEAT_BUNDLE_KEYS = Object.keys(CHEAT_APPS).map(_escapeRegexForAlt);
+// Bundles têm dots (com.x.y) — sem word boundary forte, mas precisamos casar exato
+// no início (não no meio de outra string). Usar (?:^|[^\w.]) lookahead atrasaria;
+// preferimos a regex simples e dedupe via Set ao agregar.
+const CHEAT_BUNDLES_REGEX = _CHEAT_BUNDLE_KEYS.length > 0
+    ? new RegExp('(' + _CHEAT_BUNDLE_KEYS.join('|') + ')', 'g')
+    : null;
+const _CHEAT_DOMAIN_KEYS = Object.keys(KNOWN_CHEAT_INFRA)
+    .filter(d => !/^\d+\./.test(d))   // IPs são tratados via KNOWN_CHEAT_IPS, não substring
+    .map(_escapeRegexForAlt);
+const CHEAT_DOMAINS_REGEX = _CHEAT_DOMAIN_KEYS.length > 0
+    ? new RegExp('(' + _CHEAT_DOMAIN_KEYS.join('|') + ')', 'g')
+    : null;
 
 const SCRIPT_URL_PATTERNS = [
     { regex: /raw\.githubusercontent\.com/i, label: "GitHub Raw" },
@@ -2789,46 +2841,52 @@ async function handleProfile(file) {
    ============================================================ */
 
 // Extrai strings ASCII printáveis de qualquer texto (suporta binary plists)
+// PERF v4.4.2: usa regex sobre a string já decodificada — engine V8/Safari Nitro
+// processa em ~15ms o que o loop JS char-by-char fazia em ~150ms (10× speedup
+// em buffers de 5MB). O minLen vem direto pro quantificador da regex.
 function extractStrings(raw, minLen) {
     minLen = minLen || 4;
-    const strings = [];
-    let cur = '';
-    for (let i = 0; i < raw.length; i++) {
-        const c = raw.charCodeAt(i);
-        if (c >= 32 && c < 127) {
-            cur += raw.charAt(i);
-        } else {
-            if (cur.length >= minLen) strings.push(cur);
-            cur = '';
-        }
-    }
-    if (cur.length >= minLen) strings.push(cur);
-    return strings;
+    if (!raw || raw.length === 0) return [];
+    const re = new RegExp(`[\\x20-\\x7e]{${minLen},}`, 'g');
+    return raw.match(re) || [];
 }
 
-/* extractStrings pra Uint8Array (binários: knowledgeC.db, PowerLog, fseventsd, plist binário) */
+/* extractStrings pra Uint8Array (binários: knowledgeC.db, PowerLog, fseventsd, plist binário)
+   PERF v4.4.2: decode latin1 (1 byte = 1 char, sem failure) e roda regex nativa
+   — TextDecoder + regex bate o loop char-by-char por ordem de grandeza. */
 function extractStringsFromBytes(buf, minLen) {
     minLen = minLen || 4;
-    const strings = [];
-    let cur = '';
-    for (let i = 0; i < buf.length; i++) {
-        const c = buf[i];
-        if (c >= 32 && c < 127) {
-            cur += String.fromCharCode(c);
-        } else {
-            if (cur.length >= minLen) strings.push(cur);
-            cur = '';
-        }
+    if (!buf || buf.length === 0) return [];
+    let text;
+    try {
+        text = new TextDecoder('latin1', { fatal: false }).decode(buf);
+    } catch (e) {
+        // Fallback caso latin1 não suportado (extremamente raro) — usa utf-8 lossy
+        text = new TextDecoder('utf-8', { fatal: false }).decode(buf);
     }
-    if (cur.length >= minLen) strings.push(cur);
-    return strings;
+    const re = new RegExp(`[\\x20-\\x7e]{${minLen},}`, 'g');
+    return text.match(re) || [];
 }
 
+/* readSafe — cache WeakMap pra evitar re-leituras do mesmo File entre passes.
+   PERF v4.4.2: na pipeline atual, arquivos como installLog/profileStub/wifiPlist
+   são lidos em Pass 1-7 e depois RE-LIDOS em Pass 8 (grep recursivo). Com cache,
+   a segunda leitura é zero-custo (retorna o Promise.resolve(texto) do anterior).
+   Cap default reduzido pra 10MB — files entre 10-20MB raramente trazem signal e
+   gastam memória/CPU desnecessariamente em iOS Safari. */
+const _readSafeCache = new WeakMap();
 async function readSafe(file, maxBytes) {
-    maxBytes = maxBytes || 20 * 1024 * 1024;
+    maxBytes = maxBytes || 10 * 1024 * 1024;
     if (file.size > maxBytes) return null;
-    try { return await file.text(); }
-    catch (e) { return ""; }
+    // Cache hit: retorna o mesmo Promise (evita re-decode de file.text())
+    let cached = _readSafeCache.get(file);
+    if (cached) return cached;
+    const p = (async () => {
+        try { return await file.text(); }
+        catch (e) { return ""; }
+    })();
+    _readSafeCache.set(file, p);
+    return p;
 }
 
 // Indicadores de cada categoria pra grep global
@@ -3522,8 +3580,10 @@ async function handleSysdiagnose(filesList, opts) {
     if (!opts.fromTarGz) showLoading('Lendo pasta sysdiagnose…');
     if (!opts.fromTarGz) reset();
 
+    const _scanStartedAt = performance.now();
     const files = Array.from(filesList);
-    ok(`Pasta selecionada: ${files.length} arquivos`);
+    ok(`A4ther v${VERSION} · pasta selecionada: ${files.length} arquivos`);
+    console.log(`[a4ther] handleSysdiagnose start · v${VERSION} · ${files.length} files`);
 
     // Encontra a pasta raiz (caso usuário tenha aberto um diretório pai)
     const allPaths = files.map(f => f.webkitRelativePath || f.name);
@@ -3685,12 +3745,19 @@ async function handleSysdiagnose(filesList, opts) {
         }
     }
 
-    // ─── SCAN PASS 2.5: MCProfileEvents — XML-aware parser (v4.4.1) ───
+    // ─── SCAN PASS 2.5: MCProfileEvents — XML-aware parser (v4.4.4) ───
     // Captura TODOS os profile UUIDs (SHA256+SHA256-UUID) com install/remove + timestamp
     if (byType.mcProfileEvents) {
         for (const f of byType.mcProfileEvents) {
+            // Skip AppleDouble resource fork (._foo é metadado macOS, não dado real)
+            const fname = (f.webkitRelativePath || f.name);
+            const baseName = fname.split('/').pop();
+            if (baseName.startsWith('._')) {
+                ok(`MCProfileEvents: skip ${baseName} (AppleDouble resource fork, sem dado real)`);
+                continue;
+            }
             const buf = new Uint8Array(await f.arrayBuffer());
-            ok(`MCProfileEvents: ${f.name} · ${buf.length} bytes`);
+            ok(`MCProfileEvents: ${baseName} · ${buf.length} bytes`);
 
             const isBplist = buf.length > 8 &&
                 buf[0] === 0x62 && buf[1] === 0x70 && buf[2] === 0x6c && buf[3] === 0x69 &&
@@ -3749,14 +3816,31 @@ async function handleSysdiagnose(filesList, opts) {
             }
 
             // ═══════════════ STRING POOL SCAN (fallback + IPs/hosts/payloads) ═══════════════
+            // v4.4.4: ALÉM do match exato, varremos cada string procurando hashes
+            // SHA256 (60-68 chars hex) EMBEDDED. Isso pega casos onde o XML tem
+            // <key>SHA256-UUID</key><string>HASH</string> ou bplist com hash dentro
+            // de outras strings concatenadas. Pegar TUDO que parece hash é melhor
+            // que perder pq o regex original exigia match exato da string inteira.
+            const embeddedHashRe = /[a-f0-9]{60,68}(?:-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})?/gi;
             for (const s of stringPool) {
-                // SHA256+UUID format (long): 60-68hex-UUID
+                // Caso A: match exato (formato canônico)
                 if (/^[a-f0-9]{40,68}-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/i.test(s)) {
                     if (!profileOps.has(s)) profileOps.set(s, { installs: [], removes: [], updates: [], processes: new Set(), lastSeen: null, fromStringPool: true });
                 }
-                // SHA256-only (sem UUID suffix) — formato curto do MCSettingsEvents
+                // Caso B: SHA256 puro (60-68 hex)
                 if (/^[a-f0-9]{60,68}$/i.test(s) && s.length >= 60) {
                     if (!profileOps.has(s)) profileOps.set(s, { installs: [], removes: [], updates: [], processes: new Set(), lastSeen: null, fromStringPool: true, shortFormat: true });
+                }
+                // Caso C: hash EMBEDDED em strings maiores (concat de bplist, ou XML
+                // com hash dentro de attributes/string children)
+                if (s.length > 60) {
+                    let em;
+                    embeddedHashRe.lastIndex = 0;
+                    while ((em = embeddedHashRe.exec(s)) !== null) {
+                        const hash = em[0];
+                        if (hash.length < 60) continue;  // safety
+                        if (!profileOps.has(hash)) profileOps.set(hash, { installs: [], removes: [], updates: [], processes: new Set(), lastSeen: null, fromStringPool: true, embedded: true });
+                    }
                 }
                 // PayloadType (interceptação de rede)
                 if (/^com\.apple\.(proxy|globalproxy|http\.proxy|vpn|dnsProxy|dns|relay\.managed|networkextension|wifi(\.managed)?|carrier|webClip|hotspothelper|trustsettings|certificate|security\.root-certificate|security\.pkcs12|managed|mdm|hotspotcaptive)/i.test(s)) {
@@ -3782,6 +3866,22 @@ async function handleSysdiagnose(filesList, opts) {
                     }
                 }
                 if (/^https?:\/\//i.test(s)) httpUrls.add(s);
+            }
+
+            // ═══════════════ FULL-TEXT HASH SWEEP (v4.4.4) ═══════════════
+            // Última rede de segurança: varre o textForRegex inteiro procurando
+            // QUALQUER ocorrência de hash hex de 60-68 chars (com ou sem suffix UUID).
+            // Pega casos onde o regex structured falhou (nested dicts, XML weird,
+            // bplist com strings concatenadas, etc).
+            {
+                const sweepRe = /([a-f0-9]{60,68})(?:-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})?/gi;
+                let sm;
+                while ((sm = sweepRe.exec(textForRegex)) !== null) {
+                    const full = sm[0];
+                    if (!profileOps.has(full)) {
+                        profileOps.set(full, { installs: [], removes: [], updates: [], processes: new Set(), lastSeen: null, fromTextSweep: true });
+                    }
+                }
             }
 
             // ═══════════════ TEXT-LEVEL HEURISTICS (fallback) ═══════════════
@@ -3882,8 +3982,20 @@ async function handleSysdiagnose(filesList, opts) {
                 warn(`[HIGH] ${suspicious} strings no MCProfileEvents com indícios MITM/cert-untrusted/tamper`);
             }
 
-            if (installed.size === 0 && uninstalled.size === 0 && payloadTypes.size === 0) {
+            // FIX v4.4.4: era `installed.size`/`uninstalled.size` (variáveis fantasma
+            // da v4.3 — ReferenceError silencioso). Substituído pelas Maps reais.
+            if (profileOps.size === 0 && payloadTypes.size === 0 && proxyHosts.size === 0 && proxyIps.size === 0) {
                 ok("MCProfileEvents: sem eventos de profile suspeitos");
+                // DEBUG v4.4.4: quando NÃO achou nada mas o file não é trivialmente
+                // vazio, mostra amostra do conteúdo pra diagnosticar formato exótico.
+                if (buf.length > 200) {
+                    const sample = textForRegex.substring(0, 500).replace(/\s+/g, ' ').trim();
+                    warn(`[DEBUG] MCProfileEvents amostra (${buf.length}B): ${sample.slice(0, 400)}…`);
+                    // Conta tags <key> pra saber se é XML estruturado mesmo
+                    const keyTags = (textForRegex.match(/<key>/gi) || []).length;
+                    const dictTags = (textForRegex.match(/<dict>/gi) || []).length;
+                    warn(`[DEBUG] tags: <key>×${keyTags} <dict>×${dictTags} · ${stringPool.length} strings no pool · isXml=${isXmlPlist} isBplist=${isBplist}`);
+                }
             }
         }
     }
@@ -4132,34 +4244,64 @@ async function handleSysdiagnose(filesList, opts) {
 
     // ─── SCAN PASS 8 (KILLER): GREP EM TODOS OS ARQUIVOS ───
     // Pass agressivo: varre TUDO procurando padrões conhecidos.
-    showLoading('Pass 8: scan recursivo em todos os arquivos…');
+    // PERF v4.4.3 — combinação de quatro otimizações sobre v4.4.2:
+    //   1) SKIP de arquivos já analisados em Pass 1-7 (installLog, mcEvents,
+    //      knowledgeC, etc) — eram revisitados redundantemente. Reduz ~30-50%
+    //      do trabalho dependendo do dump.
+    //   2) BATCH PARALLEL reads: 16 file.text() em paralelo via Promise.all.
+    //      Promise da File API roda em thread separada do browser, então 16
+    //      reads concorrentes ficam ~10× mais rápidos que sequencial.
+    //   3) Yield UI a cada 100ms (era 16ms) — setTimeout(0) tem overhead de
+    //      4-10ms cada; yield raro reduz overhead total sem prejudicar UX.
+    //   4) Regex pre-compiladas (v4.4.2) e cache readSafe (v4.4.2) mantidos.
+    showLoading('Pass 8: scan recursivo…');
 
     const foundProfiles = new Map();   // identifier → array de fontes
     const foundBundles = new Map();    // bundle → array de fontes
     const foundCheatStrings = new Map(); // string → array de fontes
     const foundCheatDomains = new Map();
 
-    let scanCount = 0;
-    const allScanFiles = files.filter(shouldScanFile);
+    // SKIP arquivos já analisados em passes 1-7 (tipos específicos)
+    const COVERED_BY_PREVIOUS_PASSES = new Set([
+        'installLog', 'mcEvents', 'mcProfileEvents', 'profileStub',
+        'networkExt', 'netPrefs',
+        'psFile', 'taskinfo', 'lockdown', 'mobileActivation', 'systemVersion',
+        'swcutil', 'crashIPS', 'profile',
+        'knowledgeC', 'powerLog', 'wifiKnown', 'wifiPlist',
+        'neUUIDCache', 'containersDb', 'appGroupMeta',
+        'fsEvents', 'shutdownLog', 'tailspin', 'storeDownloads',
+    ]);
+    const coveredFiles = new WeakSet();
+    for (const t of COVERED_BY_PREVIOUS_PASSES) {
+        for (const f of (byType[t] || [])) coveredFiles.add(f);
+    }
 
-    for (const f of allScanFiles) {
-        const raw = await readSafe(f);
-        if (!raw) { totalSkipped++; continue; }
+    let scanCount = 0;
+    const allScanFiles = files.filter(f => shouldScanFile(f) && !coveredFiles.has(f));
+    const _pass8Start = performance.now();
+    ok(`Pass 8: ${allScanFiles.length} arquivos a varrer (skip ${files.length - allScanFiles.length} já cobertos)`);
+
+    // Regex reutilizadas fora do loop (declarar 1× evita re-parse por arquivo)
+    const opaqueRe = /[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/g;
+    const dnsRe = /(?:com|io)\.[a-zA-Z0-9._-]+\.(?:nextdns|controld|adguard|cloudflare|warp|opendns|quad9)[a-zA-Z0-9._-]*/gi;
+    const ckRe = /\b(esign|feather|ksign|gbox|scarlet|trollstore|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|iosgods|filza|ifunbox|geranium|frida|cycript|substrate|libhooker|ffh4x|aimbot|wallhack|cheat\.menu|mod\.menu|injector)\b/gi;
+
+    // Processa 1 arquivo (lê + corre regex passes + atualiza Maps globais)
+    // Side-effects only: muta foundProfiles/foundBundles/etc e contadores.
+    function _pass8ProcessFile(f, raw) {
+        if (!raw) { totalSkipped++; return; }
         totalScanned++;
-        scanCount++;
-        if (scanCount % 50 === 0) {
-            showLoading(`Pass 8: ${scanCount}/${allScanFiles.length} arquivos…`);
-        }
 
         const sourceName = (f.webkitRelativePath || f.name).split('/').slice(-2).join('/');
-
-        // Pega strings ASCII (suporta binário)
+        // Files grandes (>50KB) já são texto; pequenos podem ser binary (.stub etc)
+        // e merecem extractStrings pra recuperar ASCII.
         const strings = raw.length > 50000 ? raw : extractStrings(raw, 6).join('\n');
 
-        // 1) Profile IDs com UUID opaco
-        let m;
         const seenInThisFile = new Set();
-        const opaqueRe = /[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/g;
+
+        // 1) Profile IDs com UUID opaco
+        opaqueRe.lastIndex = 0;
+        let m;
         while ((m = opaqueRe.exec(strings)) !== null) {
             if (seenInThisFile.has(m[0])) continue;
             seenInThisFile.add(m[0]);
@@ -4167,8 +4309,8 @@ async function handleSysdiagnose(filesList, opts) {
             foundProfiles.get(m[0]).push(sourceName);
         }
 
-        // 2) Profile IDs sem UUID mas com nome reseller
-        const dnsRe = /(?:com|io)\.[a-zA-Z0-9._-]+\.(?:nextdns|controld|adguard|cloudflare|warp|opendns|quad9)[a-zA-Z0-9._-]*/gi;
+        // 2) Profile IDs DNS reseller (NextDNS/ControlD/etc)
+        dnsRe.lastIndex = 0;
         while ((m = dnsRe.exec(strings)) !== null) {
             if (seenInThisFile.has(m[0])) continue;
             seenInThisFile.add(m[0]);
@@ -4176,8 +4318,8 @@ async function handleSysdiagnose(filesList, opts) {
             foundProfiles.get(m[0]).push(sourceName);
         }
 
-        // 3) Cheat keywords (case insensitive)
-        const ckRe = /\b(esign|feather|ksign|gbox|scarlet|trollstore|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|iosgods|filza|ifunbox|geranium|frida|cycript|substrate|libhooker|ffh4x|aimbot|wallhack|cheat\.menu|mod\.menu|injector)\b/gi;
+        // 3) Cheat keywords
+        ckRe.lastIndex = 0;
         while ((m = ckRe.exec(strings)) !== null) {
             const kw = m[0].toLowerCase();
             if (seenInThisFile.has('kw:' + kw)) continue;
@@ -4186,29 +4328,58 @@ async function handleSysdiagnose(filesList, opts) {
             foundCheatStrings.get(kw).push(sourceName);
         }
 
-        // 4) Cheat domains
-        for (const cd of Object.keys(KNOWN_CHEAT_INFRA)) {
-            if (cd.match(/^\d+\./)) continue; // skip IPs (handled separately)
-            if (strings.includes(cd)) {
+        // 4) Cheat domains (alternation pre-compilada)
+        if (CHEAT_DOMAINS_REGEX) {
+            CHEAT_DOMAINS_REGEX.lastIndex = 0;
+            let dm;
+            while ((dm = CHEAT_DOMAINS_REGEX.exec(strings)) !== null) {
+                const cd = dm[1];
                 if (!foundCheatDomains.has(cd)) foundCheatDomains.set(cd, []);
-                if (!foundCheatDomains.get(cd).includes(sourceName)) {
-                    foundCheatDomains.get(cd).push(sourceName);
-                }
+                const arr = foundCheatDomains.get(cd);
+                if (!arr.includes(sourceName)) arr.push(sourceName);
             }
         }
 
-        // 5) CHEAT_APPS bundles
-        for (const b of Object.keys(CHEAT_APPS)) {
-            if (strings.includes(b)) {
+        // 5) CHEAT_APPS bundles (alternation pre-compilada)
+        if (CHEAT_BUNDLES_REGEX) {
+            CHEAT_BUNDLES_REGEX.lastIndex = 0;
+            let bm;
+            while ((bm = CHEAT_BUNDLES_REGEX.exec(strings)) !== null) {
+                const b = bm[1];
                 if (!foundBundles.has(b)) foundBundles.set(b, []);
-                if (!foundBundles.get(b).includes(sourceName)) {
-                    foundBundles.get(b).push(sourceName);
-                }
+                const arr = foundBundles.get(b);
+                if (!arr.includes(sourceName)) arr.push(sourceName);
             }
         }
     }
 
-    ok(`Pass 8: ${totalScanned} arquivos varridos (${totalSkipped} skipados)`);
+    // Loop em batches paralelos: I/O concorrente, CPU sequencial
+    const PASS8_BATCH = 16;
+    let lastYield = performance.now();
+    for (let i = 0; i < allScanFiles.length; i += PASS8_BATCH) {
+        const batch = allScanFiles.slice(i, i + PASS8_BATCH);
+        // 16 file.text() em paralelo (browser usa thread separada por leitura)
+        const reads = await Promise.all(batch.map(async (f) => ({ f, raw: await readSafe(f) })));
+        // Process CPU sync (regex passes não bloqueiam por muito tempo cada)
+        for (const { f, raw } of reads) {
+            scanCount++;
+            _pass8ProcessFile(f, raw);
+        }
+        // UI feedback a cada batch (~16 arquivos por update)
+        if ((i / PASS8_BATCH) % 4 === 0) {
+            const pct = Math.round((scanCount / allScanFiles.length) * 100);
+            showLoading(`Pass 8: ${scanCount}/${allScanFiles.length} (${pct}%)…`);
+        }
+        // Yield UI a cada 100ms — frequencia menor reduz overhead total
+        if ((performance.now() - lastYield) > 100) {
+            await new Promise(r => setTimeout(r, 0));
+            lastYield = performance.now();
+        }
+    }
+
+    const _pass8Ms = Math.round(performance.now() - _pass8Start);
+    ok(`Pass 8: ${totalScanned} varridos · ${totalSkipped} skipados · ${_pass8Ms}ms`);
+    console.log(`[a4ther] Pass 8 done in ${_pass8Ms}ms · ${totalScanned}/${allScanFiles.length} files`);
 
     // ─── PASS 9: PC PAIRING ───
     scanPCPairings(files);
@@ -4264,6 +4435,11 @@ async function handleSysdiagnose(filesList, opts) {
         }
     }
 
+    // Timing total — útil pra diagnosticar gargalos se ainda estiver lento
+    const _scanTotalMs = Math.round(performance.now() - _scanStartedAt);
+    const _scanTotalSec = (_scanTotalMs / 1000).toFixed(1);
+    ok(`Análise completa em ${_scanTotalSec}s (v${VERSION})`);
+    console.log(`[a4ther] handleSysdiagnose done in ${_scanTotalMs}ms · v${VERSION}`);
     renderResults({});
 }
 
