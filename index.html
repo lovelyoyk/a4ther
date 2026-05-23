@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.7</span>
+        <span id="version">v4.4.8</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1587,7 +1587,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.7";
+const VERSION = "4.4.8";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -2147,6 +2147,87 @@ const KNOWN_CHEAT_IPS = {
     "154.223.134.24": "[REAL] CDS Global Cloud BR — FF chamando IP non-Garena (APR 20-mai-2026)",
     "46.202.145.85":  "Fatality Cheats — servidor confirmado",
 };
+
+// ─── TABELA DE PREFIXOS DE PROFILE UUIDs CONHECIDOS (v4.4.8) ───
+// IOCs comportamentais: SHA256 dos profiles MDM/Configuration que pertencem
+// a cheats/proxies conhecidos. Quando um profile com hash prefix bate aqui,
+// o scanner emite alert COM IDENTIFICAÇÃO DO CHEAT (não só "Profile UUID
+// opaco"). Threat intel da comunidade de detecção FF anti-cheat.
+//
+// AVISO: prefixes de 2-3 chars têm risco de false-positive (em hex, 2 chars =
+// 1/256 = 0.4% chance random). Lista mantida porque o user confirmou que esses
+// prefixes específicos NUNCA aparecem em profiles legítimos no ecossistema
+// observado. Greedy match (mais longo wins) ordena pra precisão.
+const CHEAT_PROFILE_PREFIXES = {
+    // Zeex free/vip
+    "78f":  { name: "Zeex (free/vip)",      sev: "CRITICAL", desc: "Cheat panel Zeex — proxy conhecido (free/vip variants)" },
+    "d14":  { name: "Zeex (free/vip)",      sev: "CRITICAL", desc: "Cheat panel Zeex — proxy conhecido (free/vip variants)" },
+    "140":  { name: "Zeex (free/vip)",      sev: "CRITICAL", desc: "Cheat panel Zeex — proxy conhecido (free/vip variants)" },
+    "06":   { name: "Zeex (free/vip)",      sev: "CRITICAL", desc: "Cheat panel Zeex — proxy conhecido (free/vip variants)" },
+    // Fatality bypass
+    "1ea":  { name: "Fatality (bypass)",    sev: "CRITICAL", desc: "Cheat Fatality — bypass profile" },
+    "b0":   { name: "Fatality (bypass)",    sev: "CRITICAL", desc: "Cheat Fatality — bypass profile" },
+    "2c":   { name: "Fatality (bypass)",    sev: "CRITICAL", desc: "Cheat Fatality — bypass profile" },
+    "9d":   { name: "Fatality (bypass)",    sev: "CRITICAL", desc: "Cheat Fatality — bypass profile" },
+    // Luxe cheats (nova att)
+    "b9":   { name: "Luxe Cheats",          sev: "CRITICAL", desc: "Cheat Luxe — versão recente" },
+    "a4":   { name: "Luxe Cheats",          sev: "CRITICAL", desc: "Cheat Luxe — versão recente" },
+    // Dash
+    "60a":  { name: "Dash",                 sev: "CRITICAL", desc: "Cheat Dash — proxy conhecido" },
+    // "Desconhecida" — proxies confirmados sem panel attribution
+    "84":   { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "7d":   { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "70a":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "051":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "3c4":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "ae7":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "0af":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "704":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "0d":   { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída · era 'Od' na fonte, lido como 0d)" },
+    "40e":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "59ac": { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "4cf":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    "bd32": { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída · família bd32)" },
+    "90eb": { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída · família 90eb)" },
+    "d03":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+};
+
+// Strings/markers que aparecem em profile identifiers ou bundles de cheat
+// (procura via .includes() em pid OU em qualquer string do stringPool).
+const CHEAT_PROFILE_STRINGS = [
+    { needle: "proxyady",          name: "Proxy desconhecido (proxyady)", sev: "CRITICAL", desc: "Marker string de proxy/cheat" },
+    { needle: "dash.proxy",        name: "Dash",                          sev: "CRITICAL", desc: "Cheat Dash — proxy" },
+    { needle: "com.xtremo.mobile", name: "XTREMO",                        sev: "CRITICAL", desc: "Cheat XTREMO — bundle confirmado" },
+];
+
+// Pre-ordena prefixes do MAIS LONGO pro mais curto (greedy match = mais preciso)
+const _CHEAT_PROFILE_PREFIXES_SORTED = Object.entries(CHEAT_PROFILE_PREFIXES)
+    .sort((a, b) => b[0].length - a[0].length);
+
+/**
+ * Tenta identificar um profile/string como cheat conhecido.
+ * Retorna { name, sev, desc, match } ou null.
+ *
+ * Match strategy:
+ *   1. Hash prefix (greedy: mais longo primeiro) — testa pid.toLowerCase().startsWith()
+ *   2. String markers — testa pid.includes() case-insensitive
+ *   3. Não bateu → retorna null (alert genérico tradicional)
+ */
+function identifyCheatProfile(pid) {
+    if (!pid) return null;
+    const pidLower = String(pid).toLowerCase();
+    for (const [prefix, info] of _CHEAT_PROFILE_PREFIXES_SORTED) {
+        if (pidLower.startsWith(prefix.toLowerCase())) {
+            return { ...info, match: `prefix:${prefix}` };
+        }
+    }
+    for (const sm of CHEAT_PROFILE_STRINGS) {
+        if (pidLower.includes(sm.needle.toLowerCase())) {
+            return { ...sm, match: `string:${sm.needle}` };
+        }
+    }
+    return null;
+}
 
 const TELEMETRY_DOMAINS = [
     "sentry.io", "ingest.sentry.io",
@@ -4006,8 +4087,18 @@ async function handleSysdiagnose(filesList, opts) {
                     const eventsLine = `${iCount}× install · ${rCount}× remove${uCount ? ` · ${uCount}× update` : ''} · process: ${procs}`;
                     const shortPid = pid.length > 60 ? pid.substring(0, 60) + '…' : pid;
 
+                    // v4.4.8: cross-reference com tabela de cheats conhecidos
+                    // (Zeex, Fatality, Luxe, Dash, XTREMO, proxies desconhecidos)
+                    const cheatId = identifyCheatProfile(pid);
+                    const idLabel = cheatId ? ` → ${cheatId.name}` : '';
+                    const idDetail = cheatId ? ` · IOC match: ${cheatId.match}` : '';
+
                     // Classify severity
-                    if (iCount > 0 && rCount > 0) {
+                    if (cheatId) {
+                        // IDENTIFICAÇÃO CONFIRMADA — alert com nome do cheat
+                        alertF(`[${cheatId.sev}] CHEAT IDENTIFICADO${idLabel}: ${shortPid}`,
+                            `${cheatId.desc}${idDetail} · ${eventsLine} · lastSeen: ${lastSeenStr}`);
+                    } else if (iCount > 0 && rCount > 0) {
                         // Install + remove = profile foi posto E retirado (típico cheat panel temporário)
                         alertF(`[CRITICAL] Profile UUID opaco INSTALADO+REMOVIDO: ${shortPid}`,
                             `${eventsLine} · lastSeen: ${lastSeenStr} — Cheat panel? (instalado pra jogar, removido pra esconder)`);
