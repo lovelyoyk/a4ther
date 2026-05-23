@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.4</span>
+        <span id="version">v4.4.5</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1587,7 +1587,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.4";
+const VERSION = "4.4.5";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -2395,13 +2395,21 @@ function renderResults(stats) {
     } catch (e) {}
 
     // Stats: Apps Instalados | Cheats | Perfis MDM
+    // FIX v4.4.5: regex case-INSENSITIVE pra contar "Profile UUID" (P maiúsculo,
+    // resto minúsculo) — antes só batia em "PROFILE" todo maiúsculo, perdendo
+    // 9 de cada 13 alerts de profile típicos.
     let cheatCount = 0, profileCount = 0;
     for (const a of alerts) {
         const m = (typeof a === 'string' ? a : a.msg) || '';
-        if (/\[CHEAT\]|\[CERT\]|\[SIDELOAD\]|\[JAILBREAK\]/.test(m)) cheatCount++;
-        if (/PROFILE|MDM|\[DNS\]/.test(m)) profileCount++;
+        if (/\[CHEAT\]|\[CERT\]|\[SIDELOAD\]|\[JAILBREAK\]/i.test(m)) cheatCount++;
+        if (/profile|mdm|\[dns\]/i.test(m)) profileCount++;
     }
-    const appsCount = stats && stats.bundles !== undefined ? stats.bundles : '?';
+    // FIX v4.4.5: appsCount caía em '?' porque handleSysdiagnose sempre chamava
+    // renderResults({}) sem passar bundles. Agora também aceita stats.appsInstalled
+    // (contagem real de Install events no mobile_installation.log).
+    const appsCount = stats && stats.appsInstalled !== undefined
+        ? stats.appsInstalled
+        : (stats && stats.bundles !== undefined ? stats.bundles : '?');
 
     let html = `
         <div class="verdict ${color}">
@@ -3562,17 +3570,59 @@ async function extractHWID(files) {
     if (serial) ok(`Serial: ${serial}`);
     if (udid)   ok(`UDID:   ${udid}`);
     if (ecid)   ok(`ECID:   ${ecid}`);
+    let hwidHash = null;
     if (serial || udid) {
         // HWID composto pra cross-reference com bans
         const raw = `${serial || ''}:${udid || ''}:${ecid || ''}`;
-        // Hash MD5 simples via crypto.subtle SHA-256 (web crypto não tem MD5)
         try {
             const enc = new TextEncoder().encode(raw);
             const buf = await crypto.subtle.digest('SHA-256', enc);
-            const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-            ok(`HWID (SHA-256): ${hex.substring(0, 16)}...`);
+            hwidHash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+            ok(`HWID (SHA-256): ${hwidHash.substring(0, 16)}...`);
         } catch (e) {}
     }
+
+    // ═══════════════ BLACKLIST LOOKUP (v4.4.5) ═══════════════
+    // Cross-reference com lspainel blacklist via /api/a4ther/blacklist/check.
+    // Tenta múltiplas chaves: Serial puro, UDID, hash composto SHA-256.
+    // Qualquer match → alert CRITICAL "DEVICE BANIDO" + motivos.
+    if (serial || udid || hwidHash) {
+        const lookups = [];
+        if (serial) lookups.push({ key: 'Serial', val: serial });
+        if (udid)   lookups.push({ key: 'UDID',   val: udid });
+        if (hwidHash) lookups.push({ key: 'HWID',  val: hwidHash });
+        showLoading('Consultando blacklist…');
+        // Paralelo — limit timeout via checkBlacklist (6s)
+        const results = await Promise.all(lookups.map(async (l) => {
+            const r = await checkBlacklist(l.val);
+            return { ...l, result: r };
+        }));
+        let bannedFound = false;
+        for (const { key, val, result } of results) {
+            if (!result) continue;
+            if (result.banned === true) {
+                bannedFound = true;
+                const motivos = (result.motivos && result.motivos.length > 0)
+                    ? `\nMotivos: ${result.motivos.join(' · ')}`
+                    : '';
+                const dataBan = result.date ? ` em ${result.date}` : '';
+                const source = result.source ? ` (${result.source})` : '';
+                alertF(
+                    `[CRITICAL][BLACKLIST] DEVICE BANIDO via ${key}: ${val}`,
+                    `${result.reason || 'banido'}${dataBan}${source}${motivos}\nFonte: lspainel.com.br/dashboard/blacklist`
+                );
+            } else if (result.error) {
+                warn(`Blacklist ${key}: erro consultando (${String(result.error).slice(0, 80)})`);
+            } else {
+                ok(`Blacklist ${key} (${val.slice(0, 16)}…): clean`);
+            }
+        }
+        if (!bannedFound && results.some(r => r.result && r.result.banned === false)) {
+            ok(`◆ Device NÃO está na blacklist lspainel`);
+        }
+    }
+
+    return { serial, udid, ecid, hwidHash };
 }
 
 async function handleSysdiagnose(filesList, opts) {
@@ -3596,6 +3646,8 @@ async function handleSysdiagnose(filesList, opts) {
     // ─── Mapeia arquivos por tipo ───
     const byType = {};
     let totalScanned = 0, totalSkipped = 0;
+    // v4.4.5: accumulators pros stats finais que vão pro renderResults
+    const _stats = { appsInstalled: 0, bundles: 0, events: 0, domains: 0, ips: 0 };
     for (const f of files) {
         const type = fileType(f);
         if (!byType[type]) byType[type] = [];
@@ -3664,6 +3716,9 @@ async function handleSysdiagnose(filesList, opts) {
                 if (bm && !bm[1].includes('/')) bundleSet.add(bm[1]);
             }
             ok(`mobile_installation: ${bundleSet.size} bundles · ${installs}+/${uninstalls}- events`);
+            // v4.4.5: popula stats pra contador "Apps Instalados" no painel final
+            _stats.appsInstalled = installs;
+            _stats.bundles = bundleSet.size;
             for (const b of bundleSet) {
                 const c = classifyBundle(b);
                 if (c) alertF(`[${c.sev}] App em install log: ${b}`, c.desc);
@@ -3895,8 +3950,42 @@ async function handleSysdiagnose(filesList, opts) {
                 if (/MITM|self.signed|untrusted CA|cert.*rejected|unauthor|tamper|jailbreak|cheat/i.test(line)) suspicious++;
             }
 
+            // ═══════════════ DEDUP (v4.4.5) — colapsa hashes sobrepostos ═══════════════
+            // O sweep agressivo da v4.4.4 (4 estratégias) pode adicionar o mesmo
+            // profile em 3-4 formatos: SHA256 puro (64 chars), SHA256-UUID (102 chars),
+            // hash embedded em outra string. Aqui dedupe mantendo a versão MAIS
+            // LONGA (mais informação) e mergeando os events.
+            {
+                const ids = Array.from(profileOps.keys()).sort((a, b) => b.length - a.length);
+                const canonical = new Map(); // id_curto → id_mais_longo
+                for (const long of ids) {
+                    if (canonical.has(long)) continue;
+                    canonical.set(long, long);
+                    for (const short of ids) {
+                        if (short === long) continue;
+                        if (canonical.has(short)) continue;
+                        // Se short é substring do long, mergeia
+                        if (long.includes(short) || (short.length >= 60 && long.startsWith(short))) {
+                            canonical.set(short, long);
+                            const sEntry = profileOps.get(short);
+                            const lEntry = profileOps.get(long);
+                            if (sEntry && lEntry) {
+                                lEntry.installs.push(...sEntry.installs);
+                                lEntry.removes.push(...sEntry.removes);
+                                lEntry.updates.push(...sEntry.updates);
+                                for (const p of sEntry.processes) lEntry.processes.add(p);
+                                if (sEntry.lastSeen && (!lEntry.lastSeen || sEntry.lastSeen > lEntry.lastSeen)) {
+                                    lEntry.lastSeen = sEntry.lastSeen;
+                                }
+                            }
+                            profileOps.delete(short);
+                        }
+                    }
+                }
+            }
+
             // ═══════════════ REPORT — todos profile UUIDs com timeline ═══════════════
-            ok(`  → ${profileOps.size} profile UUIDs únicos detectados`);
+            ok(`  → ${profileOps.size} profile UUIDs únicos detectados (após dedup)`);
             if (profileOps.size > 0) {
                 const sortedIds = Array.from(profileOps.entries())
                     .sort((a, b) => (b[1].lastSeen || 0) - (a[1].lastSeen || 0));
@@ -4440,7 +4529,13 @@ async function handleSysdiagnose(filesList, opts) {
     const _scanTotalSec = (_scanTotalMs / 1000).toFixed(1);
     ok(`Análise completa em ${_scanTotalSec}s (v${VERSION})`);
     console.log(`[a4ther] handleSysdiagnose done in ${_scanTotalMs}ms · v${VERSION}`);
-    renderResults({});
+    // v4.4.5: passa stats acumulados (appsInstalled, bundles) pro painel renderar
+    // os contadores corretamente (antes APPS INSTALADOS sempre virava '?').
+    renderResults({
+        appsInstalled: _stats.appsInstalled,
+        bundles: _stats.bundles,
+        mode: opts.fromTarGz ? 'sysdiagnose-targz' : 'sysdiagnose-folder',
+    });
 }
 
 /* ============================================================
