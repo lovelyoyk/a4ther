@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.2"
+VERSION="4.4.3"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -2595,17 +2595,61 @@ fi
 
 # ============================================================
 #  31. HWID (SHA-256 + MD5)
+#  v4.4.3: Android 10+ bloqueia ro.serialno, MAC e android_id pra apps não-
+#  privilegiados (Termux). Cada campo agora tem 4-7 fallbacks de fontes
+#  diferentes (getprop vendor-specific, /proc/cmdline, /sys, ip link, etc).
 # ============================================================
 header "HWID"
 
+# ─── SERIAL ─── tenta 7 fontes em ordem de prioridade
 SERIAL=$(gp ro.serialno)
 [ -z "$SERIAL" ] && SERIAL=$(gp ro.boot.serialno)
+[ -z "$SERIAL" ] && SERIAL=$(gp ro.boot.em.serial)
+[ -z "$SERIAL" ] && SERIAL=$(gp ril.serialnumber)
+# kernel cmdline guarda o serial da boot (passa do bootloader pro kernel)
+[ -z "$SERIAL" ] && SERIAL=$(cat /proc/cmdline 2>/dev/null | grep -oE 'androidboot\.serialno=[^ ]+' | cut -d= -f2 | head -1)
+# vendor-specific (alguns kernels expõem em /sys/class)
+[ -z "$SERIAL" ] && SERIAL=$(cat /sys/class/android_usb/android0/iSerial 2>/dev/null)
+[ -z "$SERIAL" ] && SERIAL=$(cat /sys/class/android_usb/f_mass_storage/lun/file 2>/dev/null | head -c 64)
+
+# ─── BOOT SERIAL ─── 4 fontes
 BOOT_SERIAL=$(gp ro.boot.serialno)
+[ -z "$BOOT_SERIAL" ] && BOOT_SERIAL=$(cat /proc/cmdline 2>/dev/null | grep -oE 'androidboot\.serialno=[^ ]+' | cut -d= -f2 | head -1)
+[ -z "$BOOT_SERIAL" ] && BOOT_SERIAL=$(gp ro.bootloader)
+[ -z "$BOOT_SERIAL" ] && BOOT_SERIAL=$(gp ro.boot.bootloader)
+
+# ─── MAC wlan0 ─── 6 fontes (a maioria falha em Android 10+ por privacy)
 MAC=$(cat /sys/class/net/wlan0/address 2>/dev/null)
+[ -z "$MAC" ] && MAC=$(ip link show wlan0 2>/dev/null | awk '/link\/ether/ {print $2}' | head -1)
+[ -z "$MAC" ] && MAC=$(ip addr show wlan0 2>/dev/null | awk '/link\/ether/ {print $2}' | head -1)
+[ -z "$MAC" ] && MAC=$(ifconfig wlan0 2>/dev/null | grep -oE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' | head -1)
+# Algumas ROMs guardam o MAC original em getprop
+[ -z "$MAC" ] && MAC=$(gp persist.sys.wifi.mac)
+[ -z "$MAC" ] && MAC=$(gp ro.boot.wifi.macaddr)
+[ -z "$MAC" ] && MAC=$(gp wifi.interface.macaddr)
+# Fallback final: outras interfaces (eth0, ap0)
+[ -z "$MAC" ] && MAC=$(cat /sys/class/net/eth0/address 2>/dev/null)
+
+# ─── ANDROID ID ─── 3 fontes
 ANDROID_ID=""
 have settings && ANDROID_ID=$(settings get secure android_id 2>/dev/null)
+# Filtra erro "cmd: Failure calling service settings..."
+case "$ANDROID_ID" in *Failure*|*cmd:*) ANDROID_ID="" ;; esac
+[ -z "$ANDROID_ID" ] && ANDROID_ID=$(gp ro.serialno)  # fallback comum em alguns devices
+[ -z "$ANDROID_ID" ] && ANDROID_ID=$(cat /data/system/users/0/settings_secure.xml 2>/dev/null | grep -oE 'android_id" value="[^"]*' | cut -d'"' -f3)
 
-RAW="${SERIAL}|${MAC}|${ANDROID_ID}|$(gp ro.product.model)"
+# ─── BLUETOOTH MAC ─── (v4.4.3: novo, raramente bloqueado pelo privacy sandbox)
+BT_MAC=$(gp persist.service.bdroid.bdaddr)
+[ -z "$BT_MAC" ] && BT_MAC=$(gp ro.boot.btmacaddr)
+[ -z "$BT_MAC" ] && BT_MAC=$(cat /sys/class/bluetooth/hci0/address 2>/dev/null)
+
+# ─── Build fingerprint sempre disponível (uniquíssimo no install) ───
+FINGERPRINT=$(gp ro.build.fingerprint)
+PRODUCT_MODEL=$(gp ro.product.model)
+PRODUCT_BRAND=$(gp ro.product.brand)
+
+# HWID composto — usa todos os campos disponíveis (não vazios)
+RAW="${SERIAL}|${BOOT_SERIAL}|${MAC}|${BT_MAC}|${ANDROID_ID}|${FINGERPRINT}|${PRODUCT_BRAND}|${PRODUCT_MODEL}"
 HWID_ALT_RAW="${ANDROID_ID}:${SERIAL}:${BOOT_SERIAL}"
 
 HASH=""
@@ -2622,9 +2666,17 @@ fi
 info "Serial:        ${SERIAL:-?}"
 info "Boot serial:   ${BOOT_SERIAL:-?}"
 info "MAC wlan0:     ${MAC:-?}"
+info "Bluetooth MAC: ${BT_MAC:-?}"
 info "Android ID:    ${ANDROID_ID:-?}"
+info "Brand/Model:   ${PRODUCT_BRAND:-?} / ${PRODUCT_MODEL:-?}"
+info "Fingerprint:   ${FINGERPRINT:-?}"
 info "HWID SHA-256:  ${HASH:-(indisponível)}"
-info "HWID MD5: ${HASH_HWID_ALT:-(indisponível)}"
+info "HWID MD5:      ${HASH_HWID_ALT:-(indisponível)}"
+
+# Diagnóstico: se TUDO tá vazio, é privacy lock do Android 10+
+if [ -z "$SERIAL" ] && [ -z "$MAC" ] && [ -z "$ANDROID_ID" ]; then
+    warn "Serial/MAC/AndroidID todos vazios — Android 10+ bloqueia esses dados pra apps não-privilegiados (Termux). Fingerprint+model ainda dão identificador único parcial."
+fi
 
 fi  # ===== fim do bloco ANDROID =====
 
