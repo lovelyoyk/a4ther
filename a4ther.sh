@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.3"
+VERSION="4.4.4"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -72,6 +72,27 @@ gp()     { getprop "$1" 2>/dev/null; }
 exists() { [ -e "$1" ]; }
 pkg_installed() {
     have pm && pm path "$1" 2>/dev/null | grep -q '^package:'
+}
+
+# v4.4.3: settings get com filtro de erro. No Android moderno o `settings`
+# command falha pra apps non-privileged com "cmd: Failure calling service
+# settings: Failed transaction (2147483646)" — o script tratava essa mensagem
+# como se fosse VALOR válido (ex: "proxy ativo: cmd: Failure..."). Agora
+# retornamos string vazia quando detectamos erro.
+#   uso:  $(setting_get global http_proxy)
+#         $(setting_get secure enabled_accessibility_services)
+setting_get() {
+    have settings || { echo ""; return 0; }
+    _v=$(settings get "$1" "$2" 2>/dev/null)
+    # Filtra mensagens de erro do Android moderno
+    case "$_v" in
+        ""|"null"|"NULL")              echo "" ;;
+        cmd:*|*"Failure calling"*)     echo "" ;;
+        *"Failed transaction"*)        echo "" ;;
+        *"Permission Denial"*)         echo "" ;;
+        *"Exception"*|*"Error:"*)      echo "" ;;
+        *) echo "$_v" ;;
+    esac
 }
 
 # ---------- Banner ----------
@@ -205,14 +226,14 @@ case "$USB" in
 esac
 
 if have settings; then
-    AT=$(settings get global auto_time 2>/dev/null)
-    ATZ=$(settings get global auto_time_zone 2>/dev/null)
+    AT=$(setting_get global auto_time)
+    ATZ=$(setting_get global auto_time_zone)
     [ "$AT" = "0" ]  && alert "auto_time DESLIGADO (manipulação de data/hora)" || [ -n "$AT" ] && ok "auto_time=$AT"
     [ "$ATZ" = "0" ] && warn "auto_time_zone DESLIGADO" || [ -n "$ATZ" ] && ok "auto_time_zone=$ATZ"
-    [ "$(settings get global adb_enabled 2>/dev/null)" = "1" ] && warn "ADB habilitado"
-    [ "$(settings get global development_settings_enabled 2>/dev/null)" = "1" ] && warn "Opções de dev habilitadas"
-    [ "$(settings get global install_non_market_apps 2>/dev/null)" = "1" ] && warn "Fontes desconhecidas habilitadas"
-    [ "$(settings get secure mock_location 2>/dev/null)" = "1" ] && alert "Mock location HABILITADO"
+    [ "$(setting_get global adb_enabled)" = "1" ] && warn "ADB habilitado"
+    [ "$(setting_get global development_settings_enabled)" = "1" ] && warn "Opções de dev habilitadas"
+    [ "$(setting_get global install_non_market_apps)" = "1" ] && warn "Fontes desconhecidas habilitadas"
+    [ "$(setting_get secure mock_location)" = "1" ] && alert "Mock location HABILITADO"
 fi
 
 ADB_TCP=$(gp persist.adb.tcp.port)
@@ -1402,8 +1423,8 @@ done
 
 # === OlhosDoCapeta2: HORA AUTOMÁTICA DESLIGADA ===
 # Usuário desliga hora automática pra spoofar timestamp dos replays
-AUTO_TIME=$(settings get global auto_time 2>/dev/null)
-AUTO_TZ=$(settings get global auto_time_zone 2>/dev/null)
+AUTO_TIME=$(setting_get global auto_time)
+AUTO_TZ=$(setting_get global auto_time_zone)
 if [ "$AUTO_TIME" = "0" ]; then
     alert "Hora automática DESATIVADA (auto_time=0) — usuário pode spoofar timestamps"
 fi
@@ -1776,14 +1797,15 @@ header "PROXY / SNIFFER / MITM"
 
 PROXY_HITS=0
 if have settings; then
-    HTTP_PROXY=$(settings get global http_proxy 2>/dev/null)
+    # v4.4.3: usa setting_get pra filtrar "Failure calling service settings"
+    HTTP_PROXY=$(setting_get global http_proxy)
     case "$HTTP_PROXY" in
-        ""|"null"|":0") ok "Sem proxy global" ;;
+        ""|":0") ok "Sem proxy global" ;;
         *) alert "Proxy global ATIVO: $HTTP_PROXY"; PROXY_HITS=$((PROXY_HITS+1)) ;;
     esac
-    PROXY_HOST=$(settings get global global_http_proxy_host 2>/dev/null)
-    PROXY_PORT=$(settings get global global_http_proxy_port 2>/dev/null)
-    [ -n "$PROXY_HOST" ] && [ "$PROXY_HOST" != "null" ] && {
+    PROXY_HOST=$(setting_get global global_http_proxy_host)
+    PROXY_PORT=$(setting_get global global_http_proxy_port)
+    [ -n "$PROXY_HOST" ] && {
         alert "Proxy host: $PROXY_HOST:$PROXY_PORT"; PROXY_HITS=$((PROXY_HITS+1));
     }
 fi
@@ -1882,12 +1904,12 @@ done
 
 # 5) Always-on VPN (app que SEMPRE roteia)
 if have settings; then
-    ALWAYS_VPN=$(settings get global always_on_vpn_app 2>/dev/null)
-    [ -n "$ALWAYS_VPN" ] && [ "$ALWAYS_VPN" != "null" ] && {
+    ALWAYS_VPN=$(setting_get global always_on_vpn_app)
+    [ -n "$ALWAYS_VPN" ] && {
         alert "Always-on VPN ativo: $ALWAYS_VPN"
         DA_HITS=$((DA_HITS+1))
     }
-    LOCKDOWN=$(settings get global always_on_vpn_lockdown 2>/dev/null)
+    LOCKDOWN=$(setting_get global always_on_vpn_lockdown)
     [ "$LOCKDOWN" = "1" ] && alert "Always-on VPN com LOCKDOWN (todo tráfego forçado pelo VPN)"
 fi
 
@@ -1919,10 +1941,10 @@ header "DNS"
 
 DNS_HITS=0
 if have settings; then
-    PDNS_MODE=$(settings get global private_dns_mode 2>/dev/null)
-    PDNS_HOST=$(settings get global private_dns_specifier 2>/dev/null)
+    PDNS_MODE=$(setting_get global private_dns_mode)
+    PDNS_HOST=$(setting_get global private_dns_specifier)
     case "$PDNS_MODE" in
-        ""|"null"|"off"|"opportunistic") ok "Private DNS: $PDNS_MODE" ;;
+        ""|"off"|"opportunistic") ok "Private DNS: ${PDNS_MODE:-off}" ;;
         "hostname")
             warn "Private DNS hostname: $PDNS_HOST"
             case "$PDNS_HOST" in
@@ -1947,7 +1969,7 @@ header "ESP / OVERLAY / ACCESSIBILITY"
 
 ESP_HITS=0
 if have settings; then
-    ACC=$(settings get secure enabled_accessibility_services 2>/dev/null)
+    ACC=$(setting_get secure enabled_accessibility_services)
     if [ -n "$ACC" ] && [ "$ACC" != "null" ]; then
         case "$ACC" in
             *esp*|*aimbot*|*menu*|*hack*|*cheat*|*ffh*|*ESP*|*Aim*|*Menu*|*Hack*|*Cheat*|*injector*|*bot*)
@@ -2632,9 +2654,7 @@ MAC=$(cat /sys/class/net/wlan0/address 2>/dev/null)
 
 # ─── ANDROID ID ─── 3 fontes
 ANDROID_ID=""
-have settings && ANDROID_ID=$(settings get secure android_id 2>/dev/null)
-# Filtra erro "cmd: Failure calling service settings..."
-case "$ANDROID_ID" in *Failure*|*cmd:*) ANDROID_ID="" ;; esac
+ANDROID_ID=$(setting_get secure android_id)
 [ -z "$ANDROID_ID" ] && ANDROID_ID=$(gp ro.serialno)  # fallback comum em alguns devices
 [ -z "$ANDROID_ID" ] && ANDROID_ID=$(cat /data/system/users/0/settings_secure.xml 2>/dev/null | grep -oE 'android_id" value="[^"]*' | cut -d'"' -f3)
 
