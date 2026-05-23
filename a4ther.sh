@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.1"
+VERSION="4.4.2"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -25,10 +25,16 @@ else
 fi
 
 # ---------- Relatório ----------
+# v4.4.2: ordem ALTERADA — /sdcard primeiro pra o .txt ficar no gerenciador de
+# arquivos do Android (Termux $HOME só é visível dentro do Termux, user perdia
+# o arquivo). Se /sdcard não writable (sem termux-setup-storage), cai pro HOME.
 TS=$(date '+%Y%m%d_%H%M%S' 2>/dev/null)
 [ -z "$TS" ] && TS="scan"
 REPORT=""
-for D in "$HOME" /sdcard /storage/emulated/0 /data/local/tmp /tmp .; do
+REPORT_DIR_TRIED=""
+for D in /sdcard/a4ther /storage/emulated/0/a4ther "$HOME" /sdcard /storage/emulated/0 /data/local/tmp /tmp .; do
+    REPORT_DIR_TRIED="$REPORT_DIR_TRIED $D"
+    [ -d "$D" ] || mkdir -p "$D" 2>/dev/null
     [ -d "$D" ] && [ -w "$D" ] || continue
     if mkdir -p "$D/a4ther_reports" 2>/dev/null; then
         REPORT="$D/a4ther_reports/scan_${TS}.txt"
@@ -85,6 +91,14 @@ emit "${CW}${CC}    │                                                      │
 emit "${CW}${CC}    ╰──────────────────────────────────────────────────────╯${CN}"
 emit ""
 emit "  ${CC}›${CN} Relatório: $REPORT"
+# v4.4.2: avisa se caiu pra /dev/null (nenhum dir writable encontrado)
+if [ "$REPORT" = "/dev/null" ]; then
+    emit "  ${CR}!${CN} ATENÇÃO: nenhum diretório writable encontrado pro relatório."
+    emit "  ${CY}›${CN} Tentados: $REPORT_DIR_TRIED"
+    emit "  ${CY}›${CN} No Termux moderno (Android 11+) rode antes:"
+    emit "      ${CW}termux-setup-storage${CN}  (vai pedir permissão de armazenamento)"
+    emit "  ${CY}›${CN} Depois rode o a4ther.sh de novo — o .txt vai pra /sdcard/a4ther/"
+fi
 emit ""
 
 # Pre-cache: lista de pacotes (usado por várias seções)
@@ -3591,6 +3605,46 @@ EOF
             emit "  ${CY}›${CN} Dump tar.gz falhou (sem espaço/permissão?), pasta: $DUMP_DIR"
         fi
     fi
+fi
+
+# ─── v4.4.2: FINAL — onde achar o .txt + auto-copy pra Downloads ─────────────
+# Mostra o caminho com tamanho real do .txt, e tenta copiar pro /sdcard/Download/
+# (gerenciador de arquivos do Android) pra o user não precisar abrir o Termux.
+emit ""
+if [ "$REPORT" != "/dev/null" ] && [ -f "$REPORT" ]; then
+    REPORT_SIZE=$(du -h "$REPORT" 2>/dev/null | awk '{print $1}')
+    REPORT_LINES=$(wc -l < "$REPORT" 2>/dev/null | tr -d ' ')
+    emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    emit "${CG}  ✓ Relatório salvo:${CN}"
+    emit "    ${CW}$REPORT${CN}"
+    emit "    ${CC}(${REPORT_SIZE:-?}, ${REPORT_LINES:-?} linhas)${CN}"
+
+    # Tenta copiar pra Downloads (acessível pelo gerenciador de arquivos)
+    COPIED=""
+    for DL in /sdcard/Download /storage/emulated/0/Download; do
+        if [ -d "$DL" ] && [ -w "$DL" ]; then
+            if cp "$REPORT" "$DL/a4ther_scan_${TS}.txt" 2>/dev/null; then
+                COPIED="$DL/a4ther_scan_${TS}.txt"
+                break
+            fi
+        fi
+    done
+    if [ -n "$COPIED" ]; then
+        emit ""
+        emit "${CG}  ✓ Cópia em Downloads (gerenciador de arquivos):${CN}"
+        emit "    ${CW}$COPIED${CN}"
+        emit "    ${CC}Abra o app Arquivos → Downloads → a4ther_scan_${TS}.txt${CN}"
+    else
+        emit ""
+        emit "${CY}  !${CN} Não consegui copiar pra Downloads. Pra mandar pro analista:"
+        emit "    ${CW}cp \"$REPORT\" /sdcard/Download/${CN}"
+        emit "    (se falhar: ${CW}termux-setup-storage${CN} antes)"
+    fi
+    emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+else
+    emit "${CR}  ✗ Relatório NÃO foi gerado (REPORT=$REPORT).${CN}"
+    emit "${CY}  ›${CN} Provável causa: sem permissão de armazenamento no Termux."
+    emit "${CY}  ›${CN} Solução: ${CW}termux-setup-storage${CN} + rodar de novo."
 fi
 
 emit ""

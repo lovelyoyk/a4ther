@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.5</span>
+        <span id="version">v4.4.7</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1587,7 +1587,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.5";
+const VERSION = "4.4.7";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -2897,6 +2897,7 @@ async function readSafe(file, maxBytes) {
     return p;
 }
 
+
 // Indicadores de cada categoria pra grep global
 const SCAN_PATTERNS = {
     bundleIdRegex:     /\b([a-zA-Z][a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+){2,})\b/g,
@@ -3800,9 +3801,22 @@ async function handleSysdiagnose(filesList, opts) {
         }
     }
 
-    // ─── SCAN PASS 2.5: MCProfileEvents — XML-aware parser (v4.4.4) ───
-    // Captura TODOS os profile UUIDs (SHA256+SHA256-UUID) com install/remove + timestamp
+    // ─── SCAN PASS 2.5: MCProfileEvents — XML-aware parser (v4.4.7) ───
+    // Captura TODOS os profile UUIDs (SHA256+SHA256-UUID) com install/remove + timestamp.
+    // v4.4.7: estruturas AGREGADORAS movidas pra fora do loop — quando há múltiplos
+    // arquivos MCProfileEvents.plist (ex: snapshot + backup + ConfigurationProfiles),
+    // antes cada arquivo gerava seu próprio alert por UUID — gerando duplicatas
+    // visualmente (mesmo hash com lastSeen diferente). Agora 1 alert por UUID
+    // único agregando todos os events de todos os arquivos.
     if (byType.mcProfileEvents) {
+        const profileOps  = new Map(); // pid -> {installs: [], removes: [], lastSeen}
+        const proxyHosts  = new Set();
+        const proxyIps    = new Set();
+        const payloadTypes= new Set();
+        const httpUrls    = new Set();
+        let suspicious    = 0;
+        let buf, isBplist = false, isXmlPlist = false, textForRegex = '', stringPool = [];
+
         for (const f of byType.mcProfileEvents) {
             // Skip AppleDouble resource fork (._foo é metadado macOS, não dado real)
             const fname = (f.webkitRelativePath || f.name);
@@ -3811,20 +3825,13 @@ async function handleSysdiagnose(filesList, opts) {
                 ok(`MCProfileEvents: skip ${baseName} (AppleDouble resource fork, sem dado real)`);
                 continue;
             }
-            const buf = new Uint8Array(await f.arrayBuffer());
+            buf = new Uint8Array(await f.arrayBuffer());
             ok(`MCProfileEvents: ${baseName} · ${buf.length} bytes`);
 
-            const isBplist = buf.length > 8 &&
+            isBplist = buf.length > 8 &&
                 buf[0] === 0x62 && buf[1] === 0x70 && buf[2] === 0x6c && buf[3] === 0x69 &&
                 buf[4] === 0x73 && buf[5] === 0x74;
-            const isXmlPlist = buf.length > 5 && buf[0] === 0x3c;
-
-            const profileOps  = new Map(); // pid -> {installs: [], removes: [], lastSeen}
-            const proxyHosts  = new Set();
-            const proxyIps    = new Set();
-            const payloadTypes= new Set();
-            const httpUrls    = new Set();
-            let suspicious    = 0;
+            isXmlPlist = buf.length > 5 && buf[0] === 0x3c;
 
             // Decode pra texto + string pool
             let textForRegex = '';
@@ -3949,6 +3956,7 @@ async function handleSysdiagnose(filesList, opts) {
                 });
                 if (/MITM|self.signed|untrusted CA|cert.*rejected|unauthor|tamper|jailbreak|cheat/i.test(line)) suspicious++;
             }
+        }  // ← fim do for(f of byType.mcProfileEvents); DEDUP+REPORT abaixo rodam 1× agregando todos files (v4.4.7)
 
             // ═══════════════ DEDUP (v4.4.5) — colapsa hashes sobrepostos ═══════════════
             // O sweep agressivo da v4.4.4 (4 estratégias) pode adicionar o mesmo
@@ -4077,7 +4085,7 @@ async function handleSysdiagnose(filesList, opts) {
                 ok("MCProfileEvents: sem eventos de profile suspeitos");
                 // DEBUG v4.4.4: quando NÃO achou nada mas o file não é trivialmente
                 // vazio, mostra amostra do conteúdo pra diagnosticar formato exótico.
-                if (buf.length > 200) {
+                if (buf && buf.length > 200) {
                     const sample = textForRegex.substring(0, 500).replace(/\s+/g, ' ').trim();
                     warn(`[DEBUG] MCProfileEvents amostra (${buf.length}B): ${sample.slice(0, 400)}…`);
                     // Conta tags <key> pra saber se é XML estruturado mesmo
@@ -4086,7 +4094,6 @@ async function handleSysdiagnose(filesList, opts) {
                     warn(`[DEBUG] tags: <key>×${keyTags} <dict>×${dictTags} · ${stringPool.length} strings no pool · isXml=${isXmlPlist} isBplist=${isBplist}`);
                 }
             }
-        }
     }
 
     // ─── SCAN PASS 2.7: knowledgeC.db — bundles em /app/inFocus durante session FF ───
@@ -4389,8 +4396,8 @@ async function handleSysdiagnose(filesList, opts) {
         const seenInThisFile = new Set();
 
         // 1) Profile IDs com UUID opaco
-        opaqueRe.lastIndex = 0;
         let m;
+        opaqueRe.lastIndex = 0;
         while ((m = opaqueRe.exec(strings)) !== null) {
             if (seenInThisFile.has(m[0])) continue;
             seenInThisFile.add(m[0]);
@@ -4442,7 +4449,7 @@ async function handleSysdiagnose(filesList, opts) {
         }
     }
 
-    // Loop em batches paralelos: I/O concorrente, CPU sequencial
+    // Loop em batches paralelos: I/O concorrente, CPU sequencial.
     const PASS8_BATCH = 16;
     let lastYield = performance.now();
     for (let i = 0; i < allScanFiles.length; i += PASS8_BATCH) {
@@ -4454,12 +4461,12 @@ async function handleSysdiagnose(filesList, opts) {
             scanCount++;
             _pass8ProcessFile(f, raw);
         }
-        // UI feedback a cada batch (~16 arquivos por update)
+        // UI feedback a cada 4 batches
         if ((i / PASS8_BATCH) % 4 === 0) {
             const pct = Math.round((scanCount / allScanFiles.length) * 100);
             showLoading(`Pass 8: ${scanCount}/${allScanFiles.length} (${pct}%)…`);
         }
-        // Yield UI a cada 100ms — frequencia menor reduz overhead total
+        // Yield UI a cada 100ms
         if ((performance.now() - lastYield) > 100) {
             await new Promise(r => setTimeout(r, 0));
             lastYield = performance.now();
