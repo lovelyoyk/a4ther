@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.8</span>
+        <span id="version">v4.4.9</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1587,7 +1587,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.8";
+const VERSION = "4.4.9";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3367,21 +3367,33 @@ async function handleTarGz(file) {
     const fileMb = file.size / (1024 * 1024);
 
     // === GUARD iOS: tar.gz grande mata o tab por OOM ===
+    // v4.4.9: threshold elevado de 150 → 250MB pra hard-block. Sysdiagnose
+    // de 322MB é comum em devices com muito uso; bloquear era frustrante.
+    // Entre 80-250MB: aviso + tenta processar; ≥250MB: bloqueia com instrução clara.
     if (isIOSMobile() && fileMb > 80) {
-        warn(`⚠ Arquivo de ${fileMb.toFixed(0)} MB no Safari iOS pode travar (memória limitada).`);
-        warn(`Recomendado: no iPhone, abra Files → toque longo no .tar.gz → "Uncompress" → use o modo "Sysdiagnose (pasta)" aqui.`);
-        warn(`Ou envie pelo desktop (Mac/PC).`);
-        if (fileMb > 150) {
+        warn(`⚠ Arquivo de ${fileMb.toFixed(0)} MB no Safari iOS pode travar (RAM limitada).`);
+        if (fileMb > 250) {
+            warn(`────────────────────────────────────────────`);
+            warn(`❌ ${fileMb.toFixed(0)} MB é GRANDE DEMAIS pro Safari iOS.`);
+            warn(`📱 Solução no PRÓPRIO iPhone (sem PC):`);
+            warn(`   1. Abra o app "Arquivos" (Files)`);
+            warn(`   2. Localize o .tar.gz`);
+            warn(`   3. Toque longo → "Descompactar"`);
+            warn(`   4. Volte aqui e use modo "iOS · sysdiagnose (pasta)"`);
+            warn(`   5. Selecione a pasta sysdiagnose_* extraída`);
+            warn(`💻 OU envie pelo desktop (Chrome/Safari Mac/PC) — sem limite de RAM`);
+            warn(`────────────────────────────────────────────`);
             renderResults({});
             return;
         }
-        // Entre 80-150MB, continua mas avisa
+        // Entre 80-250MB: continua mas avisa o caminho alternativo
+        warn(`Se travar: Files iPhone → toque longo no .tar.gz → "Descompactar" → modo "Sysdiagnose (pasta)"`);
     }
 
     // Aviso de tempo conforme tamanho do arquivo
     let warnText = '';
     if (isIOSMobile() && fileMb > 80) {
-        warnText = `⚠ iOS · ${fileMb.toFixed(0)} MB. Se travar, extraia e use "Sysdiagnose pasta".`;
+        warnText = `⚠ iOS · ${fileMb.toFixed(0)} MB. Se travar, extraia e use modo "Sysdiagnose pasta".`;
     } else if (fileMb > 150) {
         warnText = `⏱ Arquivo grande (${fileMb.toFixed(0)} MB) — 1-3 min. Não feche a aba.`;
     } else if (fileMb > 50) {
@@ -3713,11 +3725,21 @@ async function handleSysdiagnose(filesList, opts) {
     if (!opts.fromTarGz) reset();
 
     const _scanStartedAt = performance.now();
+    // v4.4.9: yield UI ANTES do Array.from — em iOS Safari, FileList com 1500+
+    // entries leva ~500ms só pra materializar; deixa o spinner aparecer primeiro.
+    await new Promise(r => setTimeout(r, 0));
     const files = Array.from(filesList);
     ok(`A4ther v${VERSION} · pasta selecionada: ${files.length} arquivos`);
     console.log(`[a4ther] handleSysdiagnose start · v${VERSION} · ${files.length} files`);
 
+    // Aviso iOS pra pasta grande (extraída de tar.gz pesado)
+    if (isIOSMobile() && files.length > 1500) {
+        warn(`⚠ ${files.length} arquivos no Safari iOS pode travar (memória limitada). Se travar, use desktop ou divida o sysdiagnose.`);
+    }
+
     // Encontra a pasta raiz (caso usuário tenha aberto um diretório pai)
+    showLoading(`Indexando ${files.length} arquivos…`);
+    await new Promise(r => setTimeout(r, 0));  // yield pra UI repaint
     const allPaths = files.map(f => f.webkitRelativePath || f.name);
     const looksLikeSysdiag = allPaths.some(p => /\/(logs\/MobileInstallation|summaries|ps\.txt|taskinfo\.txt|crashes_and_spins)/i.test(p));
     if (!looksLikeSysdiag) {
@@ -3726,14 +3748,25 @@ async function handleSysdiagnose(filesList, opts) {
     }
 
     // ─── Mapeia arquivos por tipo ───
+    // v4.4.9: yield a cada 200 arquivos pra não travar UI em pastas grandes
+    // (Safari iOS especialmente sensível — 1500 fileType() em loop síncrono
+    // bloqueava 2-3s o thread principal).
     const byType = {};
     let totalScanned = 0, totalSkipped = 0;
     // v4.4.5: accumulators pros stats finais que vão pro renderResults
     const _stats = { appsInstalled: 0, bundles: 0, events: 0, domains: 0, ips: 0 };
-    for (const f of files) {
+    let _idxYield = performance.now();
+    for (let i = 0; i < files.length; i++) {
+        const f = files[i];
         const type = fileType(f);
         if (!byType[type]) byType[type] = [];
         byType[type].push(f);
+        // Yield a cada ~50ms — UI repaint mostra progresso
+        if (i > 0 && i % 200 === 0 && (performance.now() - _idxYield) > 50) {
+            showLoading(`Indexando ${i}/${files.length} arquivos…`);
+            await new Promise(r => setTimeout(r, 0));
+            _idxYield = performance.now();
+        }
     }
     ok(`Tipos: ${Object.entries(byType).map(([k,v]) => `${k}=${v.length}`).join(', ')}`);
 
