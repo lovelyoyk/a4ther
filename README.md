@@ -10,13 +10,15 @@ Scanner anti-cheat para Free Fire. Auto-detecta **Android** (Termux) ou **iOS ja
 2. Abre o Termux e cola o one-liner:
 
 ```bash
-pkg update -y && pkg install -y curl && rm -f a4ther.sh && curl -L -o a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh && chmod +x a4ther.sh && sh a4ther.sh
+pkg upgrade -y && pkg install -y curl && rm -f a4ther.sh && curl -L -o a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh && chmod +x a4ther.sh && sh a4ther.sh
 ```
+
+> ⚠️ Importante: `pkg upgrade -y` no início garante que o Termux esteja atualizado. Sem isso, o `curl` pode dar erro **"cannot locate symbol ngtcp2_crypto_get_path_challenge_data_cb"** (dependência quebrada por updates parciais).
 
 Ou passo a passo:
 
 ```bash
-pkg install -y curl
+pkg upgrade -y && pkg install -y curl
 curl -L -o a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh
 chmod +x a4ther.sh
 sh a4ther.sh
