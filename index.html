@@ -2744,7 +2744,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.43";
+const VERSION = "4.4.44";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5683,16 +5683,36 @@ async function extractHWID(files) {
     let productClass = null;  // "iPhone"
 
     // v4.4.42: helpers pra extrair de qualquer arquivo (não só dumpstate)
-    // Sysdiagnoses minimal (.tar.gz curado, dump parcial, etc) podem não ter
-    // remotectl_dumpstate.txt — então fazemos sweep dos campos em outros plists
-    // e logs que costumam carregar IDs Apple.
+    // v4.4.44: PERF FIX — sweep agressivo (todos .plist/.txt/.log/.xml) travava
+    // o browser em sysdiagnoses grandes (Page Unresponsive, tela preta). Agora
+    // o fallback é restrito a paths CONHECIDOS por carregar IDs Apple + hard
+    // cap + yield obrigatório + early exit.
     const _pull = (raw, re, current) => {
         if (current) return current;
         const m = raw.match(re);
         return m ? m[1] : current;
     };
+    // Paths conhecidos por terem Serial/UDID/ECID em sysdiagnoses iOS
+    // (não sweep TODOS os plists — só os que provavelmente carregam IDs)
+    const _hwidPathHints = [
+        'lockdownd.plist', 'lockdownd', 'activation_record', 'mobile_activation',
+        'brctl-dump', 'data_ark.plist', 'preferences/.global', 'device_info',
+        'logs/mobileactivationd', 'identityservices', 'sysdiagnose-info',
+    ];
+    const _isHwidCandidate = (name) => {
+        for (const hint of _hwidPathHints) if (name.includes(hint)) return true;
+        return false;
+    };
+    let _fallbackCount = 0;
+    const _FALLBACK_CAP = 40; // hard cap pra não travar
 
+    let _hwidLoopIdx = 0;
     for (const f of files) {
+        _hwidLoopIdx++;
+        // yield a cada 50 arquivos pra não bloquear o main thread
+        if (_hwidLoopIdx % 50 === 0) {
+            await new Promise(r => setTimeout(r, 0));
+        }
         const name = (f.webkitRelativePath || f.name).toLowerCase();
         // remotectl_dumpstate.txt → serial, UDID, ECID, ProductType, BuildVersion
         if (name.endsWith('remotectl_dumpstate.txt')) {
@@ -5711,24 +5731,16 @@ async function extractHWID(files) {
                 productClass = _pull(raw, /ProductClass[\s:=]+([A-Za-z]+)/i, productClass);
             }
         }
-        // v4.4.42: fallback genérico pra QUALQUER arquivo (.plist, .log, .txt) que
-        // possa carregar SerialNumber/UDID/ECID — sysdiagnoses minimal não têm
-        // remotectl_dumpstate.txt mas guardam isso em backups parciais, lockdown
-        // plists, ou logs do MobileBackup.
-        if (!serial || !udid || !ecid) {
-            if (name.endsWith('.plist') || name.endsWith('.txt') || name.endsWith('.log') ||
-                name.endsWith('.xml') || name.includes('lockdown') || name.includes('activation')) {
-                const raw = await readSafe(f);
-                if (raw && raw.length < 2_000_000) { // skip arquivos muito grandes
-                    serial = _pull(raw, /<key>SerialNumber<\/key>\s*<string>([A-Z0-9]{8,16})<\/string>/i, serial) ||
-                             _pull(raw, /\bSerialNumber["']?\s*[=:]\s*["']?([A-Z0-9]{8,16})\b/i, serial);
-                    udid   = _pull(raw, /<key>(?:UniqueDeviceID|UDID)<\/key>\s*<string>([A-Fa-f0-9-]{20,45})<\/string>/i, udid) ||
-                             _pull(raw, /\b(?:UniqueDeviceID|UDID)["']?\s*[=:]\s*["']?([A-Fa-f0-9-]{20,45})\b/i, udid);
-                    ecid   = _pull(raw, /<key>(?:UniqueChipID|ECID)<\/key>\s*<(?:integer|string)>([A-Fa-f0-9x]+)</i, ecid) ||
-                             _pull(raw, /\bECID["']?\s*[=:]\s*["']?([A-Fa-f0-9x]{8,20})\b/i, ecid);
-                    productType  = _pull(raw, /<key>ProductType<\/key>\s*<string>([A-Za-z0-9,]+)<\/string>/i, productType);
-                    productClass = _pull(raw, /<key>ProductClass<\/key>\s*<string>([A-Za-z]+)<\/string>/i, productClass);
-                }
+        // v4.4.44: fallback RESTRITO — só paths conhecidos + hard cap + early exit
+        else if ((!serial || !udid || !ecid) && _fallbackCount < _FALLBACK_CAP && _isHwidCandidate(name)) {
+            _fallbackCount++;
+            const raw = await readSafe(f);
+            if (raw && raw.length < 1_500_000) {
+                serial = _pull(raw, /<key>SerialNumber<\/key>\s*<string>([A-Z0-9]{8,16})<\/string>/i, serial);
+                udid   = _pull(raw, /<key>(?:UniqueDeviceID|UDID)<\/key>\s*<string>([A-Fa-f0-9-]{20,45})<\/string>/i, udid);
+                ecid   = _pull(raw, /<key>(?:UniqueChipID|ECID)<\/key>\s*<(?:integer|string)>([A-Fa-f0-9x]+)</i, ecid);
+                productType  = _pull(raw, /<key>ProductType<\/key>\s*<string>([A-Za-z0-9,]+)<\/string>/i, productType);
+                productClass = _pull(raw, /<key>ProductClass<\/key>\s*<string>([A-Za-z]+)<\/string>/i, productClass);
             }
         }
         // SystemVersion.plist → ProductVersion, BuildVersion, ProductName
@@ -6357,14 +6369,20 @@ async function handleSysdiagnose(filesList, opts) {
     // pass parava tudo, deixava o loader visível ou (pior) tela preta sem
     // resultado. Agora: exceção é capturada, alertF emite o erro, e o
     // finally garante render do que conseguimos extrair até ali.
+    // v4.4.44: finally defensivo — se o pipeline NÃO chamar renderResults
+    // (Page Unresponsive, navegador matou o JS, etc), o finally força um
+    // render mínimo pro user não ficar com tela preta.
+    let _scanFinished = false;
     try {
         await _doHandleSysdiagnose(filesList, opts);
+        _scanFinished = true;
     } catch (e) {
         console.error('[a4ther] handleSysdiagnose ERROR:', e);
         alertF(`[CRITICAL] Erro durante scan: ${String(e?.message || e).slice(0, 200)}`,
                'Veja o console pra stack trace. Renderizando resultados parciais.');
         try {
             renderResults({ mode: opts.fromTarGz ? 'sysdiagnose-targz' : 'sysdiagnose-folder', error: true });
+            _scanFinished = true;
         } catch (e2) {
             console.error('[a4ther] renderResults ALSO FAILED:', e2);
             hideLoading();
@@ -6373,6 +6391,18 @@ async function handleSysdiagnose(filesList, opts) {
                 elResults.classList.remove('hidden');
                 elResults.innerHTML = `<div class="verdict red"><div class="verdict-title">ERRO</div>` +
                     `<div class="verdict-subtitle">${String(e?.message || e).slice(0, 200)}</div></div>`;
+            }
+        }
+    } finally {
+        // v4.4.44: nuclear fallback — se nada renderizou, força hideLoading +
+        // mostra mensagem mínima pro user saber que algo aconteceu
+        if (!_scanFinished) {
+            try { hideLoading(); } catch {}
+            const elResults = $('#results');
+            if (elResults && !elResults.innerHTML.trim()) {
+                elResults.classList.remove('hidden');
+                elResults.innerHTML = `<div class="verdict orange"><div class="verdict-title">SCAN INCOMPLETO</div>` +
+                    `<div class="verdict-subtitle">O scan não pôde concluir — provavelmente foi interrompido pelo navegador (Page Unresponsive). Tente um sysdiagnose menor ou recarregue a página.</div></div>`;
             }
         }
     }
