@@ -2198,7 +2198,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.32</span>
+        <span id="version">v4.4.33</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2455,7 +2455,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.32";
+const VERSION = "4.4.33";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -7108,37 +7108,17 @@ $('#btn-share').addEventListener('click', async () => {
     // mobile, WebView, ou quando o elemento foi criado depois do load).
     setTimeout(forceAllVisible, 1500);
 
-    /* Auto-anota seções/items dos resultados (criados dinamicamente)
-       Stagger automático nos primeiros 10 items */
-    const mo = new MutationObserver((muts) => {
-        let stagger = 0;
-        for (const mut of muts) {
-            for (const node of mut.addedNodes) {
-                if (node.nodeType !== 1) continue;
-                // Section header + items dentro de .results e .stats
-                if (node.matches?.('.section, .stat, .item, .verdict')) {
-                    node.setAttribute('data-reveal', 'fade-up');
-                    if (node.matches('.item, .stat')) {
-                        const delay = Math.min(stagger * 60, 600);
-                        node.setAttribute('data-reveal-delay', String(delay));
-                        stagger++;
-                    }
-                }
-                // Recurse children
-                node.querySelectorAll?.('.section, .stat, .item, .verdict').forEach((c, idx) => {
-                    if (!c.hasAttribute('data-reveal')) {
-                        c.setAttribute('data-reveal', 'fade-up');
-                        if (c.matches('.item, .stat')) {
-                            const d = Math.min(idx * 50, 600);
-                            c.setAttribute('data-reveal-delay', String(d));
-                        }
-                    }
-                });
-            }
-        }
-        observeAll();
-    });
-    mo.observe(document.body, { childList: true, subtree: true });
+    /* v4.4.33: MutationObserver de auto-anotação data-reveal REMOVIDO.
+       Causava tela preta após scan de sysdiagnose porque adicionava
+       data-reveal="fade-up" (opacity:0 base) a TODOS os .verdict/.section/
+       .stat/.item criados pelo renderResults. Quando o IntersectionObserver
+       não disparava .in-view a tempo (timing, viewport, scroll), tudo
+       ficava permanentemente invisível.
+
+       Os elementos de results agora aparecem imediatamente sem fade-in
+       de scroll (mais robusto). Animações próprias deles (section-in,
+       verdict-in, stat-in, item-slide) continuam funcionando via @keyframes
+       diretos no CSS — não dependem de IO. */
 })();
 </script>
 
