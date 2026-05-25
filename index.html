@@ -337,13 +337,15 @@ a:hover { color: var(--text); }
     height: 44px;
     display: grid;
     place-items: center;
-    border-radius: 0;
+    border-radius: 12px;
     background: linear-gradient(135deg, rgba(179, 136, 255, 0.18), rgba(122, 78, 255, 0.08));
-    border: none;
+    border: 1px solid rgba(179, 136, 255, 0.18);
     font-size: 1.4rem;
     line-height: 1;
+    color: var(--purple);
     transition: var(--transition);
 }
+.dropdown-icon .ico { width: 22px; height: 22px; }
 .dropdown:hover .dropdown-icon {
     background: linear-gradient(135deg, rgba(179, 136, 255, 0.28), rgba(122, 78, 255, 0.15));
     transform: scale(1.05) rotate(-3deg);
@@ -467,13 +469,23 @@ a:hover { color: var(--text); }
     height: 36px;
     display: grid;
     place-items: center;
-    border-radius: 0;
+    border-radius: 10px;
     background: rgba(255, 255, 255, 0.04);
-    border: none;
+    border: 1px solid rgba(179, 136, 255, 0.1);
     font-size: 1.1rem;
+    color: var(--text-dim);
+    transition: var(--transition);
+}
+.dropdown-option-emoji .ico { width: 18px; height: 18px; }
+.dropdown-option:hover .dropdown-option-emoji {
+    color: var(--purple);
+    background: rgba(179, 136, 255, 0.1);
+    border-color: rgba(179, 136, 255, 0.25);
 }
 .dropdown-option.active .dropdown-option-emoji {
+    color: var(--purple);
     background: linear-gradient(135deg, rgba(179, 136, 255, 0.25), rgba(122, 78, 255, 0.12));
+    border-color: rgba(179, 136, 255, 0.4);
 }
 .dropdown-option-text {
     flex: 1;
@@ -531,12 +543,24 @@ a:hover { color: var(--text); }
 }
 
 .dropzone-icon {
-    font-size: 3.2rem;
-    margin-bottom: 1.2rem;
-    display: block;
-    line-height: 1;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1.2rem;
+    display: grid;
+    place-items: center;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(179, 136, 255, 0.16), rgba(122, 78, 255, 0.06));
+    border: 1px solid rgba(179, 136, 255, 0.25);
+    color: var(--purple);
+    line-height: 0;
     filter: drop-shadow(0 0 16px var(--cyan-glow));
     animation: icon-float 4s ease-in-out infinite;
+    transition: var(--transition);
+}
+.dropzone-icon .ico { width: 32px; height: 32px; }
+.dropzone:hover .dropzone-icon {
+    border-color: var(--purple);
+    background: linear-gradient(135deg, rgba(179, 136, 255, 0.25), rgba(122, 78, 255, 0.1));
 }
 @keyframes icon-float {
     0%, 100% { transform: translateY(0); }
@@ -683,6 +707,208 @@ a:hover { color: var(--text); }
     50%      { opacity: 1; }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ICON SYSTEM (v4.4.17) — SVG inline, currentColor, sized via parent
+   ═══════════════════════════════════════════════════════════════ */
+.ico {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    line-height: 0;
+    vertical-align: middle;
+}
+.ico svg { width: 100%; height: 100%; display: block; }
+
+/* ═══════════════════════════════════════════════════════════════
+   DEVICE INFO CARD (v4.4.17) — terminal/cyber style
+   ═══════════════════════════════════════════════════════════════ */
+.device-section { margin: 0 0 28px; }
+.device-section-header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 0 14px 0; margin-bottom: 14px;
+}
+.device-section-icon {
+    width: 38px; height: 38px; border-radius: 9px;
+    background: linear-gradient(135deg, #0c2236, #051528);
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    box-shadow: 0 0 18px rgba(34, 211, 238, 0.18), inset 0 0 10px rgba(10, 31, 53, 0.5);
+    display: grid; place-items: center;
+    color: #22d3ee;
+}
+.device-section-icon svg { width: 20px; height: 20px; }
+.device-section-title {
+    color: #22d3ee; font-size: 12px; letter-spacing: 0.32em;
+    text-transform: uppercase; font-weight: 700;
+}
+.device-section-line {
+    flex: 1; height: 1px;
+    background: linear-gradient(90deg, rgba(34, 211, 238, 0.4), transparent);
+}
+.device-card {
+    background: linear-gradient(180deg, rgba(10, 18, 25, 0.95) 0%, rgba(15, 25, 36, 0.95) 100%);
+    border: 1px solid rgba(26, 42, 58, 0.8);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 0 50px rgba(0, 255, 255, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    position: relative;
+}
+.device-card::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.5), transparent);
+}
+.device-hero {
+    display: flex; align-items: center; gap: 22px;
+    padding: 26px 28px;
+    border-bottom: 1px solid rgba(26, 42, 58, 0.6);
+    flex-wrap: wrap;
+}
+.device-hero-icon {
+    width: 64px; height: 64px; border-radius: 14px;
+    background: linear-gradient(135deg, #0e1f30, #061021);
+    border: 1px solid rgba(34, 211, 238, 0.3);
+    box-shadow: inset 0 0 18px rgba(0, 255, 255, 0.08);
+    display: grid; place-items: center;
+    color: #22d3ee; flex-shrink: 0;
+}
+.device-hero-icon svg { width: 30px; height: 30px; }
+.device-hero-info { flex: 1; min-width: 200px; }
+.device-hero-model {
+    font-size: 22px; font-weight: 700;
+    color: #d4dde6; letter-spacing: -0.02em;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
+.device-hero-subtitle {
+    color: #5d7390; font-size: 11px;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    margin-top: 5px; font-family: 'JetBrains Mono', monospace;
+}
+.device-hero-version {
+    text-align: right;
+    padding: 10px 20px;
+    border: 1px solid rgba(34, 211, 238, 0.4);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(10, 32, 48, 0.6), rgba(5, 20, 32, 0.6));
+    box-shadow: 0 0 24px rgba(34, 211, 238, 0.1);
+}
+.device-hero-version .ver {
+    font-size: 24px; color: #22d3ee; font-weight: 700;
+    line-height: 1; letter-spacing: 0.02em;
+    text-shadow: 0 0 12px rgba(34, 211, 238, 0.5);
+    font-family: 'JetBrains Mono', monospace;
+}
+.device-hero-version .ver-label {
+    font-size: 9px; color: #0891b2; letter-spacing: 0.32em;
+    text-transform: uppercase; margin-top: 5px;
+    font-family: 'JetBrains Mono', monospace;
+}
+.device-hwid-row {
+    padding: 18px 28px;
+    border-bottom: 1px solid rgba(26, 42, 58, 0.6);
+    display: flex; align-items: center; flex-wrap: wrap; gap: 14px;
+}
+.device-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.device-field-label {
+    color: #fbbf24; font-size: 10px; letter-spacing: 0.24em;
+    text-transform: uppercase; font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+}
+.device-field-value {
+    color: #fbbf24; font-size: 15px; font-weight: 600;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
+    word-break: break-all;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.device-field-value.green { color: #22c55e; }
+.device-field-value.cyan { color: #22d3ee; }
+.device-field-value.muted { color: #d4dde6; font-weight: 500; font-size: 13px; }
+.device-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 10px; letter-spacing: 0.16em;
+    text-transform: uppercase; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+}
+.device-badge svg { width: 12px; height: 12px; }
+.device-badge.ok {
+    background: rgba(26, 58, 37, 0.6); color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+    box-shadow: 0 0 14px rgba(34, 197, 94, 0.18);
+}
+.device-badge.banned {
+    background: rgba(58, 26, 26, 0.6); color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.25);
+}
+.device-grid2 {
+    display: grid; grid-template-columns: 1fr 1fr;
+    padding: 18px 28px; gap: 22px;
+    border-bottom: 1px solid rgba(26, 42, 58, 0.6);
+}
+.device-grid2:last-of-type { border-bottom: none; }
+@media (max-width: 640px) {
+    .device-grid2 { grid-template-columns: 1fr; }
+}
+.device-footer {
+    padding: 14px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: rgba(4, 8, 13, 0.6);
+    font-size: 10px; color: #5d7390;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace;
+    flex-wrap: wrap; gap: 8px;
+}
+.device-country { display: inline-flex; align-items: center; gap: 10px; }
+.country-flag {
+    display: inline-block; width: 22px; height: 14px;
+    border-radius: 2px; border: 1px solid rgba(255, 255, 255, 0.15);
+    background: linear-gradient(180deg, #009b3a 50%, #ffdf00 50%);  /* BR default */
+}
+.country-name { color: #22c55e; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
+.country-code { color: #5d7390; margin-left: 8px; }
+
+/* ═══════ Status Cards (Blacklist + Jailbreak) ═══════ */
+.status-card {
+    background: linear-gradient(180deg, rgba(10, 26, 18, 0.6) 0%, rgba(5, 18, 8, 0.6) 100%);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: 12px;
+    padding: 18px 22px;
+    box-shadow: 0 0 30px rgba(34, 197, 94, 0.06);
+    display: flex; align-items: center; gap: 18px;
+    margin-bottom: 14px;
+}
+.status-card.banned {
+    background: linear-gradient(180deg, rgba(26, 10, 10, 0.6) 0%, rgba(32, 5, 5, 0.6) 100%);
+    border-color: rgba(239, 68, 68, 0.5);
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.15);
+}
+.status-icon-box {
+    width: 42px; height: 42px; border-radius: 10px;
+    display: grid; place-items: center; flex-shrink: 0;
+    background: rgba(34, 197, 94, 0.1); color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.4);
+}
+.status-icon-box svg { width: 22px; height: 22px; }
+.status-card.banned .status-icon-box {
+    background: rgba(239, 68, 68, 0.1); color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.5);
+}
+.status-info { flex: 1; min-width: 0; }
+.status-title {
+    color: #22c55e; font-size: 11px; letter-spacing: 0.24em;
+    text-transform: uppercase; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+}
+.status-card.banned .status-title { color: #ef4444; }
+.status-detail {
+    color: #d4dde6; font-size: 13px; margin-top: 5px;
+    font-family: 'JetBrains Mono', monospace;
+}
+.status-meta {
+    color: #5d7390; font-size: 11px; margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace; word-break: break-all;
+}
+
 /* Progress bar pra uploads grandes (tar.gz) */
 .loading-progress {
     margin: 1.5rem auto 0;
@@ -775,12 +1001,15 @@ a:hover { color: var(--text); }
 .verdict.green  { color: var(--green);  background: var(--green-bg);  box-shadow: 0 0 60px rgba(46, 213, 115, 0.15); }
 
 .verdict-icon {
-    font-size: 3.5rem;
-    line-height: 1;
-    margin-bottom: 0.6rem;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 0.6rem;
+    line-height: 0;
     filter: drop-shadow(0 0 24px currentColor);
     animation: icon-pop 800ms 200ms var(--ease) both;
 }
+.verdict-icon .ico,
+.verdict-icon svg { width: 100%; height: 100%; }
 @keyframes icon-pop {
     from { opacity: 0; transform: scale(0); }
     50%  { transform: scale(1.15); }
@@ -1132,10 +1361,19 @@ footer a:hover {
     margin-bottom: 0.9rem;
 }
 .dump-step-icon {
-    font-size: 1.6rem;
-    line-height: 1;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(179, 136, 255, 0.2), rgba(122, 78, 255, 0.08));
+    border: 1px solid rgba(179, 136, 255, 0.25);
+    color: var(--purple);
+    line-height: 0;
     filter: drop-shadow(0 0 12px var(--purple-glow));
+    flex-shrink: 0;
 }
+.dump-step-icon .ico { width: 20px; height: 20px; }
 .dump-step-title {
     flex: 1;
     font-weight: 700;
@@ -1225,7 +1463,11 @@ footer a:hover {
     font-size: 0.82rem;
     color: var(--text-dim);
     line-height: 1.55;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
 }
+.dump-tip .ico { width: 16px; height: 16px; color: var(--orange); margin-top: 2px; flex-shrink: 0; }
 .dump-tip a { color: var(--purple); text-decoration: underline; text-decoration-color: rgba(179, 136, 255, 0.3); }
 
 /* ============================================================
@@ -1289,7 +1531,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.16</span>
+        <span id="version">v4.4.17</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1306,7 +1548,7 @@ footer a:hover {
         <div class="dropdown-label">Selecione o tipo de análise</div>
         <div class="dropdown" id="modeDropdown" role="combobox" aria-haspopup="listbox" aria-expanded="false" tabindex="0">
             <button class="dropdown-trigger" type="button" id="modeTrigger" aria-label="Escolha o modo de análise">
-                <span class="dropdown-icon" id="modeIcon">📦</span>
+                <span class="dropdown-icon" id="modeIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
                 <span class="dropdown-text">
                     <span class="dropdown-title" id="modeTitle">iOS · sysdiagnose <code>.tar.gz</code></span>
                     <span class="dropdown-sub"   id="modeSub">Recomendado · análise completa sem extrair</span>
@@ -1317,7 +1559,7 @@ footer a:hover {
             </button>
             <div class="dropdown-menu" role="listbox" id="modeMenu">
                 <button class="dropdown-option active" data-tab="targz" role="option" type="button">
-                    <span class="dropdown-option-emoji">📦</span>
+                    <span class="dropdown-option-emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
                     <span class="dropdown-option-text">
                         <span class="dropdown-option-title">iOS · sysdiagnose <code>.tar.gz</code></span>
                         <span class="dropdown-option-desc">Recomendado — análise completa, sem extrair</span>
@@ -1327,7 +1569,7 @@ footer a:hover {
                     </svg>
                 </button>
                 <button class="dropdown-option" data-tab="ndjson" role="option" type="button">
-                    <span class="dropdown-option-emoji">📊</span>
+                    <span class="dropdown-option-emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></span>
                     <span class="dropdown-option-text">
                         <span class="dropdown-option-title">iOS · App Privacy Report</span>
                         <span class="dropdown-option-desc">Arquivo <code>.ndjson</code> exportado</span>
@@ -1337,7 +1579,7 @@ footer a:hover {
                     </svg>
                 </button>
                 <button class="dropdown-option" data-tab="android" role="option" type="button">
-                    <span class="dropdown-option-emoji">🤖</span>
+                    <span class="dropdown-option-emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span>
                     <span class="dropdown-option-text">
                         <span class="dropdown-option-title">Android · scan TXT</span>
                         <span class="dropdown-option-desc">Relatório gerado pelo <code>a4ther.sh</code></span>
@@ -1347,7 +1589,7 @@ footer a:hover {
                     </svg>
                 </button>
                 <button class="dropdown-option" data-tab="dump" role="option" type="button">
-                    <span class="dropdown-option-emoji">📝</span>
+                    <span class="dropdown-option-emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
                     <span class="dropdown-option-text">
                         <span class="dropdown-option-title">Gerar dump (tutorial)</span>
                         <span class="dropdown-option-desc">Como o jogador faz o dump — iOS + Android</span>
@@ -1363,7 +1605,7 @@ footer a:hover {
     <!-- TAR.GZ (default, mais fácil) -->
     <div class="tab-panel active" data-panel="targz">
         <label class="dropzone" id="dz-targz">
-            <span class="dropzone-icon">📦</span>
+            <span class="dropzone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="32" height="32"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
             <div class="dropzone-text">Arraste ou clique para enviar o <code>.tar.gz</code></div>
             <div class="dropzone-hint">Sysdiagnose completo · sem precisar extrair</div>
             <input type="file" id="file-targz" accept=".tar.gz,.tgz,application/gzip,application/x-gzip,application/x-tar" />
@@ -1384,7 +1626,7 @@ footer a:hover {
     <!-- NDJSON -->
     <div class="tab-panel" data-panel="ndjson">
         <label class="dropzone" id="dz-ndjson">
-            <span class="dropzone-icon">⬆</span>
+            <span class="dropzone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="32" height="32"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m8 17 4-5 4 5"/></svg></span>
             <div class="dropzone-text">Arraste ou clique para enviar o <code>.ndjson</code></div>
             <div class="dropzone-hint">App Privacy Report exportado do iPhone</div>
             <input type="file" id="file-ndjson" accept=".ndjson,application/json,text/plain" />
@@ -1403,7 +1645,7 @@ footer a:hover {
     <!-- Android (TXT do a4ther.sh) -->
     <div class="tab-panel" data-panel="android">
         <label class="dropzone" id="dz-android">
-            <span class="dropzone-icon">🤖</span>
+            <span class="dropzone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="32" height="32"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span>
             <div class="dropzone-text">Arraste ou clique para enviar o <code>.txt</code> do scan Android</div>
             <div class="dropzone-hint">Relatório gerado pelo <code>a4ther.sh</code> no Termux</div>
             <input type="file" id="file-android" accept=".txt,text/plain" />
@@ -1425,7 +1667,7 @@ footer a:hover {
         <div class="dump-tutorial">
             <div class="dump-step">
                 <div class="dump-step-head">
-                    <span class="dump-step-icon">🍎</span>
+                    <span class="dump-step-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg></span>
                     <div class="dump-step-title">iPhone / iPad</div>
                     <div class="dump-step-sub">Sysdiagnose (.tar.gz) — recomendado, sem JB</div>
                 </div>
@@ -1438,12 +1680,12 @@ footer a:hover {
                     <li>Toque no arquivo → <strong>Compartilhar</strong> → envie via AirDrop / Files / iCloud / WhatsApp</li>
                     <li>Suba aqui pelo modo "<strong>iOS · sysdiagnose .tar.gz</strong>"</li>
                 </ol>
-                <div class="dump-tip">⚡ Se travar no upload: extraia localmente no iPhone (Files → toque longo no .tar.gz → <code>Uncompress</code>) e use o modo "<strong>iOS · sysdiagnose (pasta)</strong>".</div>
+                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>Se travar no upload: extraia localmente no iPhone (Files → toque longo no .tar.gz → <code>Uncompress</code>) e use o modo "<strong>iOS · sysdiagnose (pasta)</strong>".</span></div>
             </div>
 
             <div class="dump-step">
                 <div class="dump-step-head">
-                    <span class="dump-step-icon">🤖</span>
+                    <span class="dump-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span>
                     <div class="dump-step-title">Android</div>
                     <div class="dump-step-sub">Via Termux (sem root) — gera <code>.txt</code></div>
                 </div>
@@ -1464,13 +1706,13 @@ footer a:hover {
                     <li>Abre o picker do Android — escolhe WhatsApp/Telegram/iCloud — manda pra cá</li>
                     <li>Faz upload aqui pelo modo "<strong>Android · scan TXT</strong>"</li>
                 </ol>
-                <div class="dump-tip">📋 Atalho: <code>termux-share</code> também funciona (precisa app <code>Termux:API</code>). Sem ele, o <code>cp</code> pra <code>/sdcard/Download/</code> + abrir Files já permite mandar pro WhatsApp.</div>
-                <div class="dump-tip">📦 Source open: <a href="https://github.com/lovelyoyk/a4ther" target="_blank" rel="noopener">github.com/lovelyoyk/a4ther</a></div>
+                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>Atalho: <code>termux-share</code> também funciona (precisa app <code>Termux:API</code>). Sem ele, o <code>cp</code> pra <code>/sdcard/Download/</code> + abrir Files já permite mandar pro WhatsApp.</span></div>
+                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg><span>Source open: <a href="https://github.com/lovelyoyk/a4ther" target="_blank" rel="noopener">github.com/lovelyoyk/a4ther</a></span></div>
             </div>
 
             <div class="dump-step">
                 <div class="dump-step-head">
-                    <span class="dump-step-icon">📊</span>
+                    <span class="dump-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></span>
                     <div class="dump-step-title">iOS sem sysdiagnose</div>
                     <div class="dump-step-sub">App Privacy Report (.ndjson)</div>
                 </div>
@@ -1480,7 +1722,7 @@ footer a:hover {
                     <li>Volte em <code>App Privacy Report</code> → toque <strong>Salvar App Privacy Report</strong></li>
                     <li>Compartilhe o <code>.ndjson</code> aqui no modo "<strong>iOS · App Privacy Report</strong>"</li>
                 </ol>
-                <div class="dump-tip">💡 Útil quando o jogador não consegue gerar sysdiagnose (iOS antigo, espaço em disco baixo).</div>
+                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg><span>Útil quando o jogador não consegue gerar sysdiagnose (iOS antigo, espaço em disco baixo).</span></div>
             </div>
         </div>
     </div>
@@ -1528,7 +1770,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.16";
+const VERSION = "4.4.17";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -1945,20 +2187,20 @@ const SUBSTRING_PATTERNS = [
     { needle: "fakerunlocker", name: "Faker Unlocker",  cat: "CLEANER",  sev: "HIGH",     desc: "LSPosed module — spoofa device fingerprint" },
 ];
 
-// Categorias (badges visuais)
+// Categorias (badges visuais) — v4.4.17: nome do SVG icon (use iconSVG())
 const CATEGORY_INFO = {
-    CHEAT:     { icon: "⚠",  label: "Cheat",     color: "red"    },
-    SIDELOAD:  { icon: "📦", label: "Sideload",  color: "red"    },
-    JAILBREAK: { icon: "🔓", label: "Jailbreak", color: "red"    },
-    CERT:      { icon: "🔐", label: "Cert",      color: "orange" },
-    PROXY:     { icon: "🔀", label: "Proxy",     color: "orange" },
-    VPN:       { icon: "🛡",  label: "VPN",       color: "orange" },
-    DNS:       { icon: "🌐", label: "DNS",       color: "red"    },
-    TWEAK:     { icon: "🛠",  label: "Tweak",     color: "orange" },
-    DEV:       { icon: "🧪", label: "Dev",       color: "orange" },
-    CLEANER:   { icon: "🧹", label: "Cleaner",   color: "orange" },
-    PCPAIR:    { icon: "💻", label: "PC Pair",   color: "orange" },
-    TAMPER:    { icon: "🔴", label: "Tamper",    color: "red"    },
+    CHEAT:     { icon: "alert-triangle", label: "Cheat",     color: "red"    },
+    SIDELOAD:  { icon: "package",        label: "Sideload",  color: "red"    },
+    JAILBREAK: { icon: "lock-open",      label: "Jailbreak", color: "red"    },
+    CERT:      { icon: "shield",         label: "Cert",      color: "orange" },
+    PROXY:     { icon: "activity",       label: "Proxy",     color: "orange" },
+    VPN:       { icon: "shield-check",   label: "VPN",       color: "orange" },
+    DNS:       { icon: "globe",          label: "DNS",       color: "red"    },
+    TWEAK:     { icon: "code",           label: "Tweak",     color: "orange" },
+    DEV:       { icon: "code",           label: "Dev",       color: "orange" },
+    CLEANER:   { icon: "sparkles",       label: "Cleaner",   color: "orange" },
+    PCPAIR:    { icon: "monitor",        label: "PC Pair",   color: "orange" },
+    TAMPER:    { icon: "alert-triangle", label: "Tamper",    color: "red"    },
 };
 
 const FF_OFFICIAL = new Set([
@@ -2313,11 +2555,74 @@ const PROFILE_PAYLOADS = {
 let alerts = [], warnings = [], okItems = [];
 let lastStats = null;
 let lastReportText = "";
+// v4.4.17: contexto pra Device Info Card no renderResults
+let _deviceInfo = null;
+let _jailbreakInfo = null;
+let _blacklistResults = [];   // [{ key:'Serial', val:'FD7…', result:{banned, reason, date, …} }]
 
 function alertF(msg, detail) { alerts.push({ msg, detail }); }
 function warn(msg, detail)   { warnings.push({ msg, detail }); }
 function ok(msg, detail)     { okItems.push({ msg, detail }); }
-function reset() { alerts = []; warnings = []; okItems = []; }
+function reset() {
+    alerts = []; warnings = []; okItems = [];
+    _deviceInfo = null; _jailbreakInfo = null; _blacklistResults = [];
+}
+
+/* ============================================================
+   SVG ICONS — Lucide-style inline icons (v4.4.17)
+   Substituem emojis unicode. Tudo currentColor pra herdar parent.
+   ============================================================ */
+const ICONS = {
+    // device + identity
+    smartphone:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2.5"/><line x1="12" y1="18" x2="12" y2="18"/></svg>',
+    cpu:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="2" x2="9" y2="4"/><line x1="15" y1="2" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="22"/><line x1="15" y1="20" x2="15" y2="22"/><line x1="20" y1="9" x2="22" y2="9"/><line x1="20" y1="15" x2="22" y2="15"/><line x1="2" y1="9" x2="4" y2="9"/><line x1="2" y1="15" x2="4" y2="15"/></svg>',
+    fingerprint: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12a10 10 0 0 1 18-6"/><path d="M5 19.5C5.5 18 6 15 6 12c0-.7.12-1.37.34-2"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2"/></svg>',
+    box:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+    // signals
+    'shield-check': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>',
+    'shield-alert': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.6" fill="currentColor"/></svg>',
+    shield:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>',
+    'lock-open': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>',
+    lock:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+    // status
+    check:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    'check-circle': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+    x:           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    'x-circle':  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+    'alert-triangle': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg>',
+    info:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><circle cx="12" cy="8" r="0.6" fill="currentColor"/></svg>',
+    // files + actions
+    'file-text': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
+    upload:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
+    'cloud-upload': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m8 17 4-5 4 5"/></svg>',
+    activity:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',
+    'bar-chart': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>',
+    bot:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>',
+    apple:       '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/></svg>',
+    folder:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+    zap:         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+    lightbulb:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg>',
+    code:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+    globe:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>',
+    flag:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>',
+    'store':     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/></svg>',
+    package:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+    hash:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
+    clock:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+    'monitor':   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+    sparkles:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>',
+};
+
+function iconSVG(name, opts) {
+    const svg = ICONS[name];
+    if (!svg) return '';
+    opts = opts || {};
+    // wrap em span pra controle de tamanho via CSS quando precisar
+    if (opts.raw) return svg;
+    const size = opts.size || 16;
+    const cls = opts.cls ? ` class="${opts.cls}"` : '';
+    return `<span class="ico"${cls} style="display:inline-flex;width:${size}px;height:${size}px;align-items:center;justify-content:center;flex-shrink:0;">${svg}</span>`;
+}
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -2401,19 +2706,174 @@ function finishProgress() {
     $('#loadingETA').textContent = 'finalizando…';
 }
 
+// ════════════════════════════════════════════════════════════
+// v4.4.17: Device Info Card renderer — usa dados reais do extractHWID
+// ════════════════════════════════════════════════════════════
+const COUNTRY_FLAGS = {
+    'BR': { name: 'Brasil',         g: 'linear-gradient(180deg, #009b3a 50%, #ffdf00 50%)' },
+    'US': { name: 'United States',  g: 'linear-gradient(180deg, #b22234 33%, #fff 33% 66%, #3c3b6e 66%)' },
+    'GB': { name: 'United Kingdom', g: 'linear-gradient(135deg, #00247d 0 40%, #cf142b 40% 60%, #fff 60%)' },
+    'FR': { name: 'France',         g: 'linear-gradient(90deg, #0055a4 33%, #fff 33% 66%, #ef4135 66%)' },
+    'DE': { name: 'Germany',        g: 'linear-gradient(180deg, #000 33%, #dd0000 33% 66%, #ffce00 66%)' },
+    'JP': { name: 'Japan',          g: 'radial-gradient(circle at center, #bc002d 30%, #fff 30%)' },
+    'AU': { name: 'Australia',      g: 'linear-gradient(180deg, #012169 50%, #012169)' },
+    'CA': { name: 'Canada',         g: 'linear-gradient(90deg, #d80027 25%, #fff 25% 75%, #d80027 75%)' },
+    'IT': { name: 'Italy',          g: 'linear-gradient(90deg, #008c45 33%, #fff 33% 66%, #cd212a 66%)' },
+    'ES': { name: 'Spain',          g: 'linear-gradient(180deg, #aa151b 25%, #f1bf00 25% 75%, #aa151b 75%)' },
+    'MX': { name: 'México',         g: 'linear-gradient(90deg, #006847 33%, #fff 33% 66%, #ce1126 66%)' },
+    'PT': { name: 'Portugal',       g: 'linear-gradient(90deg, #006600 40%, #ff0000 40%)' },
+    'AR': { name: 'Argentina',      g: 'linear-gradient(180deg, #74acdf 33%, #fff 33% 66%, #74acdf 66%)' },
+    'CL': { name: 'Chile',          g: 'linear-gradient(180deg, #fff 50%, #d52b1e 50%)' },
+    'CO': { name: 'Colômbia',       g: 'linear-gradient(180deg, #ffcd00 50%, #003893 50% 75%, #ce1126 75%)' },
+    'PE': { name: 'Peru',           g: 'linear-gradient(90deg, #d91023 33%, #fff 33% 66%, #d91023 66%)' },
+};
+
+function renderDeviceCard(info, jbInfo, blResults) {
+    // Decide badge banido/ok pelo blacklist results
+    const banned = (blResults || []).find(r => r.result && r.result.banned === true);
+    const isBanned = !!banned;
+
+    // Hero icon: apple se iOS, smartphone fallback
+    const isIOS = (info.iosVersion || info.productType || '').toString().length > 0;
+    const heroIcon = isIOS ? 'apple' : 'smartphone';
+    const modelDisplay = info.modelName || info.productType || 'Dispositivo Desconhecido';
+    const productLine = info.productType ? `${info.productType} · ${info.modelName ? 'iPhone' : 'Device'}` : 'iOS Device';
+    const iosLabel = info.iosVersion ? info.iosVersion : '—';
+    const buildLine = info.buildVersion ? `BUILD ${info.buildVersion}` : 'IOS VERSION';
+
+    // País → flag info
+    const cc = (info.regionCode || '').toUpperCase();
+    const flag = COUNTRY_FLAGS[cc] || { name: info.region || cc || 'Desconhecido', g: 'linear-gradient(135deg, #555, #333)' };
+    const appStore = (info.appStoreCountry || '').toUpperCase();
+    const appStoreInfo = COUNTRY_FLAGS[appStore];
+
+    // HWID badge
+    const hwidShort = info.hwidHash ? `${info.hwidHash.substring(0, 16)}…` : '—';
+    const serialDisplay = info.serial || '—';
+
+    let html = `
+    <div class="device-section">
+        <div class="device-section-header">
+            <div class="device-section-icon">${iconSVG('cpu', { size: 20 })}</div>
+            <span class="device-section-title">Device Identification</span>
+            <span class="device-section-line"></span>
+        </div>
+        <div class="device-card">
+            <div class="device-hero">
+                <div class="device-hero-icon">${iconSVG(heroIcon, { size: 30 })}</div>
+                <div class="device-hero-info">
+                    <div class="device-hero-model">${escapeHTML(modelDisplay)}</div>
+                    <div class="device-hero-subtitle">${escapeHTML(productLine)}</div>
+                </div>
+                <div class="device-hero-version">
+                    <div class="ver">${escapeHTML(iosLabel)}</div>
+                    <div class="ver-label">${escapeHTML(buildLine)}</div>
+                </div>
+            </div>
+
+            <div class="device-hwid-row">
+                <div class="device-field" style="flex:1; min-width:200px;">
+                    <span class="device-field-label">SERIAL NUMBER</span>
+                    <span class="device-field-value">${escapeHTML(serialDisplay)} ${
+                        isBanned
+                            ? `<span class="device-badge banned">${iconSVG('x', { size: 12 })} BANNED</span>`
+                            : `<span class="device-badge ok">${iconSVG('check', { size: 12 })} CLEAN</span>`
+                    }</span>
+                </div>
+                <div class="device-field" style="min-width:200px;">
+                    <span class="device-field-label">HWID (SHA-256)</span>
+                    <span class="device-field-value muted">${escapeHTML(hwidShort)}</span>
+                </div>
+            </div>
+
+            <div class="device-grid2">
+                <div class="device-field">
+                    <span class="device-field-label">UDID</span>
+                    <span class="device-field-value muted">${escapeHTML(info.udid || '—')}</span>
+                </div>
+                <div class="device-field">
+                    <span class="device-field-label">ECID</span>
+                    <span class="device-field-value muted">${escapeHTML(info.ecid || '—')}</span>
+                </div>
+            </div>
+
+            <div class="device-grid2">
+                <div class="device-field">
+                    <span class="device-field-label">Região do Device</span>
+                    <span class="device-field-value cyan">
+                        <span class="country-flag" style="background:${flag.g}"></span>
+                        ${escapeHTML(flag.name)} <span class="country-code">${escapeHTML(cc || '—')}</span>
+                    </span>
+                </div>
+                <div class="device-field">
+                    <span class="device-field-label">App Store Region</span>
+                    <span class="device-field-value cyan">
+                        ${appStoreInfo
+                            ? `<span class="country-flag" style="background:${appStoreInfo.g}"></span> ${escapeHTML(appStoreInfo.name)} <span class="country-code">${escapeHTML(appStore)}</span>`
+                            : (appStore ? `<span class="country-code">${escapeHTML(appStore)}</span>` : '—')}
+                    </span>
+                </div>
+            </div>
+
+            <div class="device-footer">
+                <span>A4ther Systems · Device Forensics</span>
+                <span class="device-country">${iconSVG('shield', { size: 12 })} ${escapeHTML(flag.name)}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="device-section">
+        <div class="device-section-header">
+            <div class="device-section-icon">${iconSVG('shield-check', { size: 20 })}</div>
+            <span class="device-section-title">Security Status</span>
+            <span class="device-section-line"></span>
+        </div>
+        <div class="status-card ${isBanned ? 'banned' : ''}">
+            <div class="status-icon-box">${iconSVG(isBanned ? 'shield-alert' : 'shield-check', { size: 22 })}</div>
+            <div class="status-info">
+                <div class="status-title">Blacklist Status</div>
+                <div class="status-detail">${
+                    isBanned
+                        ? `BANIDO · ${escapeHTML(banned.result.reason || 'sem motivo')}`
+                        : 'CLEAN · Device não consta em lspainel.com.br/dashboard/blacklist'
+                }</div>
+                ${isBanned ? `<div class="status-meta">Match em ${escapeHTML(banned.key)}: ${escapeHTML(banned.val)}${banned.result.date ? ` · ${escapeHTML(banned.result.date)}` : ''}</div>` : ''}
+            </div>
+        </div>`;
+
+    // Jailbreak card
+    const jbBanned = jbInfo && jbInfo.jailbroken;
+    html += `
+        <div class="status-card ${jbBanned ? 'banned' : ''}">
+            <div class="status-icon-box">${iconSVG(jbBanned ? 'lock-open' : 'lock', { size: 22 })}</div>
+            <div class="status-info">
+                <div class="status-title">Jailbreak Status</div>
+                <div class="status-detail">${
+                    jbBanned
+                        ? `JAILBROKEN · ${escapeHTML(jbInfo.names.slice(0,3).join(' · '))}${jbInfo.names.length > 3 ? ` +${jbInfo.names.length-3}` : ''}`
+                        : 'STOCK · Nenhum indicador de jailbreak detectado'
+                }</div>
+                ${jbBanned ? `<div class="status-meta">${jbInfo.names.length} ferramenta(s) · palera1n/Dopamine/Unc0ver/Taurine/Checkra1n/TrollStore</div>` : `<div class="status-meta">Checagem: palera1n · Dopamine · Unc0ver · Taurine · Checkra1n · TrollStore · Sileo · Cydia · Zebra · Substrate · Frida</div>`}
+            </div>
+        </div>
+    </div>`;
+
+    return html;
+}
+
 function renderResults(stats) {
     hideLoading();
     lastStats = stats;
-    let verdict, color, icon, subtitle, verdictKey;
+    let verdict, color, iconName, subtitle, verdictKey;
     // Verdict: W.O (vermelho) ou LIMPO (verde)
     if (alerts.length > 0) {
-        verdict = 'W . O'; verdictKey = 'W.O'; color = 'red'; icon = '✗';
+        verdict = 'W . O'; verdictKey = 'W.O'; color = 'red'; iconName = 'x-circle';
         subtitle = `${alerts.length} alerta${alerts.length !== 1 ? 's' : ''} crítico${alerts.length !== 1 ? 's' : ''} · aplicar W.O / BAN`;
     } else if (warnings.length > 0) {
-        verdict = 'REVISAR'; verdictKey = 'REVISAR'; color = 'orange'; icon = '⚠';
+        verdict = 'REVISAR'; verdictKey = 'REVISAR'; color = 'orange'; iconName = 'alert-triangle';
         subtitle = `${warnings.length} aviso${warnings.length !== 1 ? 's' : ''} a checar manualmente`;
     } else {
-        verdict = 'L I M P O'; verdictKey = 'LIMPO'; color = 'green'; icon = '✓';
+        verdict = 'L I M P O'; verdictKey = 'LIMPO'; color = 'green'; iconName = 'check-circle';
         subtitle = 'Device aprovado · nenhum indicador suspeito';
     }
     // Telemetria pro backend (fire-and-forget, não bloqueia render)
@@ -2438,9 +2898,19 @@ function renderResults(stats) {
         ? stats.appsInstalled
         : (stats && stats.bundles !== undefined ? stats.bundles : '?');
 
-    let html = `
+    let html = '';
+
+    // ════════════════════════════════════════════════════════════
+    // v4.4.17: DEVICE INFO CARD — só renderiza quando temos dados reais
+    // extraídos do sysdiagnose (extractHWID populou _deviceInfo).
+    // ════════════════════════════════════════════════════════════
+    if (_deviceInfo && (_deviceInfo.serial || _deviceInfo.udid || _deviceInfo.modelName)) {
+        html += renderDeviceCard(_deviceInfo, _jailbreakInfo, _blacklistResults);
+    }
+
+    html += `
         <div class="verdict ${color}">
-            <div class="verdict-icon">${icon}</div>
+            <div class="verdict-icon">${iconSVG(iconName, { size: 64 })}</div>
             <div class="verdict-title">${verdict}</div>
             <div class="verdict-subtitle">${subtitle}</div>
         </div>
@@ -3317,17 +3787,17 @@ async function handleTarGz(file) {
     // de 322MB é comum em devices com muito uso; bloquear era frustrante.
     // Entre 80-250MB: aviso + tenta processar; ≥250MB: bloqueia com instrução clara.
     if (isIOSMobile() && fileMb > 80) {
-        warn(`⚠ Arquivo de ${fileMb.toFixed(0)} MB no Safari iOS pode travar (RAM limitada).`);
+        warn(`Arquivo de ${fileMb.toFixed(0)} MB no Safari iOS pode travar (RAM limitada).`);
         if (fileMb > 250) {
             warn(`────────────────────────────────────────────`);
-            warn(`❌ ${fileMb.toFixed(0)} MB é GRANDE DEMAIS pro Safari iOS.`);
-            warn(`📱 Solução no PRÓPRIO iPhone (sem PC):`);
+            warn(`${fileMb.toFixed(0)} MB é GRANDE DEMAIS pro Safari iOS.`);
+            warn(`Solução no PRÓPRIO iPhone (sem PC):`);
             warn(`   1. Abra o app "Arquivos" (Files)`);
             warn(`   2. Localize o .tar.gz`);
             warn(`   3. Toque longo → "Descompactar"`);
             warn(`   4. Volte aqui e use modo "iOS · sysdiagnose (pasta)"`);
             warn(`   5. Selecione a pasta sysdiagnose_* extraída`);
-            warn(`💻 OU envie pelo desktop (Chrome/Safari Mac/PC) — sem limite de RAM`);
+            warn(`OU envie pelo desktop (Chrome/Safari Mac/PC) — sem limite de RAM`);
             warn(`────────────────────────────────────────────`);
             renderResults({});
             return;
@@ -3339,7 +3809,7 @@ async function handleTarGz(file) {
     // Aviso de tempo conforme tamanho do arquivo
     let warnText = '';
     if (isIOSMobile() && fileMb > 80) {
-        warnText = `⚠ iOS · ${fileMb.toFixed(0)} MB. Se travar, extraia e use modo "Sysdiagnose pasta".`;
+        warnText = `iOS · ${fileMb.toFixed(0)} MB. Se travar, extraia e use modo "Sysdiagnose pasta".`;
     } else if (fileMb > 150) {
         warnText = `⏱ Arquivo grande (${fileMb.toFixed(0)} MB) — 1-3 min. Não feche a aba.`;
     } else if (fileMb > 50) {
@@ -3697,7 +4167,7 @@ async function extractHWID(files) {
     if (modelName)    ok(`Modelo: ${modelName}${productType ? ` (${productType})` : ''}`);
     if (iosVersion)   ok(`iOS:    ${iosVersion}${buildVersion ? ` · build ${buildVersion}` : ''}`);
     if (region)       ok(`País:   ${region}${regionCode && region !== regionCode ? ` (${regionCode})` : ''}`);
-    if (appStoreCountry) ok(`App Store: ${appStoreCountry}${appStoreCountry !== regionCode ? ` ⚠ DIFERE da região do device (${regionCode || '?'})` : ''}`);
+    if (appStoreCountry) ok(`App Store: ${appStoreCountry}${appStoreCountry !== regionCode ? ` (DIFERE da região do device: ${regionCode || '?'})` : ''}`);
     let hwidHash = null;
     if (serial || udid) {
         // HWID composto pra cross-reference com bans
@@ -3714,6 +4184,7 @@ async function extractHWID(files) {
     // Cross-reference com lspainel blacklist via /api/a4ther/blacklist/check.
     // Tenta múltiplas chaves: Serial puro, UDID, hash composto SHA-256.
     // Qualquer match → alert CRITICAL "DEVICE BANIDO" + motivos.
+    const _allBlResults = [];
     if (serial || udid || hwidHash) {
         const lookups = [];
         if (serial) lookups.push({ key: 'Serial', val: serial });
@@ -3727,6 +4198,7 @@ async function extractHWID(files) {
         }));
         let bannedFound = false;
         for (const { key, val, result } of results) {
+            _allBlResults.push({ key, val, result });
             if (!result) continue;
             if (result.banned === true) {
                 bannedFound = true;
@@ -3746,11 +4218,15 @@ async function extractHWID(files) {
             }
         }
         if (!bannedFound && results.some(r => r.result && r.result.banned === false)) {
-            ok(`◆ Device NÃO está na blacklist lspainel`);
+            ok(`Device NAO esta na blacklist lspainel`);
         }
     }
 
-    return { serial, udid, ecid, hwidHash, productType, modelName, iosVersion, buildVersion, region, regionCode, appStoreCountry };
+    const info = { serial, udid, ecid, hwidHash, productType, modelName, iosVersion, buildVersion, region, regionCode, appStoreCountry };
+    // v4.4.17: persiste pro renderResults usar
+    _deviceInfo = info;
+    _blacklistResults = _allBlResults;
+    return info;
 }
 
 /* ============================================================
@@ -3810,18 +4286,22 @@ async function detectJailbreakAggregated(files) {
     const toolsDetected = Object.keys(found);
     if (toolsDetected.length === 0) {
         ok("Jailbreak: sem indicadores detectados (palera1n/Dopamine/Unc0ver/Taurine/Checkra1n/TrollStore)");
-        return { jailbroken: false, tools: [] };
+        _jailbreakInfo = { jailbroken: false, tools: [], names: [] };
+        return _jailbreakInfo;
     }
 
     // Emite 1 alert por tool detectada (com lista de arquivos)
+    const names = [];
     for (const tool of toolsDetected) {
         const ind = INDICATORS[tool];
         const sources = Array.from(found[tool]);
         const srcStr = sources.slice(0, 5).join(', ') + (sources.length > 5 ? ` +${sources.length-5}` : '');
         alertF(`[CRITICAL][JAILBREAK] ${ind.name} detectado`,
             `Indicadores em: ${srcStr}`);
+        names.push(ind.name);
     }
-    return { jailbroken: true, tools: toolsDetected };
+    _jailbreakInfo = { jailbroken: true, tools: toolsDetected, names };
+    return _jailbreakInfo;
 }
 
 async function handleSysdiagnose(filesList, opts) {
@@ -3839,7 +4319,7 @@ async function handleSysdiagnose(filesList, opts) {
 
     // Aviso iOS pra pasta grande (extraída de tar.gz pesado)
     if (isIOSMobile() && files.length > 1500) {
-        warn(`⚠ ${files.length} arquivos no Safari iOS pode travar (memória limitada). Se travar, use desktop ou divida o sysdiagnose.`);
+        warn(`${files.length} arquivos no Safari iOS pode travar (memória limitada). Se travar, use desktop ou divida o sysdiagnose.`);
     }
 
     // Encontra a pasta raiz (caso usuário tenha aberto um diretório pai)
@@ -3848,7 +4328,7 @@ async function handleSysdiagnose(filesList, opts) {
     const allPaths = files.map(f => f.webkitRelativePath || f.name);
     const looksLikeSysdiag = allPaths.some(p => /\/(logs\/MobileInstallation|summaries|ps\.txt|taskinfo\.txt|crashes_and_spins)/i.test(p));
     if (!looksLikeSysdiag) {
-        warn("⚠ Pasta não parece sysdiagnose - falta logs/, ps.txt, summaries/, etc.");
+        warn("Pasta não parece sysdiagnose - falta logs/, ps.txt, summaries/, etc.");
         warn("Certifique que o .tar.gz foi extraído e selecionou a pasta sysdiagnose_*");
     }
 
