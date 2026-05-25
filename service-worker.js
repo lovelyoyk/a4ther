@@ -6,7 +6,7 @@
    - Tudo mais → network-first com fallback cache
    ----------------------------------------------------------- */
 
-const CACHE_VERSION = "a4ther-v4.4.14";
+const CACHE_VERSION = "a4ther-v4.4.15";
 const APP_SHELL = [
     "./",
     "./index.html",

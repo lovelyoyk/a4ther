@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.14</span>
+        <span id="version">v4.4.15</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1528,7 +1528,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.14";
+const VERSION = "4.4.15";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3582,13 +3582,40 @@ async function checkManualProxy(files) {
 }
 
 /* ============================================================
-   HWID EXTRACTION
+   HWID EXTRACTION (v4.4.15 — estendido com modelo/iOS/build/region/AppStore)
    ============================================================ */
+// Mapping ProductType (iPhoneX,Y) → nome comercial
+const IPHONE_MODELS = {
+    'iPhone10,1':'iPhone 8','iPhone10,4':'iPhone 8','iPhone10,2':'iPhone 8 Plus','iPhone10,5':'iPhone 8 Plus',
+    'iPhone10,3':'iPhone X','iPhone10,6':'iPhone X',
+    'iPhone11,2':'iPhone XS','iPhone11,4':'iPhone XS Max','iPhone11,6':'iPhone XS Max','iPhone11,8':'iPhone XR',
+    'iPhone12,1':'iPhone 11','iPhone12,3':'iPhone 11 Pro','iPhone12,5':'iPhone 11 Pro Max','iPhone12,8':'iPhone SE (2nd gen)',
+    'iPhone13,1':'iPhone 12 mini','iPhone13,2':'iPhone 12','iPhone13,3':'iPhone 12 Pro','iPhone13,4':'iPhone 12 Pro Max',
+    'iPhone14,2':'iPhone 13 Pro','iPhone14,3':'iPhone 13 Pro Max','iPhone14,4':'iPhone 13 mini','iPhone14,5':'iPhone 13',
+    'iPhone14,6':'iPhone SE (3rd gen)','iPhone14,7':'iPhone 14','iPhone14,8':'iPhone 14 Plus',
+    'iPhone15,2':'iPhone 14 Pro','iPhone15,3':'iPhone 14 Pro Max','iPhone15,4':'iPhone 15','iPhone15,5':'iPhone 15 Plus',
+    'iPhone16,1':'iPhone 15 Pro','iPhone16,2':'iPhone 15 Pro Max',
+    'iPhone17,1':'iPhone 16 Pro','iPhone17,2':'iPhone 16 Pro Max','iPhone17,3':'iPhone 16','iPhone17,4':'iPhone 16 Plus',
+};
+const IPAD_MODELS = {
+    // pad models...
+};
+
 async function extractHWID(files) {
-    // Busca em remotectl_dumpstate.txt e SystemVersion
+    // ─── Extrai TUDO em uma passada otimizada ───
     let serial = null, udid = null, ecid = null;
+    let productType = null;   // iPhone10,2
+    let modelName   = null;   // iPhone 8 Plus
+    let iosVersion  = null;   // 16.7.16
+    let buildVersion= null;   // 20H392
+    let buildId     = null;   // SystemImage/Restore UUID
+    let region      = null;   // Brasil / BR
+    let regionCode  = null;   // BR
+    let appStoreCountry = null; // BR (App Store loja)
+
     for (const f of files) {
         const name = (f.webkitRelativePath || f.name).toLowerCase();
+        // remotectl_dumpstate.txt → serial, UDID, ECID, ProductType, BuildVersion
         if (name.endsWith('remotectl_dumpstate.txt')) {
             const raw = await readSafe(f);
             if (raw) {
@@ -3599,12 +3626,73 @@ async function extractHWID(files) {
                 if (um) udid = um[1];
                 const em = raw.match(/ECID[\s:=]+([A-Fa-f0-9x]+)/i);
                 if (em) ecid = em[1];
+                const pm = raw.match(/ProductType[\s:=]+([A-Za-z0-9,]+)/i);
+                if (pm) productType = pm[1];
+                const bm = raw.match(/BuildVersion[\s:=]+([A-Z0-9]+)/i);
+                if (bm) buildVersion = bm[1];
+                const rm = raw.match(/RegionInfo[\s:=]+([A-Z]+\/[A-Z]+)/i);
+                if (rm) regionCode = rm[1].split('/')[0];
+            }
+        }
+        // SystemVersion.plist → ProductVersion, BuildVersion, ProductName
+        if (name.endsWith('systemversion.plist')) {
+            const raw = await readSafe(f);
+            if (raw) {
+                const pvm = raw.match(/<key>ProductVersion<\/key>\s*<string>([^<]+)<\/string>/i);
+                if (pvm) iosVersion = pvm[1];
+                const bvm = raw.match(/<key>(?:ProductBuildVersion|BuildVersion)<\/key>\s*<string>([^<]+)<\/string>/i);
+                if (bvm && !buildVersion) buildVersion = bvm[1];
+            }
+        }
+        // Globalpreferences.plist → AppleLocale → country
+        if (name.endsWith('.globalpreferences.plist') || name.includes('.globalpreferences')) {
+            const raw = await readSafe(f);
+            if (raw) {
+                const lm = raw.match(/<key>AppleLocale<\/key>\s*<string>([a-z]{2,3})_([A-Z]{2})<\/string>/);
+                if (lm) { regionCode = regionCode || lm[2]; }
+                const cm = raw.match(/<key>(?:Country|CountryCode)<\/key>\s*<string>([A-Z]{2})<\/string>/);
+                if (cm) regionCode = regionCode || cm[1];
+            }
+        }
+        // com.apple.commerce.plist → App Store country
+        if (name.endsWith('com.apple.commerce.plist')) {
+            const raw = await readSafe(f);
+            if (raw) {
+                const am = raw.match(/<key>StoreFrontIdentifier<\/key>\s*<string>(\d+)/i) ||
+                           raw.match(/<key>StorefrontCountryCode<\/key>\s*<string>([A-Z]{2})/i);
+                if (am) {
+                    const v = am[1];
+                    // 143467-3,29 → BR (143467 = Brazil storefront ID)
+                    const STORE_IDS = {'143441':'US','143442':'GB','143443':'FR','143444':'DE','143445':'JP','143446':'AU','143467':'BR','143460':'CA','143462':'IT','143465':'ES','143466':'MX'};
+                    appStoreCountry = STORE_IDS[v] || (v.length === 2 ? v : null);
+                }
+            }
+        }
+        // itunesstored downloads → fallback pra App Store country
+        if (name.includes('itunesstored') && name.endsWith('.plist')) {
+            const raw = await readSafe(f);
+            if (raw && !appStoreCountry) {
+                const am = raw.match(/<key>StorefrontIdentifier<\/key>\s*<string>(\d+)/i);
+                if (am) {
+                    const STORE_IDS = {'143441':'US','143442':'GB','143443':'FR','143444':'DE','143445':'JP','143446':'AU','143467':'BR','143460':'CA','143462':'IT','143465':'ES','143466':'MX'};
+                    appStoreCountry = STORE_IDS[am[1]] || null;
+                }
             }
         }
     }
+    if (productType) modelName = IPHONE_MODELS[productType] || IPAD_MODELS[productType] || productType;
+    if (regionCode) {
+        const COUNTRIES = {'BR':'Brasil','US':'United States','GB':'United Kingdom','FR':'France','DE':'Germany','JP':'Japan','AU':'Australia','CA':'Canada','IT':'Italy','ES':'Spain','MX':'Mexico','PT':'Portugal','AR':'Argentina','CL':'Chile','CO':'Colombia','PE':'Peru'};
+        region = COUNTRIES[regionCode] || regionCode;
+    }
+
     if (serial) ok(`Serial: ${serial}`);
     if (udid)   ok(`UDID:   ${udid}`);
     if (ecid)   ok(`ECID:   ${ecid}`);
+    if (modelName)    ok(`Modelo: ${modelName}${productType ? ` (${productType})` : ''}`);
+    if (iosVersion)   ok(`iOS:    ${iosVersion}${buildVersion ? ` · build ${buildVersion}` : ''}`);
+    if (region)       ok(`País:   ${region}${regionCode && region !== regionCode ? ` (${regionCode})` : ''}`);
+    if (appStoreCountry) ok(`App Store: ${appStoreCountry}${appStoreCountry !== regionCode ? ` ⚠ DIFERE da região do device (${regionCode || '?'})` : ''}`);
     let hwidHash = null;
     if (serial || udid) {
         // HWID composto pra cross-reference com bans
@@ -3657,7 +3745,78 @@ async function extractHWID(files) {
         }
     }
 
-    return { serial, udid, ecid, hwidHash };
+    return { serial, udid, ecid, hwidHash, productType, modelName, iosVersion, buildVersion, region, regionCode, appStoreCountry };
+}
+
+/* ============================================================
+   JAILBREAK DETECTION (v4.4.15) — agregado de todos sinais
+   Centraliza checagem de palera1n / Dopamine / Unc0ver / Taurine /
+   Checkra1n / TrollStore. Procura em ps.txt, shutdown.log, paths /var/jb/,
+   bundles em AppGroups, processos em crash logs e fseventsd recente.
+   Emite 1 alert AGREGADO com TODOS os indicadores encontrados (em vez de
+   N alerts soltos).
+   ============================================================ */
+async function detectJailbreakAggregated(files) {
+    const INDICATORS = {
+        palera1n:   { name: 'palera1n',   markers: ['/var/jb/', 'palera1nd', '/palera1n/', 'com.opa334.palera1n', 'palera1nLoader'] },
+        Dopamine:   { name: 'Dopamine',   markers: ['com.opa334.dopamine', 'Dopamine.app', 'dopamine-init', 'launchdhook', 'jailbreakd'] },
+        Unc0ver:    { name: 'Unc0ver',    markers: ['/var/containers/Bundle/Application/.*/unc0ver', 'science.xnu.undecimus', 'unc0ver.app'] },
+        Taurine:    { name: 'Taurine',    markers: ['org.taurine.jailbreak', 'taurine.app', '/var/LIB/Taurine'] },
+        Checkra1n:  { name: 'Checkra1n',  markers: ['/checkra1n', 'checkra1n.app', 'io.checkra1n'] },
+        TrollStore: { name: 'TrollStore', markers: ['com.opa334.trollstore', 'TrollStore.app', '/var/containers/Bundle/Application/.*/TrollStore'] },
+        Sileo:      { name: 'Sileo (pkg mgr)',  markers: ['org.coolstar.sileo', 'Sileo.app', '/Applications/Sileo.app'] },
+        Cydia:      { name: 'Cydia',     markers: ['/Applications/Cydia.app', 'com.saurik.Cydia'] },
+        Zebra:      { name: 'Zebra',     markers: ['xyz.willy.zebra', 'Zebra.app'] },
+        Substrate:  { name: 'MobileSubstrate', markers: ['/Library/MobileSubstrate', 'MobileSubstrate.dylib', 'libsubstrate'] },
+        Frida:      { name: 'Frida',     markers: ['frida-server', 'frida-gadget', 'FridaGadget'] },
+    };
+    const found = {};  // tool name → Set of files where detected
+
+    // Files candidatos pra varredura (logs, ps, shutdown, fseventsd, etc)
+    const candidates = files.filter(f => {
+        const n = (f.webkitRelativePath || f.name).toLowerCase();
+        return n.endsWith('ps.txt') || n.endsWith('taskinfo.txt') ||
+               n.includes('shutdown.log') || n.includes('lockdownd.log') ||
+               n.includes('crashes_and_spins/') || n.includes('mcstate/') ||
+               n.includes('.fseventsd/') || n.endsWith('appgroupmetadata.plist') ||
+               n.includes('containers.sqlite3');
+    });
+
+    for (const f of candidates.slice(0, 50)) {
+        const fname = (f.webkitRelativePath || f.name).split('/').pop();
+        let content;
+        try {
+            const buf = new Uint8Array(await f.arrayBuffer());
+            content = extractStringsFromBytes(buf, 5).join('\n');
+        } catch (e) { continue; }
+        if (!content) continue;
+        for (const [key, ind] of Object.entries(INDICATORS)) {
+            for (const marker of ind.markers) {
+                const re = new RegExp(marker.replace(/\//g, '\\/').replace(/\./g, '\\.'), 'i');
+                if (re.test(content)) {
+                    if (!found[key]) found[key] = new Set();
+                    found[key].add(fname);
+                    break;  // 1 hit por (tool, file) — não precisa testar outros markers
+                }
+            }
+        }
+    }
+
+    const toolsDetected = Object.keys(found);
+    if (toolsDetected.length === 0) {
+        ok("Jailbreak: sem indicadores detectados (palera1n/Dopamine/Unc0ver/Taurine/Checkra1n/TrollStore)");
+        return { jailbroken: false, tools: [] };
+    }
+
+    // Emite 1 alert por tool detectada (com lista de arquivos)
+    for (const tool of toolsDetected) {
+        const ind = INDICATORS[tool];
+        const sources = Array.from(found[tool]);
+        const srcStr = sources.slice(0, 5).join(', ') + (sources.length > 5 ? ` +${sources.length-5}` : '');
+        alertF(`[CRITICAL][JAILBREAK] ${ind.name} detectado`,
+            `Indicadores em: ${srcStr}`);
+    }
+    return { jailbroken: true, tools: toolsDetected };
 }
 
 async function handleSysdiagnose(filesList, opts) {
@@ -4063,7 +4222,7 @@ async function handleSysdiagnose(filesList, opts) {
                 const sortedIds = Array.from(profileOps.entries())
                     .sort((a, b) => (b[1].lastSeen || 0) - (a[1].lastSeen || 0));
 
-                // Primeira passada: agrupa por cheatId.name → { sev, desc, pids[], events agg }
+                // Primeira passada: agrupa por cheatId.name → { sev, desc, pids[], events agg + timeline }
                 const cheatGroups = new Map();
                 const unidentified = [];
                 for (const [pid, entry] of sortedIds) {
@@ -4074,6 +4233,8 @@ async function handleSysdiagnose(filesList, opts) {
                                 name: cheatId.name, sev: cheatId.sev, desc: cheatId.desc,
                                 pids: [], totalInstalls: 0, totalRemoves: 0, totalUpdates: 0,
                                 processes: new Set(), latestSeen: null, matches: new Set(),
+                                // v4.4.15: timeline — primeiras/últimas install/remove com data formatada
+                                firstInstall: null, lastInstall: null, lastRemove: null,
                             });
                         }
                         const g = cheatGroups.get(cheatId.name);
@@ -4086,23 +4247,45 @@ async function handleSysdiagnose(filesList, opts) {
                             g.latestSeen = entry.lastSeen;
                         }
                         g.matches.add(cheatId.match);
+                        // Agrega timeline events
+                        for (const ev of entry.installs) {
+                            if (!ev.ts) continue;
+                            if (!g.firstInstall || ev.ts < g.firstInstall) g.firstInstall = ev.ts;
+                            if (!g.lastInstall  || ev.ts > g.lastInstall)  g.lastInstall  = ev.ts;
+                        }
+                        for (const ev of entry.removes) {
+                            if (!ev.ts) continue;
+                            if (!g.lastRemove || ev.ts > g.lastRemove) g.lastRemove = ev.ts;
+                        }
                     } else {
                         unidentified.push([pid, entry]);
                     }
                 }
 
+                // Format helper — pt-BR friendly date
+                const _fmtDate = (ts) => {
+                    if (!ts) return null;
+                    const d = new Date(ts);
+                    return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour12: false });
+                };
+
                 // Emite 1 alert por família de cheat conhecido
                 for (const g of cheatGroups.values()) {
                     const procs = Array.from(g.processes).join(', ') || '?';
-                    const lastSeenStr = g.latestSeen ? new Date(g.latestSeen).toISOString() : '(sem ts)';
                     const ev = `${g.totalInstalls}× install · ${g.totalRemoves}× remove${g.totalUpdates ? ` · ${g.totalUpdates}× update` : ''} · process: ${procs}`;
                     const matchStr = Array.from(g.matches).join(', ');
                     const sample = g.pids[0].length > 40 ? g.pids[0].substring(0, 40) + '…' : g.pids[0];
                     const variantLine = g.pids.length > 1
                         ? `${g.pids.length} variantes · ex: ${sample}`
                         : sample;
+                    // Timeline com datas formatadas (v4.4.15)
+                    const timeline = [];
+                    if (g.firstInstall) timeline.push(`1ª instalação: ${_fmtDate(g.firstInstall)}`);
+                    if (g.lastInstall && g.lastInstall !== g.firstInstall) timeline.push(`Última instalação: ${_fmtDate(g.lastInstall)}`);
+                    if (g.lastRemove) timeline.push(`Última remoção: ${_fmtDate(g.lastRemove)}`);
+                    const tlStr = timeline.length > 0 ? ` · ${timeline.join(' · ')}` : '';
                     alertF(`[${g.sev}] CHEAT IDENTIFICADO → ${g.name}: ${variantLine}`,
-                        `${g.desc} · IOC match: ${matchStr} · ${ev} · lastSeen: ${lastSeenStr}`);
+                        `${g.desc} · IOC match: ${matchStr} · ${ev}${tlStr}`);
                 }
 
                 // Emite individualmente os profiles NÃO-identificados (sem família conhecida)
@@ -4619,8 +4802,9 @@ async function handleSysdiagnose(filesList, opts) {
     // ─── PASS 10b: Manual Wi-Fi Proxy ───
     await checkManualProxy(files);
 
-    // ─── PASS 11: HWID EXTRACTION ───
+    // ─── PASS 11: HWID EXTRACTION + JAILBREAK DETECT (v4.4.15) ───
     await extractHWID(files);
+    await detectJailbreakAggregated(files);
 
     // ─── Emite alerts agregados ───
     // v4.4.14: AGRUPA por cheatId.name (Pass 8 final emit). Profiles do mesmo
