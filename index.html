@@ -1611,14 +1611,14 @@ footer a:hover {
             <input type="file" id="file-targz" accept=".tar.gz,.tgz,application/gzip,application/x-gzip,application/x-tar" />
         </label>
         <div class="help-box">
-            <strong>Como gerar (recomendado):</strong>
+            <strong>Como gerar no iPhone:</strong>
             <ol>
-                <li>iPhone: aperte <code>Vol+ + Vol- + Side</code> simultaneamente por 1 segundo</li>
-                <li>Aguarde ~5min (continue usando normalmente)</li>
-                <li><code>Settings → Privacy → Analytics &amp; Improvements → Analytics Data</code></li>
-                <li>Procure <code>sysdiagnose_AAAA.MM.DD_*.tar.gz</code></li>
-                <li>Toque → <strong>Share</strong> → envie pra cá (AirDrop / Files / iCloud)</li>
-                <li>Selecione o arquivo aqui — <strong>SEM extrair</strong>, eu descompacto no navegador</li>
+                <li>Pressione e segure simultaneamente: <strong>Volume +</strong>, <strong>Volume −</strong> e o <strong>botão lateral</strong> por cerca de 1 segundo</li>
+                <li>Solte e use o iPhone normalmente por <strong>5 minutos</strong> — o iOS está gerando o dump em segundo plano</li>
+                <li>Abra <code>Ajustes → Privacidade e Segurança → Análise e Melhorias → Dados de Análise</code></li>
+                <li>Localize o arquivo <code>sysdiagnose_AAAA.MM.DD_HH-MM-SS-MS_*.tar.gz</code> (o mais recente)</li>
+                <li>Toque no arquivo → ícone de <strong>Compartilhar</strong> → envie via AirDrop, Mensagens, WhatsApp, Telegram ou Arquivos/iCloud</li>
+                <li>Faça upload do <code>.tar.gz</code> aqui — <strong>não precisa descompactar</strong>, o scanner extrai direto no navegador</li>
             </ol>
         </div>
     </div>
@@ -1628,16 +1628,17 @@ footer a:hover {
         <label class="dropzone" id="dz-ndjson">
             <span class="dropzone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="32" height="32"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m8 17 4-5 4 5"/></svg></span>
             <div class="dropzone-text">Arraste ou clique para enviar o <code>.ndjson</code></div>
-            <div class="dropzone-hint">App Privacy Report exportado do iPhone</div>
+            <div class="dropzone-hint">Relatório de Privacidade do App exportado do iPhone</div>
             <input type="file" id="file-ndjson" accept=".ndjson,application/json,text/plain" />
         </label>
         <div class="help-box">
-            <strong>Como gerar:</strong>
+            <strong>Como gerar no iPhone:</strong>
             <ol>
-                <li>iPhone: <code>Settings → Privacy &amp; Security → App Privacy Report → ON</code></li>
-                <li>Joga FF por 5-10 minutos pra popular o log</li>
-                <li>Em <code>App Privacy Report</code> toque em <code>Save App Privacy Report</code></li>
-                <li>Compartilha o arquivo <code>.ndjson</code> pra cá (AirDrop, iCloud, etc.)</li>
+                <li>Abra <code>Ajustes → Privacidade e Segurança → Relatório de Privacidade do App</code> e toque em <strong>Ativar Relatório de Privacidade do App</strong></li>
+                <li>Use o Free Fire normalmente por <strong>5 a 10 minutos</strong> — o iOS precisa coletar atividade de rede e acesso a dados</li>
+                <li>Volte na mesma tela e toque em <strong>Salvar Relatório de Privacidade do App</strong> (no topo)</li>
+                <li>O iOS abre o menu de compartilhamento — envie o <code>.ndjson</code> via AirDrop, WhatsApp, Telegram ou Arquivos</li>
+                <li>Faça upload do <code>.ndjson</code> aqui</li>
             </ol>
         </div>
     </div>
@@ -1651,13 +1652,17 @@ footer a:hover {
             <input type="file" id="file-android" accept=".txt,text/plain" />
         </label>
         <div class="help-box">
-            <strong>Como gerar:</strong>
+            <strong>Como gerar no Android (sem root):</strong>
             <ol>
-                <li>No Android, instala Termux (F-Droid)</li>
-                <li>Cola: <code>pkg upgrade -y &amp;&amp; pkg install -y curl &amp;&amp; curl -L -o a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh &amp;&amp; chmod +x a4ther.sh &amp;&amp; sh a4ther.sh</code></li>
-                <li>O scan salva em <code>~/a4ther_reports/scan_*.txt</code></li>
-                <li>Compartilha o TXT pra cá (Telegram/WhatsApp/iCloud)</li>
-                <li>Faz upload aqui</li>
+                <li>Instale o <strong>Termux</strong> pelo F-Droid: <a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener">f-droid.org/packages/com.termux/</a> — não use o da Play Store (versão antiga e abandonada)</li>
+                <li>Abra o Termux e cole o comando abaixo (toque longo no terminal → Colar):
+                    <br><code>pkg upgrade -y &amp;&amp; pkg install -y curl &amp;&amp; curl -L -o a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh &amp;&amp; chmod +x a4ther.sh &amp;&amp; sh a4ther.sh</code>
+                </li>
+                <li>Quando perguntar, conceda permissão de armazenamento (<code>termux-setup-storage</code>) — sem isso o relatório não consegue ser salvo em local visível</li>
+                <li>Aguarde o scan terminar (entre 1 e 3 minutos, dependendo do dispositivo)</li>
+                <li>O <code>.txt</code> é salvo em <code>/sdcard/a4ther/a4ther_reports/scan_AAAAMMDD_HHMMSS.txt</code> e copiado automaticamente para <code>/sdcard/Download/</code></li>
+                <li>Abra o app <strong>Arquivos</strong> (ou Files do Android), vá em <strong>Downloads</strong>, encontre o <code>scan_*.txt</code>, toque em <strong>Compartilhar</strong> e envie pra cá</li>
+                <li>Faça upload do <code>.txt</code> aqui</li>
             </ol>
         </div>
     </div>
@@ -1672,15 +1677,14 @@ footer a:hover {
                     <div class="dump-step-sub">Sysdiagnose (.tar.gz) — recomendado, sem JB</div>
                 </div>
                 <ol class="dump-step-ol">
-                    <li>Aperte simultaneamente: <code>Volume + + Volume - + Botão Lateral</code> (1 segundo)</li>
-                    <li>Sinta uma vibração leve confirmando · continue usando o iPhone normalmente</li>
-                    <li>Aguarde <strong>~5 minutos</strong> (o iOS está gerando o dump)</li>
-                    <li>Vá em <code>Ajustes → Privacidade → Análise &amp; Melhorias → Dados de Análise</code></li>
-                    <li>Procure <code>sysdiagnose_AAAA.MM.DD_*.tar.gz</code> (mais recente)</li>
-                    <li>Toque no arquivo → <strong>Compartilhar</strong> → envie via AirDrop / Files / iCloud / WhatsApp</li>
-                    <li>Suba aqui pelo modo "<strong>iOS · sysdiagnose .tar.gz</strong>"</li>
+                    <li>Pressione e segure simultaneamente: <strong>Volume +</strong>, <strong>Volume −</strong> e o <strong>botão lateral</strong> (cerca de 1 segundo, até soltar)</li>
+                    <li>Use o iPhone normalmente — não precisa fazer nada, o iOS está gerando o dump em segundo plano</li>
+                    <li>Aguarde <strong>5 minutos</strong> completos (o dump leva esse tempo pra finalizar; se você abrir antes, o arquivo ainda não está pronto)</li>
+                    <li>Abra <code>Ajustes → Privacidade e Segurança → Análise e Melhorias → Dados de Análise</code></li>
+                    <li>Role a lista e localize <code>sysdiagnose_AAAA.MM.DD_HH-MM-SS-MS_iPhone-OS_*.tar.gz</code> (geralmente o arquivo mais recente, com ~200 MB)</li>
+                    <li>Toque no arquivo → ícone de <strong>Compartilhar</strong> (canto superior direito) → envie via AirDrop, Mensagens, WhatsApp, Telegram ou salve em Arquivos/iCloud</li>
+                    <li>Faça upload do <code>.tar.gz</code> aqui pelo modo <strong>"iOS · sysdiagnose .tar.gz"</strong> — o scanner descompacta direto no navegador, não precisa extrair antes</li>
                 </ol>
-                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>Se travar no upload: extraia localmente no iPhone (Files → toque longo no .tar.gz → <code>Uncompress</code>) e use o modo "<strong>iOS · sysdiagnose (pasta)</strong>".</span></div>
             </div>
 
             <div class="dump-step">
@@ -1690,39 +1694,38 @@ footer a:hover {
                     <div class="dump-step-sub">Via Termux (sem root) — gera <code>.txt</code></div>
                 </div>
                 <ol class="dump-step-ol">
-                    <li>Instale o <strong>Termux</strong> pelo F-Droid (NÃO use o do Play Store — abandonado): <a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener">f-droid.org/packages/com.termux/</a></li>
-                    <li>Abra o Termux e cole esse comando único:</li>
+                    <li>Instale o <strong>Termux</strong> pelo F-Droid: <a href="https://f-droid.org/packages/com.termux/" target="_blank" rel="noopener">f-droid.org/packages/com.termux/</a><br><span style="font-size:.8rem;color:var(--text-faint)">Não use o Termux da Play Store — está descontinuado desde 2020 e quebra o scan.</span></li>
+                    <li>Abra o Termux e cole o comando abaixo (toque longo no terminal → <strong>Colar</strong>):</li>
                 </ol>
                 <pre class="dump-cmd"><code>pkg upgrade -y &amp;&amp; pkg install -y curl &amp;&amp; rm -f a4ther.sh &amp;&amp; curl -L -o a4ther.sh https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh &amp;&amp; chmod +x a4ther.sh &amp;&amp; sh a4ther.sh</code></pre>
                 <button class="dump-copy" type="button" data-target=".dump-cmd code">Copiar comando</button>
                 <ol class="dump-step-ol" start="3">
-                    <li>Aguarde o scan terminar (~30-60s)</li>
-                    <li>O <code>.txt</code> salva em <code>~/a4ther_reports/scan_AAAAMMDD_HHMMSS.txt</code> (= <code>/data/data/com.termux/files/home/a4ther_reports/</code>)</li>
-                    <li><strong>Pra compartilhar do Termux pro WhatsApp/Telegram</strong>, rode:</li>
+                    <li>Se o Termux pedir permissão de armazenamento, aceite (sem isso o relatório não é salvo em local visível)</li>
+                    <li>Aguarde o scan terminar — leva entre <strong>1 e 3 minutos</strong> dependendo do dispositivo (quanto mais apps instalados, mais demora)</li>
+                    <li>Ao final, o script imprime o caminho do relatório. Ele salva em <code>/sdcard/a4ther/a4ther_reports/scan_AAAAMMDD_HHMMSS.txt</code> e <strong>copia automaticamente</strong> para <code>/sdcard/Download/</code></li>
+                    <li>Abra o app <strong>Arquivos</strong> (Files) do Android → pasta <strong>Downloads</strong> → encontre o <code>scan_*.txt</code> mais recente</li>
+                    <li>Toque longo no arquivo → <strong>Compartilhar</strong> → escolha WhatsApp, Telegram, AirDroid ou qualquer app de envio</li>
+                    <li>Faça upload do <code>.txt</code> aqui pelo modo <strong>"Android · scan TXT"</strong></li>
                 </ol>
-                <pre class="dump-cmd"><code>cp ~/a4ther_reports/scan_*.txt /sdcard/Download/ &amp;&amp; termux-open /sdcard/Download/$(ls -t ~/a4ther_reports/ | head -1)</code></pre>
-                <button class="dump-copy" type="button" data-target=".dump-cmd:nth-of-type(2) code">Copiar comando</button>
-                <ol class="dump-step-ol" start="6">
-                    <li>Abre o picker do Android — escolhe WhatsApp/Telegram/iCloud — manda pra cá</li>
-                    <li>Faz upload aqui pelo modo "<strong>Android · scan TXT</strong>"</li>
-                </ol>
-                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>Atalho: <code>termux-share</code> também funciona (precisa app <code>Termux:API</code>). Sem ele, o <code>cp</code> pra <code>/sdcard/Download/</code> + abrir Files já permite mandar pro WhatsApp.</span></div>
-                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg><span>Source open: <a href="https://github.com/lovelyoyk/a4ther" target="_blank" rel="noopener">github.com/lovelyoyk/a4ther</a></span></div>
+                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span>Se o app Arquivos não mostrar a pasta <code>/sdcard/a4ther/</code>, use a versão em <code>Downloads</code> — o script copia pra lá justamente porque alguns lançadores Android só enxergam <code>Downloads</code>.</span></div>
+                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg><span>Código-fonte aberto: <a href="https://github.com/lovelyoyk/a4ther" target="_blank" rel="noopener">github.com/lovelyoyk/a4ther</a> — você pode inspecionar exatamente o que o script faz antes de rodar.</span></div>
             </div>
 
             <div class="dump-step">
                 <div class="dump-step-head">
                     <span class="dump-step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="20" height="20"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></span>
-                    <div class="dump-step-title">iOS sem sysdiagnose</div>
-                    <div class="dump-step-sub">App Privacy Report (.ndjson)</div>
+                    <div class="dump-step-title">Alternativa iOS — Relatório de Privacidade do App</div>
+                    <div class="dump-step-sub">Para quando o sysdiagnose não funciona</div>
                 </div>
                 <ol class="dump-step-ol">
-                    <li>Ative em <code>Ajustes → Privacidade → App Privacy Report → Ativar</code></li>
-                    <li>Jogue Free Fire por <strong>5-10 minutos</strong> (popula o log)</li>
-                    <li>Volte em <code>App Privacy Report</code> → toque <strong>Salvar App Privacy Report</strong></li>
-                    <li>Compartilhe o <code>.ndjson</code> aqui no modo "<strong>iOS · App Privacy Report</strong>"</li>
+                    <li>Abra <code>Ajustes → Privacidade e Segurança → Relatório de Privacidade do App</code></li>
+                    <li>Toque em <strong>Ativar Relatório de Privacidade do App</strong> (se ainda não estiver ativo)</li>
+                    <li>Use o Free Fire normalmente por <strong>5 a 10 minutos</strong> — o iOS precisa coletar atividade de rede e acesso a sensores</li>
+                    <li>Volte na mesma tela e toque em <strong>Salvar Relatório de Privacidade do App</strong> (botão no topo)</li>
+                    <li>O iOS abre a folha de compartilhamento — envie o <code>.ndjson</code> via AirDrop, WhatsApp, Telegram ou Arquivos</li>
+                    <li>Faça upload do <code>.ndjson</code> aqui pelo modo <strong>"iOS · App Privacy Report"</strong></li>
                 </ol>
-                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg><span>Útil quando o jogador não consegue gerar sysdiagnose (iOS antigo, espaço em disco baixo).</span></div>
+                <div class="dump-tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="16" height="16" class="ico"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg><span>Use esse modo quando o jogador estiver em iOS antigo, com pouco armazenamento ou quando o sysdiagnose não aparecer em Dados de Análise. A detecção é menos completa que o sysdiagnose, mas ainda pega proxies, MDM profiles e DNS.</span></div>
             </div>
         </div>
     </div>
@@ -5748,7 +5751,8 @@ async function handleSysdiagnose(filesList, opts) {
             $$('.dropdown-option').forEach(o => o.classList.remove('active'));
             opt.classList.add('active');
             // Atualiza trigger (clona conteúdo da option)
-            icon.textContent  = opt.querySelector('.dropdown-option-emoji').textContent;
+            // v4.4.18 fix: usar innerHTML (não textContent) pra preservar SVG inline
+            icon.innerHTML    = opt.querySelector('.dropdown-option-emoji').innerHTML;
             title.innerHTML   = opt.querySelector('.dropdown-option-title').innerHTML;
             sub.innerHTML     = opt.querySelector('.dropdown-option-desc').innerHTML;
             // Switch panel
