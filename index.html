@@ -2744,7 +2744,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.45";
+const VERSION = "4.4.46";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5700,6 +5700,11 @@ async function extractHWID(files) {
     // o browser em sysdiagnoses grandes (Page Unresponsive, tela preta). Agora
     // o fallback é restrito a paths CONHECIDOS por carregar IDs Apple + hard
     // cap + yield obrigatório + early exit.
+    // v4.4.46: KellerSS-tier coverage — paths expandidos + regex em texto livre
+    // (não só XML). User reportou que KellerSS pega Serial/UDID/ECID em mais
+    // sysdiagnoses do que A4ther — agora cobrimos os mesmos vetores:
+    // mobileactivationd logs, brctl-container-list, MobileBackup, IORegistry,
+    // Trial.plist, awdd, tailspin, purplebuddy, etc.
     const _pull = (raw, re, current) => {
         if (current) return current;
         const m = raw.match(re);
@@ -5708,16 +5713,29 @@ async function extractHWID(files) {
     // Paths conhecidos por terem Serial/UDID/ECID em sysdiagnoses iOS
     // (não sweep TODOS os plists — só os que provavelmente carregam IDs)
     const _hwidPathHints = [
-        'lockdownd.plist', 'lockdownd', 'activation_record', 'mobile_activation',
-        'brctl-dump', 'data_ark.plist', 'preferences/.global', 'device_info',
-        'logs/mobileactivationd', 'identityservices', 'sysdiagnose-info',
+        // Diretos
+        'lockdownd.plist', 'lockdown', 'activation_record', 'mobile_activation',
+        'brctl-dump', 'brctl-container-list', 'data_ark.plist',
+        'preferences/.global', 'device_info', 'sysdiagnose-info',
+        // Logs com IDs incorporados
+        'mobileactivationd', 'identityservices', 'mobilebackup',
+        'aggregated/trial.plist', 'awdd', 'tailspin',
+        // Preferences que loggam IDs
+        'com.apple.mobilebackup', 'com.apple.purplebuddy', 'com.apple.itunesstored',
+        'com.apple.itunes', 'com.apple.networkserviceproxy',
+        // Outros que aparecem em sysdiagnose real
+        'ioregistry', 'iotreeregistry', 'system_logs',
+        'summary.txt', 'mobile-installation', 'apsd',
+        'aps/lifecycle', 'duetexpertd',
+        // Logs com containers (UDID aparece em paths /var/mobile/Containers/Data/Application/UUID-)
+        'containers-list', 'application_state',
     ];
     const _isHwidCandidate = (name) => {
         for (const hint of _hwidPathHints) if (name.includes(hint)) return true;
         return false;
     };
     let _fallbackCount = 0;
-    const _FALLBACK_CAP = 40; // hard cap pra não travar
+    const _FALLBACK_CAP = 120; // v4.4.46: 40→120, com short-circuit early-exit é seguro
 
     let _hwidLoopIdx = 0;
     for (const f of files) {
@@ -5725,6 +5743,11 @@ async function extractHWID(files) {
         // yield a cada 50 arquivos pra não bloquear o main thread
         if (_hwidLoopIdx % 50 === 0) {
             await new Promise(r => setTimeout(r, 0));
+        }
+        // v4.4.46: early exit absoluto quando temos TUDO o que precisamos.
+        // Evita continuar lendo arquivos após já ter Serial+UDID+ECID+iOS+Build+ProdType.
+        if (serial && udid && ecid && iosVersion && buildVersion && productType) {
+            break;
         }
         const name = (f.webkitRelativePath || f.name).toLowerCase();
         // remotectl_dumpstate.txt → serial, UDID, ECID, ProductType, BuildVersion
@@ -5744,16 +5767,44 @@ async function extractHWID(files) {
                 productClass = _pull(raw, /ProductClass[\s:=]+([A-Za-z]+)/i, productClass);
             }
         }
-        // v4.4.44: fallback RESTRITO — só paths conhecidos + hard cap + early exit
+        // v4.4.46: fallback EXPANDIDO — paths whitelistados + regex XML/JSON/plain
+        // text. Cobre os mesmos vetores que KellerSS:
+        //   - <key>X</key><string>Y</string>  (XML plist)
+        //   - "X":"Y"                          (JSON)
+        //   - X: Y / X = Y                     (logs plain text)
+        //   - X<TAB>Y                          (tabular)
+        // Early exit assim que serial && udid && ecid estão setados.
         else if ((!serial || !udid || !ecid) && _fallbackCount < _FALLBACK_CAP && _isHwidCandidate(name)) {
             _fallbackCount++;
             const raw = await readSafe(f);
             if (raw && raw.length < 1_500_000) {
-                serial = _pull(raw, /<key>SerialNumber<\/key>\s*<string>([A-Z0-9]{8,16})<\/string>/i, serial);
-                udid   = _pull(raw, /<key>(?:UniqueDeviceID|UDID)<\/key>\s*<string>([A-Fa-f0-9-]{20,45})<\/string>/i, udid);
-                ecid   = _pull(raw, /<key>(?:UniqueChipID|ECID)<\/key>\s*<(?:integer|string)>([A-Fa-f0-9x]+)</i, ecid);
-                productType  = _pull(raw, /<key>ProductType<\/key>\s*<string>([A-Za-z0-9,]+)<\/string>/i, productType);
-                productClass = _pull(raw, /<key>ProductClass<\/key>\s*<string>([A-Za-z]+)<\/string>/i, productClass);
+                // === Serial (12 chars Apple ou 8 chars antigo) ===
+                serial = _pull(raw, /<key>SerialNumber<\/key>\s*<string>([A-Z0-9]{8,16})<\/string>/i, serial) ||
+                         _pull(raw, /"SerialNumber"\s*:\s*"([A-Z0-9]{8,16})"/i, serial) ||
+                         _pull(raw, /\b(?:Hardware\s+)?Serial(?:Number)?\s*[:=]\s*([A-Z0-9]{8,16})\b/i, serial);
+                // === UDID (40 hex iPhone antigo, ou 24 chars iPhone 6s+: 8hex-16hex) ===
+                udid = _pull(raw, /<key>(?:UniqueDeviceID|UDID)<\/key>\s*<string>([A-Fa-f0-9-]{20,45})<\/string>/i, udid) ||
+                       _pull(raw, /"(?:UniqueDeviceID|UDID)"\s*:\s*"([A-Fa-f0-9-]{20,45})"/i, udid) ||
+                       _pull(raw, /\b(?:UniqueDeviceID|Unique Device ID|UDID|Hardware UDID)\s*[:=]\s*([A-Fa-f0-9-]{20,45})\b/i, udid);
+                // === ECID (decimal grande ou hex 0x...) ===
+                ecid = _pull(raw, /<key>(?:UniqueChipID|ECID)<\/key>\s*<(?:integer|string)>([A-Fa-f0-9x]+)</i, ecid) ||
+                       _pull(raw, /"(?:UniqueChipID|ECID)"\s*:\s*"?(0x[A-Fa-f0-9]+|\d{10,20})"?/i, ecid) ||
+                       _pull(raw, /\b(?:UniqueChipID|ECID|chip[\s_]?id)\s*[:=]\s*(0x[A-Fa-f0-9]+|\d{10,20})\b/i, ecid);
+                // === Product Type ===
+                productType  = _pull(raw, /<key>ProductType<\/key>\s*<string>([A-Za-z0-9,]+)<\/string>/i, productType) ||
+                               _pull(raw, /"ProductType"\s*:\s*"([A-Za-z0-9,]+)"/i, productType) ||
+                               _pull(raw, /\bProductType\s*[:=]\s*([A-Za-z]+\d+,\d+)\b/i, productType);
+                productClass = _pull(raw, /<key>ProductClass<\/key>\s*<string>([A-Za-z]+)<\/string>/i, productClass) ||
+                               _pull(raw, /"ProductClass"\s*:\s*"([A-Za-z]+)"/i, productClass);
+                // === Build version (caso não tenha vindo do dumpstate) ===
+                buildVersion = _pull(raw, /<key>(?:ProductBuildVersion|BuildVersion)<\/key>\s*<string>([A-Z0-9]{4,12})<\/string>/i, buildVersion) ||
+                               _pull(raw, /\bBuildVersion\s*[:=]\s*([A-Z0-9]{4,12})\b/i, buildVersion);
+                // === iOS version (caso não tenha vindo do SystemVersion.plist) ===
+                if (!iosVersion) {
+                    const ivm = raw.match(/<key>ProductVersion<\/key>\s*<string>([\d.]+)<\/string>/i) ||
+                                raw.match(/\bProductVersion\s*[:=]\s*([\d.]+)\b/i);
+                    if (ivm) iosVersion = ivm[1];
+                }
             }
         }
         // SystemVersion.plist → ProductVersion, BuildVersion, ProductName
