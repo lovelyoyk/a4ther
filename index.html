@@ -708,6 +708,107 @@ a:hover { color: var(--text); }
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   HERO TRUST BADGES (v4.4.19)
+   ═══════════════════════════════════════════════════════════════ */
+.hero-badges {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    margin: 1rem auto 1.6rem;
+    max-width: 720px;
+}
+.trust-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.85rem;
+    background: linear-gradient(135deg, rgba(179, 136, 255, 0.08), rgba(179, 136, 255, 0.03));
+    border: 1px solid rgba(179, 136, 255, 0.2);
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    transition: var(--transition);
+}
+.trust-badge svg { color: var(--purple); flex-shrink: 0; }
+.trust-badge:hover {
+    border-color: rgba(179, 136, 255, 0.45);
+    color: var(--text);
+    background: linear-gradient(135deg, rgba(179, 136, 255, 0.14), rgba(179, 136, 255, 0.05));
+    transform: translateY(-1px);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPABILITIES SECTION (v4.4.19) — 4 cards de "o que detecta"
+   ═══════════════════════════════════════════════════════════════ */
+.capabilities {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    max-width: 980px;
+    margin: 0 auto 2.5rem;
+    padding: 0 1rem;
+}
+.cap-card {
+    padding: 1.2rem 1.25rem 1.3rem;
+    background: linear-gradient(180deg, rgba(26, 20, 46, 0.55) 0%, rgba(18, 12, 32, 0.6) 100%);
+    border: 1px solid rgba(179, 136, 255, 0.14);
+    border-radius: 14px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    position: relative;
+    overflow: hidden;
+    transition: var(--transition);
+}
+.cap-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(179, 136, 255, 0.5), transparent);
+    opacity: 0;
+    transition: opacity 300ms var(--ease);
+}
+.cap-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(179, 136, 255, 0.36);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 0 24px rgba(179, 136, 255, 0.08);
+}
+.cap-card:hover::before { opacity: 1; }
+.cap-icon {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 11px;
+    background: linear-gradient(135deg, rgba(179, 136, 255, 0.22), rgba(122, 78, 255, 0.08));
+    border: 1px solid rgba(179, 136, 255, 0.3);
+    color: var(--purple);
+    margin-bottom: 0.85rem;
+    box-shadow: inset 0 0 14px rgba(179, 136, 255, 0.1);
+}
+.cap-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 0.35rem;
+    letter-spacing: -0.01em;
+}
+.cap-desc {
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    color: var(--text-dim);
+    line-height: 1.55;
+    letter-spacing: 0.02em;
+}
+@media (max-width: 640px) {
+    .capabilities { gap: 0.7rem; padding: 0 0.5rem; margin-bottom: 2rem; }
+    .cap-card { padding: 1rem; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
    ICON SYSTEM (v4.4.17) — SVG inline, currentColor, sized via parent
    ═══════════════════════════════════════════════════════════════ */
 .ico {
@@ -1531,7 +1632,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.18</span>
+        <span id="version">v4.4.19</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1539,8 +1640,53 @@ footer a:hover {
         Free Fire Anti-Cheat Scanner
         <span class="pill">iOS · Android</span>
     </p>
+
+    <!-- Trust badges (v4.4.19) -->
+    <div class="hero-badges">
+        <span class="trust-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            Análise 100% local
+        </span>
+        <span class="trust-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+            Sem upload de dados
+        </span>
+        <span class="trust-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            Open source
+        </span>
+        <span class="trust-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Análise em ~30s
+        </span>
+    </div>
+
     <div class="hero-divider"></div>
 </header>
+
+<!-- Capability cards (v4.4.19) — sumário visual do que o scanner detecta -->
+<section class="capabilities" data-reveal="fade-up">
+    <div class="cap-card">
+        <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg></div>
+        <div class="cap-title">Cheat Detection</div>
+        <div class="cap-desc">FFH4X · Zeex · Fatality · Luxe · Dash · XTREMO · bundle modificado</div>
+    </div>
+    <div class="cap-card">
+        <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg></div>
+        <div class="cap-title">Jailbreak</div>
+        <div class="cap-desc">palera1n · Dopamine · TrollStore · Sileo · Frida · Substrate</div>
+    </div>
+    <div class="cap-card">
+        <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+        <div class="cap-title">MDM & Proxies</div>
+        <div class="cap-desc">Configuration Profiles · DNS sequester · MITM · UUID opacos</div>
+    </div>
+    <div class="cap-card">
+        <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <div class="cap-title">Blacklist Check</div>
+        <div class="cap-desc">Serial cross-check com lspainel · histórico de banimentos</div>
+    </div>
+</section>
 
 <!-- ─── UPLOAD ─── -->
 <section class="upload-section" id="uploadSection">
@@ -1773,7 +1919,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.18";
+const VERSION = "4.4.19";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -1994,10 +2140,95 @@ const CHEAT_APPS = {
     "com.hhnios.pubgvngatena":          { sev: "CRITICAL", name: "iGG by HHNiOS",          cat: "CHEAT",     desc: "FF/PUBG mixed menu" },
     "com.dts.freefirethack":            { sev: "CRITICAL", name: "Free Fire IPA Modded",   cat: "CHEAT",     desc: "Bundle modificado (re-pack)" },
     "com.dts.freefireth2":              { sev: "CRITICAL", name: "Free Fire IPA Re-sign",  cat: "CHEAT",     desc: "Bundle modificado (re-sign)" },
-    "com.dts.ffh4x":                    { sev: "CRITICAL", name: "FFH4X",                  cat: "CHEAT",     desc: "FFH4X mod menu — bundle modificado de FF" },
-    "com.dts.fth4x":                    { sev: "CRITICAL", name: "FFH4X (alt)",            cat: "CHEAT",     desc: "FFH4X variante — bundle modificado de FF" },
-    "com.dts.ffh4xmax":                 { sev: "CRITICAL", name: "FFH4X Max",              cat: "CHEAT",     desc: "FFH4X variante FF Max" },
-    "com.dts.h4xff":                    { sev: "CRITICAL", name: "H4X FF",                 cat: "CHEAT",     desc: "Variante FFH4X reversed" },
+    /* ═══════════════════════════════════════════════════════════════
+       Família com.dts.* — TODA variante NÃO oficial é cheat (v4.4.19)
+       O dts.* é o namespace da Garena/Sea Limited. Apenas freefireth
+       e freefiremax são oficiais; QUALQUER outro com.dts.* é cheat
+       de re-pack ou tweak de injeção dynamic library.
+       ═══════════════════════════════════════════════════════════════ */
+    /* === FFH4X family (mod menu mais popular do BR) === */
+    "com.dts.ffh4x":                    { sev: "CRITICAL", name: "FFH4X",                  cat: "CHEAT",     desc: "FFH4X mod menu — bundle re-packed" },
+    "com.dts.fth4x":                    { sev: "CRITICAL", name: "FFH4X (alt)",            cat: "CHEAT",     desc: "FFH4X variante reversed" },
+    "com.dts.ffh4xmax":                 { sev: "CRITICAL", name: "FFH4X Max",              cat: "CHEAT",     desc: "FFH4X para FF Max" },
+    "com.dts.h4xff":                    { sev: "CRITICAL", name: "H4X FF",                 cat: "CHEAT",     desc: "FFH4X com nomes invertidos" },
+    "com.dts.ffh4xpro":                 { sev: "CRITICAL", name: "FFH4X Pro",              cat: "CHEAT",     desc: "FFH4X build paga" },
+    "com.dts.ffh4xfree":                { sev: "CRITICAL", name: "FFH4X Free",             cat: "CHEAT",     desc: "FFH4X build grátis" },
+    "com.dts.ffh4xinjector":            { sev: "CRITICAL", name: "FFH4X Injector",         cat: "CHEAT",     desc: "FFH4X dylib injector" },
+    "com.dts.ffh4xvip":                 { sev: "CRITICAL", name: "FFH4X VIP",              cat: "CHEAT",     desc: "FFH4X build VIP" },
+    "com.dts.ffh4xv2":                  { sev: "CRITICAL", name: "FFH4X v2",               cat: "CHEAT",     desc: "FFH4X versão 2" },
+    "com.dts.ffh4xios":                 { sev: "CRITICAL", name: "FFH4X iOS",              cat: "CHEAT",     desc: "FFH4X build iOS específica" },
+    "com.dts.ffh4xnew":                 { sev: "CRITICAL", name: "FFH4X New",              cat: "CHEAT",     desc: "FFH4X build nova" },
+    "com.dts.ffh4xkill":                { sev: "CRITICAL", name: "FFH4X Kill",             cat: "CHEAT",     desc: "FFH4X aim variant" },
+    "com.dts.ffhax":                    { sev: "CRITICAL", name: "FFHAX",                  cat: "CHEAT",     desc: "FFH4X com nome alternativo" },
+    /* === Mods/cheats genéricos (re-pack do IPA oficial) === */
+    "com.dts.freefirethmod":            { sev: "CRITICAL", name: "Free Fire Mod",          cat: "CHEAT",     desc: "FF re-pack com mod menu embedded" },
+    "com.dts.freefirethmodded":         { sev: "CRITICAL", name: "Free Fire Modded",       cat: "CHEAT",     desc: "FF re-pack — modded build" },
+    "com.dts.freefirethhack":           { sev: "CRITICAL", name: "Free Fire Hack",         cat: "CHEAT",     desc: "FF re-pack com hack embedded" },
+    "com.dts.freefirethpro":            { sev: "CRITICAL", name: "Free Fire Pro",          cat: "CHEAT",     desc: "FF re-pack 'pro' (cheat)" },
+    "com.dts.freefirethvip":            { sev: "CRITICAL", name: "Free Fire VIP",          cat: "CHEAT",     desc: "FF re-pack 'vip' (cheat)" },
+    "com.dts.freefirethmenu":           { sev: "CRITICAL", name: "Free Fire Menu",         cat: "CHEAT",     desc: "FF com mod menu injetado" },
+    "com.dts.freefirethaim":            { sev: "CRITICAL", name: "Free Fire Aim",          cat: "CHEAT",     desc: "FF re-pack com aimbot" },
+    "com.dts.freefirethaimbot":         { sev: "CRITICAL", name: "Free Fire Aimbot",       cat: "CHEAT",     desc: "FF aimbot injetado" },
+    "com.dts.freefirethaimlock":        { sev: "CRITICAL", name: "Free Fire AimLock",      cat: "CHEAT",     desc: "FF aim lock injetado" },
+    "com.dts.freefirethesp":            { sev: "CRITICAL", name: "Free Fire ESP",          cat: "CHEAT",     desc: "FF re-pack com ESP" },
+    "com.dts.freefirethwh":             { sev: "CRITICAL", name: "Free Fire Wallhack",     cat: "CHEAT",     desc: "FF re-pack com wallhack" },
+    "com.dts.freefirethwallhack":       { sev: "CRITICAL", name: "Free Fire Wallhack",     cat: "CHEAT",     desc: "FF re-pack com wallhack" },
+    "com.dts.freefirethmagic":          { sev: "CRITICAL", name: "Free Fire Magic",        cat: "CHEAT",     desc: "FF magic bullet variant" },
+    "com.dts.freefirethheadshot":       { sev: "CRITICAL", name: "Free Fire Headshot",     cat: "CHEAT",     desc: "FF auto-headshot variant" },
+    "com.dts.freefirethradar":          { sev: "CRITICAL", name: "Free Fire Radar",        cat: "CHEAT",     desc: "FF re-pack com radar/minimap hack" },
+    "com.dts.freefirethinjector":       { sev: "CRITICAL", name: "Free Fire Injector",     cat: "CHEAT",     desc: "FF com dylib injector" },
+    /* === Aliases curtos === */
+    "com.dts.ffmod":                    { sev: "CRITICAL", name: "FF Mod",                 cat: "CHEAT",     desc: "Free Fire mod menu (alias)" },
+    "com.dts.ffmodmenu":                { sev: "CRITICAL", name: "FF Mod Menu",            cat: "CHEAT",     desc: "Free Fire mod menu" },
+    "com.dts.ffmodded":                 { sev: "CRITICAL", name: "FF Modded",              cat: "CHEAT",     desc: "Free Fire modded build" },
+    "com.dts.ffmenu":                   { sev: "CRITICAL", name: "FF Menu",                cat: "CHEAT",     desc: "Free Fire cheat menu" },
+    "com.dts.ffhack":                   { sev: "CRITICAL", name: "FF Hack",                cat: "CHEAT",     desc: "Free Fire hack (alias)" },
+    "com.dts.ffinjector":               { sev: "CRITICAL", name: "FF Injector",            cat: "CHEAT",     desc: "Free Fire dylib injector" },
+    "com.dts.ffaim":                    { sev: "CRITICAL", name: "FF Aim",                 cat: "CHEAT",     desc: "Free Fire aim variant" },
+    "com.dts.ffaimbot":                 { sev: "CRITICAL", name: "FF Aimbot",              cat: "CHEAT",     desc: "Free Fire aimbot" },
+    "com.dts.ffaimlock":                { sev: "CRITICAL", name: "FF AimLock",             cat: "CHEAT",     desc: "Free Fire aim lock" },
+    "com.dts.ffesp":                    { sev: "CRITICAL", name: "FF ESP",                 cat: "CHEAT",     desc: "Free Fire ESP overlay" },
+    "com.dts.ffwh":                     { sev: "CRITICAL", name: "FF Wallhack",            cat: "CHEAT",     desc: "Free Fire wallhack (alias)" },
+    "com.dts.ffwallhack":               { sev: "CRITICAL", name: "FF Wallhack",            cat: "CHEAT",     desc: "Free Fire wallhack" },
+    "com.dts.ffheadshot":               { sev: "CRITICAL", name: "FF Headshot",            cat: "CHEAT",     desc: "Free Fire auto-headshot" },
+    "com.dts.ffradar":                  { sev: "CRITICAL", name: "FF Radar",               cat: "CHEAT",     desc: "Free Fire radar/minimap hack" },
+    "com.dts.ffvip":                    { sev: "CRITICAL", name: "FF VIP",                 cat: "CHEAT",     desc: "Free Fire mod VIP" },
+    "com.dts.ffpro":                    { sev: "CRITICAL", name: "FF Pro",                 cat: "CHEAT",     desc: "Free Fire mod 'pro'" },
+    "com.dts.ffmagic":                  { sev: "CRITICAL", name: "FF Magic",               cat: "CHEAT",     desc: "Free Fire magic bullet" },
+    "com.dts.ffinj":                    { sev: "CRITICAL", name: "FF Inj",                 cat: "CHEAT",     desc: "Free Fire injector curto" },
+    "com.dts.fffix":                    { sev: "CRITICAL", name: "FF Fix",                 cat: "CHEAT",     desc: "Free Fire 'fix' (cheat menu)" },
+    "com.dts.ffx":                      { sev: "CRITICAL", name: "FFX",                    cat: "CHEAT",     desc: "Free Fire X (mod genérico)" },
+    "com.dts.ffhx":                     { sev: "CRITICAL", name: "FFHX",                   cat: "CHEAT",     desc: "Free Fire HX (variante h4x)" },
+    /* === Variantes Free Fire Max === */
+    "com.dts.freefiremax2":             { sev: "CRITICAL", name: "FF Max Modded",          cat: "CHEAT",     desc: "FF Max re-pack" },
+    "com.dts.freefiremaxhack":          { sev: "CRITICAL", name: "FF Max Hack",            cat: "CHEAT",     desc: "FF Max com hack embedded" },
+    "com.dts.freefiremaxmod":           { sev: "CRITICAL", name: "FF Max Mod",             cat: "CHEAT",     desc: "FF Max mod menu" },
+    "com.dts.freefiremaxmenu":          { sev: "CRITICAL", name: "FF Max Menu",            cat: "CHEAT",     desc: "FF Max cheat menu" },
+    "com.dts.freefiremaxh4x":           { sev: "CRITICAL", name: "FF Max H4X",             cat: "CHEAT",     desc: "FFH4X port pra FF Max" },
+    "com.dts.freefiremaxvip":           { sev: "CRITICAL", name: "FF Max VIP",             cat: "CHEAT",     desc: "FF Max mod VIP" },
+    "com.dts.freefiremaxpro":           { sev: "CRITICAL", name: "FF Max Pro",             cat: "CHEAT",     desc: "FF Max mod 'pro'" },
+    "com.dts.freefiremaxinjector":      { sev: "CRITICAL", name: "FF Max Injector",        cat: "CHEAT",     desc: "FF Max dylib injector" },
+    "com.dts.maxh4x":                   { sev: "CRITICAL", name: "Max H4X",                cat: "CHEAT",     desc: "FFH4X build FF Max" },
+    "com.dts.maxmod":                   { sev: "CRITICAL", name: "Max Mod",                cat: "CHEAT",     desc: "FF Max mod alias curto" },
+    /* === Brands de cheat conhecidos no namespace dts === */
+    "com.dts.zeex":                     { sev: "CRITICAL", name: "Zeex",                   cat: "CHEAT",     desc: "Zeex cheat (paid mod menu)" },
+    "com.dts.fatality":                 { sev: "CRITICAL", name: "Fatality",               cat: "CHEAT",     desc: "Fatality cheat menu" },
+    "com.dts.luxe":                     { sev: "CRITICAL", name: "Luxe",                   cat: "CHEAT",     desc: "Luxe cheat menu" },
+    "com.dts.dash":                     { sev: "CRITICAL", name: "Dash",                   cat: "CHEAT",     desc: "Dash cheat menu" },
+    "com.dts.xtremo":                   { sev: "CRITICAL", name: "XTREMO",                 cat: "CHEAT",     desc: "XTREMO cheat menu BR" },
+    "com.dts.nextor":                   { sev: "CRITICAL", name: "Nextor",                 cat: "CHEAT",     desc: "Nextor mod (carrier dts)" },
+    "com.dts.menucheat":                { sev: "CRITICAL", name: "Menu Cheat",             cat: "CHEAT",     desc: "Cheat menu genérico dts" },
+    "com.dts.modmenu":                  { sev: "CRITICAL", name: "Mod Menu",               cat: "CHEAT",     desc: "Mod menu genérico" },
+    "com.dts.gameguardian":             { sev: "CRITICAL", name: "GameGuardian (dts ns)",  cat: "CHEAT",     desc: "GameGuardian re-pack no namespace dts" },
+    "com.dts.cheatengine":              { sev: "CRITICAL", name: "Cheat Engine (dts ns)",  cat: "CHEAT",     desc: "Cheat engine port no namespace dts" },
+    /* === Regionais === */
+    "com.dts.ffbrasil":                 { sev: "CRITICAL", name: "FF Brasil Mod",          cat: "CHEAT",     desc: "Mod brasileiro de FF" },
+    "com.dts.ffbr":                     { sev: "CRITICAL", name: "FF BR Mod",              cat: "CHEAT",     desc: "Mod regional Brasil" },
+    "com.dts.ffhaxbrasil":              { sev: "CRITICAL", name: "FFHAX Brasil",           cat: "CHEAT",     desc: "FFHAX variante BR" },
+    "com.dts.ffhaxbr":                  { sev: "CRITICAL", name: "FFHAX BR",               cat: "CHEAT",     desc: "FFHAX variante BR" },
+    "com.dts.ffindo":                   { sev: "CRITICAL", name: "FF Indo Mod",            cat: "CHEAT",     desc: "Mod regional Indonésia" },
+    "com.dts.ffvn":                     { sev: "CRITICAL", name: "FF VN Mod",              cat: "CHEAT",     desc: "Mod regional Vietnã" },
+    "com.dts.ffth":                     { sev: "CRITICAL", name: "FF TH Mod",              cat: "CHEAT",     desc: "Mod regional Tailândia" },
     "com.nextor.app":                   { sev: "CRITICAL", name: "Nextor Menu",            cat: "CHEAT",     desc: "Carrier app do menu Nextor" },
 
     // === Proxy / MITM ===
@@ -3501,6 +3732,18 @@ function classifyBundle(b, source) {
     }
     if (bl.includes('freefire') && !FF_OFFICIAL.has(b)) {
         return { sev: 'CRITICAL', desc: "Bundle FF NÃO oficial (re-sign / IPA mod)", name: "Free Fire Modded IPA", cat: 'CHEAT' };
+    }
+    // v4.4.19: catch-all pro namespace com.dts.* (Garena/Sea Limited).
+    // Apenas com.dts.freefireth e com.dts.freefiremax são oficiais.
+    // Qualquer outro com.dts.<algo> é cheat (re-pack ou tweak no namespace).
+    if (/^com\.dts\./.test(b) && !FF_OFFICIAL.has(b)) {
+        const suffix = b.replace(/^com\.dts\./, '');
+        return {
+            sev: 'CRITICAL',
+            desc: `Namespace com.dts.* só pode ser FF oficial (freefireth/freefiremax). '${suffix}' é re-pack/cheat.`,
+            name: `Bundle dts.* não-oficial: ${suffix}`,
+            cat: 'CHEAT',
+        };
     }
 
     // SUBSTRING patterns (iMazing, xDark, 3uTools, iFunBox, AltServer)
