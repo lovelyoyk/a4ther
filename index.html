@@ -2744,7 +2744,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.40";
+const VERSION = "4.4.41";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -4496,6 +4496,43 @@ async function handleAndroid(file) {
     //   3) `TAG: texto` (formato alternativo)
     showLoading('Parseando relatório Android…');
 
+    // v4.4.41: Detecta strings de erro do Android moderno que podem vazar
+    // como "valor" de um campo. O a4ther.sh ≥ v4.4.3 já filtra via setting_get,
+    // mas se o user enviar relatório de versão velha, OU se algum fallback usar
+    // `settings get` direto, esses erros viram falsos positivos brabos:
+    //   - "Serial: cmd: Failure calling service settings: Failed transaction…"
+    //   - "Proxy global ATIVO: cmd: Failure calling service settings…"
+    //   - "Always-on VPN ativo: cmd: Failure calling service settings…"
+    // Defesa em profundidade: parser ignora valores que batem nesses padrões.
+    const _isErrorValue = (v) => {
+        if (!v || typeof v !== 'string') return false;
+        const s = v.trim();
+        if (!s) return false;
+        return /^cmd:\s*Failure\b/i.test(s)
+            || /Failure calling service/i.test(s)
+            || /Failed transaction\b/i.test(s)
+            || /Permission Denial/i.test(s)
+            || /^java\.lang\.\w+Exception/i.test(s)
+            || /^Error:/i.test(s);
+    };
+
+    // Whitelist de IOCs benignos que o a4ther.sh dispara como alert/warn mas
+    // que são NORMAIS em Android moderno ou só ruído. Cada entrada é { re, demote }
+    // onde demote='info' silencia (não conta como alert/warn) e demote='warn'
+    // rebaixa de alert→warn.
+    const _benignIOCs = [
+        // Termux instala um wrapper `su` em /data/data/com.termux/files/usr/bin/su
+        // que NÃO dá root real — só ajuda scripts a chamar comandos privilegiados
+        // quando o device JÁ é rooted. Em device stock o wrapper existe mas falha.
+        { re: /Bin[áa]rio 'su' no PATH:\s*\/data\/data\/com\.termux\/files\/usr\/bin\/su/i, demote: 'info' },
+        // force_normal_boot=1 é padrão Android 10+ (boot flow normal vs recovery).
+        // Em Android <10 era IOC; em Android moderno é literalmente o caminho normal.
+        { re: /ro\.boot\.force_normal_boot=1\b/i, demote: 'info' },
+        // /sdcard → /storage/self/primary é o symlink PADRÃO do AOSP desde Android 6.
+        // Reportar isso como warn é desinformação.
+        { re: /Symlink:\s*\/sdcard\s*->\s*\/storage\/self\/primary/i, demote: 'info' },
+    ];
+
     let currentSection = "";
     let totalSections = 0;
     let stats = { alerts: 0, warns: 0, oks: 0, infos: 0 };
@@ -4545,13 +4582,30 @@ async function handleAndroid(file) {
         if (!body) continue;
         const tagged = `[${currentSection || 'Android'}] ${body}`;
 
-        if (tag === 'ALERTA' || tag === 'ALERT') {
+        // v4.4.41: rebaixa tag baseado em (a) string de erro do cmd settings
+        // colada como valor — "Proxy global ATIVO: cmd: Failure…" não é proxy
+        // ativo, é leitura falhou — e (b) whitelist de IOCs benignos.
+        let effectiveTag = tag;
+        if ((tag === 'ALERTA' || tag === 'ALERT' || tag === 'AVISO' || tag === 'WARN')
+            && /Failure calling service|Failed transaction|cmd:\s*Failure/i.test(body)) {
+            effectiveTag = 'INFO'; // não conta como problema — só ruído de permission denial
+        }
+        if (effectiveTag !== 'INFO' && effectiveTag !== 'OK' && effectiveTag !== 'CLEAN') {
+            for (const w of _benignIOCs) {
+                if (w.re.test(body)) {
+                    effectiveTag = w.demote === 'warn' ? 'AVISO' : 'INFO';
+                    break;
+                }
+            }
+        }
+
+        if (effectiveTag === 'ALERTA' || effectiveTag === 'ALERT') {
             alertF(tagged); stats.alerts++;
-        } else if (tag === 'AVISO' || tag === 'WARN') {
+        } else if (effectiveTag === 'AVISO' || effectiveTag === 'WARN') {
             warn(tagged); stats.warns++;
-        } else if (tag === 'OK' || tag === 'CLEAN') {
+        } else if (effectiveTag === 'OK' || effectiveTag === 'CLEAN') {
             ok(tagged); stats.oks++;
-        } else if (tag === 'INFO') {
+        } else if (effectiveTag === 'INFO') {
             stats.infos++;
         }
         // v4.4.32: Captura device info em QUALQUER tag (info/ok/warn) — antes
@@ -4561,8 +4615,9 @@ async function handleAndroid(file) {
         if (kv) {
             const k = kv[1].trim().toLowerCase();
             const v = kv[2].trim().replace(/\(indispon[íi]vel\)/i, '').replace(/^\?$/, '');
-            if (!v || /^(none|null|n\/a|unknown)$/i.test(v)) {
-                // skip — valor inútil
+            if (!v || /^(none|null|n\/a|unknown)$/i.test(v) || _isErrorValue(v)) {
+                // v4.4.41: skip valor inútil OU string de erro do cmd settings
+                // (não deixa "cmd: Failure calling service settings…" virar serial/androidId)
             }
             // v4.4.32: ORDEM IMPORTA — específico ANTES de geral
             // "Android ID" deve bater ANTES de "Android" (bug v4.4.31)
@@ -4629,22 +4684,26 @@ async function handleAndroid(file) {
         : (devBrand || devDevice || 'Android Device');
     // v4.4.21: blacklistKeys = TODOS os IDs em formato cru completo, prontos
     // pra copiar e colar em lspainel.com.br/dashboard/blacklist.
+    // v4.4.41: blinda contra strings de erro do cmd settings (defesa em profundidade)
+    const _validId = (v) => v && typeof v === 'string' && v.trim() && !_isErrorValue(v);
     const blacklistKeys = [];
-    if (devHwid)      blacklistKeys.push({ label: 'HWID SHA-256',  value: devHwid,      recommended: true,  why: 'identificador composto (8 fontes) — mais robusto' });
-    if (devSerial)    blacklistKeys.push({ label: 'Serial',        value: devSerial,    recommended: true,  why: 'gravado em hardware — só muda trocando placa' });
-    if (devMac)       blacklistKeys.push({ label: 'MAC wlan0',     value: devMac,       recommended: true,  why: 'gravado no chip Wi-Fi — sobrevive a factory reset' });
-    if (devHwidMd5)   blacklistKeys.push({ label: 'HWID MD5',      value: devHwidMd5,   recommended: false, why: 'fallback do HWID (Android ID + Serial + Boot)' });
-    if (devAndroidId) blacklistKeys.push({ label: 'Android ID',    value: devAndroidId, recommended: false, why: 'regenerado em factory reset (menos confiável)' });
-    if (devBtMac)     blacklistKeys.push({ label: 'Bluetooth MAC', value: devBtMac,     recommended: false, why: 'gravado no chip BT — alternativa robusta' });
-    if (devFingerprint && devFingerprint.length > 10)
+    if (_validId(devHwid))      blacklistKeys.push({ label: 'HWID SHA-256',  value: devHwid,      recommended: true,  why: 'identificador composto (8 fontes) — mais robusto' });
+    if (_validId(devSerial))    blacklistKeys.push({ label: 'Serial',        value: devSerial,    recommended: true,  why: 'gravado em hardware — só muda trocando placa' });
+    if (_validId(devMac))       blacklistKeys.push({ label: 'MAC wlan0',     value: devMac,       recommended: true,  why: 'gravado no chip Wi-Fi — sobrevive a factory reset' });
+    if (_validId(devHwidMd5))   blacklistKeys.push({ label: 'HWID MD5',      value: devHwidMd5,   recommended: false, why: 'fallback do HWID (Android ID + Serial + Boot)' });
+    if (_validId(devAndroidId)) blacklistKeys.push({ label: 'Android ID',    value: devAndroidId, recommended: false, why: 'regenerado em factory reset (menos confiável)' });
+    if (_validId(devBtMac))     blacklistKeys.push({ label: 'Bluetooth MAC', value: devBtMac,     recommended: false, why: 'gravado no chip BT — alternativa robusta' });
+    if (_validId(devFingerprint) && devFingerprint.length > 10)
         blacklistKeys.push({ label: 'Fingerprint',  value: devFingerprint, recommended: false, why: 'string única da build instalada' });
 
+    // v4.4.41: helper pra retornar null em vez de string de erro do cmd settings
+    const _clean = (v) => _validId(v) ? v : null;
     _deviceInfo = {
-        serial: devSerial || devAndroidId || null,
-        udid: devFingerprint || null,
-        ecid: devMac || null,
-        hwidHash: devHwid || devHwidMd5 || null,
-        productType: devDevice || null,
+        serial: _clean(devSerial) || _clean(devAndroidId) || null,
+        udid: _clean(devFingerprint),
+        ecid: _clean(devMac),
+        hwidHash: _clean(devHwid) || _clean(devHwidMd5) || null,
+        productType: _clean(devDevice),
         modelName: modelDisplay,
         iosVersion: devAndroid ? `Android ${devAndroid}` : null,
         buildVersion: devBuild || (devSdk ? `SDK ${devSdk}` : null),
@@ -4664,8 +4723,8 @@ async function handleAndroid(file) {
             uptime: devUptime,
             usbState: devUsbState,
             manufacturer: devBrand,
-            androidId: devAndroidId,
-            btMac: devBtMac,
+            androidId: _clean(devAndroidId),
+            btMac: _clean(devBtMac),
         },
     };
 
@@ -4681,12 +4740,13 @@ async function handleAndroid(file) {
     }
 
     // Blacklist lookup com TODAS as chaves disponíveis (igual iOS)
+    // v4.4.41: _validId filtra strings de erro do cmd settings (defesa em profundidade)
     _blacklistResults = [];
     const lookups = [];
-    if (devSerial)    lookups.push({ key: 'Serial',    val: devSerial });
-    if (devHwid)      lookups.push({ key: 'HWID',      val: devHwid });
-    if (devHwidMd5)   lookups.push({ key: 'HWID-MD5',  val: devHwidMd5 });
-    if (devAndroidId) lookups.push({ key: 'Android-ID',val: devAndroidId });
+    if (_validId(devSerial))    lookups.push({ key: 'Serial',    val: devSerial });
+    if (_validId(devHwid))      lookups.push({ key: 'HWID',      val: devHwid });
+    if (_validId(devHwidMd5))   lookups.push({ key: 'HWID-MD5',  val: devHwidMd5 });
+    if (_validId(devAndroidId)) lookups.push({ key: 'Android-ID',val: devAndroidId });
 
     if (lookups.length > 0 && BLACKLIST_CONFIG.enabled) {
         showLoading('Consultando blacklist…');

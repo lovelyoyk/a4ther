@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.30"
+VERSION="4.4.31"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -300,9 +300,10 @@ WARR=$(gp ro.boot.warranty_bit)
 AVB=$(gp ro.boot.avb_version)
 [ -n "$AVB" ] && info "AVB version: $AVB"
 
-# force_normal_boot (recovery bypass)
+# force_normal_boot — v4.4.31: rebaixado pra info pq é PADRÃO em Android 10+
+# (boot flow normal vs recovery). Em Android <10 era IOC, hoje é o caminho normal.
 case "$(gp ro.boot.force_normal_boot)" in
-    1) warn "ro.boot.force_normal_boot=1" ;;
+    1) info "ro.boot.force_normal_boot=1 (normal em Android 10+)" ;;
 esac
 
 # bootstate
@@ -466,9 +467,18 @@ for PKG in com.topjohnwu.magisk io.github.vvb2060.magisk io.github.huskydg.magis
 done
 
 WHICH_SU=$(command -v su 2>/dev/null)
-[ -n "$WHICH_SU" ] && [ "$WHICH_SU" != "/usr/bin/su" ] && {
-    alert "Binário 'su' no PATH: $WHICH_SU"; ROOT_HITS=$((ROOT_HITS+1));
-}
+# v4.4.31: whitelist do `su` wrapper do Termux. Esse binário NÃO dá root real —
+# é só um stub que chama `setpriv`/`exec` e falha em device stock. Só ajuda
+# scripts a chamar comandos privilegiados QUANDO o device JÁ é rooted. Reportar
+# como ROOT é falso positivo clássico — milhares de devices têm Termux instalado.
+if [ -n "$WHICH_SU" ] && [ "$WHICH_SU" != "/usr/bin/su" ]; then
+    case "$WHICH_SU" in
+        /data/data/com.termux/files/usr/bin/su|*/com.termux/files/usr/bin/su)
+            info "su wrapper do Termux em $WHICH_SU (não dá root, só stub)" ;;
+        *)
+            alert "Binário 'su' no PATH: $WHICH_SU"; ROOT_HITS=$((ROOT_HITS+1)) ;;
+    esac
+fi
 
 case "$(gp ro.build.tags)" in
     *test-keys*) alert "build.tags=test-keys"; ROOT_HITS=$((ROOT_HITS+1)) ;;
@@ -2031,13 +2041,14 @@ fi
 header "/data SUSPEITO"
 
 DATA_HITS=0
+# v4.4.31: brevent.sh removido daqui — já é reportado na seção PRIVILEGE ESCALATION,
+# duplicar gerava ruído. Os outros paths são de cheats/injectors puros.
 for P in /data/local/tmp/frida-server /data/local/tmp/re.frida.server \
          /data/local/tmp/cheat /data/local/tmp/.cheats /data/local/tmp/gg \
          /data/local/tmp/.gg /data/local/tmp/script.lua /data/local/tmp/hack.so \
          /data/local/tmp/.injector /data/local/tmp/gadget.so \
          /data/local/tmp/menu.so /data/local/tmp/esp.so \
-         /data/local/tmp/lib /data/local/tmp/mod \
-         /data/local/tmp/brevent.sh /data/local/tmp/.brevent; do
+         /data/local/tmp/lib /data/local/tmp/mod; do
     exists "$P" && { alert "Cheat em /data: $P"; DATA_HITS=$((DATA_HITS+1)); }
 done
 
@@ -2273,8 +2284,16 @@ if have find; then
         esac
     done
     SYMS=$(find /sdcard 2>/dev/null -maxdepth 4 -type l 2>/dev/null | head -n 20)
+    # v4.4.31: skip symlinks padrão do AOSP (não são IOC). /sdcard→/storage/self/primary
+    # é o symlink que o Android usa pra mapear o storage emulado do user atual desde
+    # Android 6. Reportar isso warpa o sinal de IOCs reais.
     [ -n "$SYMS" ] && echo "$SYMS" | while IFS= read -r S; do
-        [ -n "$S" ] && warn "Symlink: $S -> $(readlink "$S" 2>/dev/null)"
+        [ -z "$S" ] && continue
+        TARGET=$(readlink "$S" 2>/dev/null)
+        case "$S→$TARGET" in
+            "/sdcard→/storage/self/primary"|"/sdcard→/storage/emulated/0") continue ;;
+        esac
+        warn "Symlink: $S -> $TARGET"
     done
 fi
 [ "$HIDDEN_HITS" = "0" ] && ok "Sem ocultos suspeitos"
