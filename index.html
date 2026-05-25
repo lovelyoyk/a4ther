@@ -2198,7 +2198,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.31</span>
+        <span id="version">v4.4.32</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2455,7 +2455,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.31";
+const VERSION = "4.4.32";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -4229,46 +4229,55 @@ async function handleAndroid(file) {
             ok(tagged); stats.oks++;
         } else if (tag === 'INFO') {
             stats.infos++;
-            // Captura device info via padrões "Campo: valor"
-            const kv = body.match(/^([A-Za-z][^:]*?)[:]\s*(.+?)$/);
-            if (kv) {
-                const k = kv[1].trim().toLowerCase();
-                const v = kv[2].trim().replace(/\(indispon[íi]vel\)/i, '').replace(/^\?$/, '');
-                if (!v) continue;
-                if (/^serial\b/.test(k))                   devSerial = devSerial || v;
-                else if (/^boot\s*serial/.test(k))         devSerial = devSerial || v;
-                else if (/^hwid\b.*sha[\s-]?256/.test(k))  devHwid = v;
-                else if (/^hwid\b.*md5/.test(k))           devHwidMd5 = v;
-                else if (/^hwid\b/.test(k))                devHwid = devHwid || v;
-                else if (/marca\/modelo|brand\/model/.test(k)) {
-                    const parts = v.split(/\s*\/\s*|\s+/);
-                    devBrand = devBrand || parts[0];
-                    devModel = devModel || parts.slice(1).join(' ');
-                }
-                else if (/^marca\b|^brand\b/.test(k))      devBrand = devBrand || v;
-                else if (/^modelo\b|^model\b/.test(k))     devModel = devModel || v;
-                else if (/^device\b/.test(k))              devDevice = devDevice || v;
-                else if (/^android\b/.test(k)) {
-                    const am = v.match(/^([\d.]+)\s*(?:\(SDK\s+(\d+)\))?/i);
-                    if (am) { devAndroid = am[1]; if (am[2]) devSdk = am[2]; }
-                    else devAndroid = devAndroid || v;
-                }
-                else if (/^build\b/.test(k))               devBuild = devBuild || v;
-                else if (/^fingerprint\b/.test(k))         devFingerprint = devFingerprint || v;
-                else if (/^mac\s*wlan|^mac\s+wlan/.test(k)) devMac = devMac || v;
-                else if (/^bluetooth\s*mac/.test(k))       devBtMac = devBtMac || v;
-                else if (/^android\s*id/.test(k))          devAndroidId = devAndroidId || v;
-                // v4.4.30: campos novos
-                else if (/^hardware\b/.test(k))            devHardware = devHardware || v;
-                else if (/^abi\b/.test(k))                 devAbi = devAbi || v;
-                else if (/^kernel\b/.test(k))              devKernel = devKernel || v;
-                else if (/^locale\b/.test(k))              devLocale = devLocale || v;
-                else if (/^country\b/.test(k))             devCountry = devCountry || v.toUpperCase().slice(0, 2);
-                else if (/^timezone\b/.test(k))            devTimezone = devTimezone || v;
-                else if (/^play\s*store/.test(k))          devPlayStore = devPlayStore || v.toUpperCase().slice(0, 2);
-                else if (/^uptime\b/.test(k))              devUptime = devUptime || v;
-                else if (/^usb\s*state/.test(k))           devUsbState = devUsbState || v;
+        }
+        // v4.4.32: Captura device info em QUALQUER tag (info/ok/warn) — antes
+        // só pegava em info, mas a4ther.sh emite Uptime/USB state como OK, e
+        // outros campos podem variar por release. Tag agnóstico é mais robusto.
+        const kv = body.match(/^([A-Za-z][^:]*?)[:]\s*(.+?)$/);
+        if (kv) {
+            const k = kv[1].trim().toLowerCase();
+            const v = kv[2].trim().replace(/\(indispon[íi]vel\)/i, '').replace(/^\?$/, '');
+            if (!v || /^(none|null|n\/a|unknown)$/i.test(v)) {
+                // skip — valor inútil
             }
+            // v4.4.32: ORDEM IMPORTA — específico ANTES de geral
+            // "Android ID" deve bater ANTES de "Android" (bug v4.4.31)
+            else if (/^android\s*id\b/.test(k))            devAndroidId = devAndroidId || v;
+            else if (/^boot\s*serial/.test(k))             devSerial = devSerial || v;
+            else if (/^serial\b/.test(k))                  devSerial = devSerial || v;
+            else if (/^hwid\b.*sha[\s-]?256/.test(k))      devHwid = v;
+            else if (/^hwid\b.*md5/.test(k))               devHwidMd5 = v;
+            else if (/^hwid\b/.test(k))                    devHwid = devHwid || v;
+            else if (/^marca\/modelo|^brand\/model/.test(k)) {
+                const parts = v.split(/\s*\/\s*|\s+/);
+                devBrand = devBrand || parts[0];
+                devModel = devModel || parts.slice(1).join(' ');
+            }
+            else if (/^marca\b|^brand\b/.test(k))          devBrand = devBrand || v;
+            else if (/^modelo\b|^model\b/.test(k))         devModel = devModel || v;
+            else if (/^device\b/.test(k))                  devDevice = devDevice || v;
+            else if (/^android\b/.test(k)) {
+                // "Android: 16 (SDK 36)" → captura versão + SDK
+                const am = v.match(/^([\d.]+)\s*(?:\(SDK\s+(\d+)\))?/i);
+                if (am && /^[\d.]+$/.test(am[1])) {
+                    devAndroid = am[1];
+                    if (am[2]) devSdk = am[2];
+                }
+            }
+            else if (/^build\b/.test(k))                   devBuild = devBuild || v;
+            else if (/^fingerprint\b/.test(k))             devFingerprint = devFingerprint || v;
+            else if (/^mac\s*wlan|^mac\s+wlan/.test(k))    devMac = devMac || v;
+            else if (/^bluetooth\s*mac/.test(k))           devBtMac = devBtMac || v;
+            // v4.4.30: campos novos
+            else if (/^hardware\b/.test(k))                devHardware = devHardware || v;
+            else if (/^abi\b/.test(k))                     devAbi = devAbi || v;
+            else if (/^kernel\b/.test(k))                  devKernel = devKernel || v;
+            else if (/^locale\b/.test(k))                  devLocale = devLocale || v;
+            else if (/^country\b/.test(k))                 devCountry = devCountry || v.toUpperCase().slice(0, 2);
+            else if (/^timezone\b/.test(k))                devTimezone = devTimezone || v;
+            else if (/^play\s*store/.test(k))              devPlayStore = devPlayStore || v.toUpperCase().slice(0, 2);
+            else if (/^uptime\b/.test(k))                  devUptime = devUptime || v;
+            else if (/^usb\s*state/.test(k))               devUsbState = devUsbState || v;
         }
 
         // Detecta jailbreak/root markers no texto pra popular _jailbreakInfo
