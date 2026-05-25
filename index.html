@@ -1632,7 +1632,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.19</span>
+        <span id="version">v4.4.20</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1919,7 +1919,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.19";
+const VERSION = "4.4.20";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -2974,9 +2974,10 @@ function renderDeviceCard(info, jbInfo, blResults) {
     const banned = (blResults || []).find(r => r.result && r.result.banned === true);
     const isBanned = !!banned;
 
-    // Hero icon: apple se iOS, smartphone fallback
-    const isIOS = (info.iosVersion || info.productType || '').toString().length > 0;
-    const heroIcon = isIOS ? 'apple' : 'smartphone';
+    // Hero icon: apple se iOS, bot/Android, smartphone fallback
+    const isAndroid = info._platform === 'android' || /^Android /.test(info.iosVersion || '');
+    const isIOS = !isAndroid && (info.iosVersion || info.productType || '').toString().length > 0;
+    const heroIcon = isAndroid ? 'bot' : (isIOS ? 'apple' : 'smartphone');
     const modelDisplay = info.modelName || info.productType || 'Dispositivo Desconhecido';
     const productLine = info.productType ? `${info.productType} · ${info.modelName ? 'iPhone' : 'Device'}` : 'iOS Device';
     const iosLabel = info.iosVersion ? info.iosVersion : '—';
@@ -3411,69 +3412,199 @@ async function handleAndroid(file) {
     reset();
     const raw = await file.text();
     if (!raw || raw.length < 100) {
-        warn("Arquivo TXT vazio ou inválido");
-        renderResults({});
+        warn("Arquivo TXT vazio ou muito curto (< 100 bytes)");
+        renderResults({ mode: 'android-txt' });
         return;
     }
-    // O TXT do a4ther.sh tem linhas tipo:
-    //   [ALERTA]  texto aqui
-    //   [AVISO]   texto aqui
-    //   [OK]      texto aqui
-    //   [INFO]    texto aqui
-    //   === SECAO ===
+
+    // v4.4.20: parser ROBUSTO do .txt do a4ther.sh. O script gera linhas no
+    // formato (depois do strip de cores ANSI):
+    //   "  ●  ALERTA  texto"          ← bullet + tag + texto
+    //   "  ●  AVISO   texto"
+    //   "  ●  OK      texto"
+    //   "  ○  info    texto"
+    //   " ◆  SEÇÃO"                   ← cabeçalho de seção (com bullet ◆)
+    //   "━━━━━━━━━━…"                ← divisor (descartar)
+    //
+    // O parser anterior tinha 2 padrões mas dependia exclusivamente do bullet
+    // ●/○ — se o usuário enviasse versões antigas ou copiasse manualmente
+    // sem o bullet, NADA seria detectado e o render mostrava "L I M P O"
+    // ou "W . O" sem listar nada. Agora aceitamos:
+    //   1) `●/○  TAG  texto` (formato atual do a4ther.sh)
+    //   2) `[TAG] texto` (formato genérico)
+    //   3) `TAG: texto` (formato alternativo)
+    showLoading('Parseando relatório Android…');
+
     let currentSection = "";
     let totalSections = 0;
-    let hwid = null, model = null, android = null;
-    const lines = raw.split('\n');
-    for (const line of lines) {
-        // Section headers (também tem variantes com ◆ e ━━━)
-        const sec = line.match(/^=== (.+?) ===$/) || line.match(/^\s*◆\s+(.+?)\s*$/);
-        if (sec) {
-            currentSection = sec[1].trim();
+    let stats = { alerts: 0, warns: 0, oks: 0, infos: 0 };
+
+    // Device info accumulators
+    let devSerial = null, devHwid = null, devHwidMd5 = null;
+    let devModel = null, devBrand = null, devDevice = null;
+    let devAndroid = null, devSdk = null, devBuild = null;
+    let devFingerprint = null, devMac = null, devBtMac = null, devAndroidId = null;
+    let detectedJBNames = [];
+
+    // Detecta versão do scan (a4ther.sh v4.4.4, etc) — só pra log
+    const versionMatch = raw.match(/a4ther[\s.\/-]*v?\s*(\d+\.\d+\.\d+)/i) ||
+                         raw.match(/v(\d+\.\d+\.\d+)\s+LS\s+Aluguel/i);
+    if (versionMatch) ok(`Relatório gerado por a4ther.sh v${versionMatch[1]}`);
+
+    // Regex compilados (compatibilidade larga)
+    const SECTION_RE = /(?:^=== (.+?) ===$)|(?:^\s*◆\s+(.+?)\s*$)/;
+    const TAG_RE = /^\s*(?:[●○]\s*)?(?:\[\s*)?(ALERTA|ALERT|AVISO|WARN|OK|CLEAN|INFO|info)(?:\s*\])?\s+(.+?)\s*$/;
+    const COLON_TAG_RE = /^\s*(ALERTA|ALERT|AVISO|WARN|OK|CLEAN|INFO|info)[\s:]+(.+?)\s*$/;
+
+    const lines = raw.split(/\r?\n/);
+    for (const rawLine of lines) {
+        // Pula linha vazia ou divisor
+        const line = rawLine.replace(/[ -]/g, '').trimEnd();
+        if (!line || /^[━─=─\-_]{8,}$/.test(line.trim())) continue;
+
+        // Section header
+        const secM = line.match(SECTION_RE);
+        if (secM) {
+            currentSection = (secM[1] || secM[2] || '').trim();
             totalSections++;
             continue;
         }
-        // Tags
-        const alertMatch = line.match(/^\s*[●○]?\s*\[ALERTA\]\s*(?:ALERTA\s+)?(.+?)$/) ||
-                          line.match(/^\s*●\s*ALERTA\s+(.+?)$/);
-        const warnMatch  = line.match(/^\s*[●○]?\s*\[AVISO\]\s*(?:AVISO\s+)?(.+?)$/) ||
-                          line.match(/^\s*●\s*AVISO\s+(.+?)$/);
-        const okMatch    = line.match(/^\s*[●○]?\s*\[OK\]\s*(?:OK\s+)?(.+?)$/) ||
-                          line.match(/^\s*●\s*OK\s+(.+?)$/);
-        const infoMatch  = line.match(/^\s*[●○]?\s*\[INFO\]\s*(?:info\s+|INFO\s+)?(.+?)$/) ||
-                          line.match(/^\s*○\s*info\s+(.+?)$/);
-        if (alertMatch) {
-            alertF(`[${currentSection || 'Android'}] ${alertMatch[1].trim()}`);
-        } else if (warnMatch) {
-            warn(`[${currentSection || 'Android'}] ${warnMatch[1].trim()}`);
-        } else if (okMatch) {
-            ok(`[${currentSection || 'Android'}] ${okMatch[1].trim()}`);
-        } else if (infoMatch) {
-            const t = infoMatch[1].trim();
-            // Captura HWID / modelo
-            if (t.startsWith("HWID")) hwid = t.replace(/^HWID[\s:]+/i, '');
-            if (t.startsWith("Modelo") || t.startsWith("Marca/Modelo")) model = t.replace(/^[a-zA-Z\/]+[\s:]+/, '');
-            if (t.startsWith("Android")) android = t.replace(/^Android[\s:]+/, '');
+
+        // Tag (bullet style ou [TAG] ou TAG:)
+        let tagM = line.match(TAG_RE);
+        if (!tagM) tagM = line.match(COLON_TAG_RE);
+        if (!tagM) continue;
+
+        const tag = tagM[1].toUpperCase();
+        const body = tagM[2].trim();
+        if (!body) continue;
+        const tagged = `[${currentSection || 'Android'}] ${body}`;
+
+        if (tag === 'ALERTA' || tag === 'ALERT') {
+            alertF(tagged); stats.alerts++;
+        } else if (tag === 'AVISO' || tag === 'WARN') {
+            warn(tagged); stats.warns++;
+        } else if (tag === 'OK' || tag === 'CLEAN') {
+            ok(tagged); stats.oks++;
+        } else if (tag === 'INFO') {
+            stats.infos++;
+            // Captura device info via padrões "Campo: valor"
+            const kv = body.match(/^([A-Za-z][^:]*?)[:]\s*(.+?)$/);
+            if (kv) {
+                const k = kv[1].trim().toLowerCase();
+                const v = kv[2].trim().replace(/\(indispon[íi]vel\)/i, '').replace(/^\?$/, '');
+                if (!v) continue;
+                if (/^serial\b/.test(k))                   devSerial = devSerial || v;
+                else if (/^boot\s*serial/.test(k))         devSerial = devSerial || v;
+                else if (/^hwid\b.*sha[\s-]?256/.test(k))  devHwid = v;
+                else if (/^hwid\b.*md5/.test(k))           devHwidMd5 = v;
+                else if (/^hwid\b/.test(k))                devHwid = devHwid || v;
+                else if (/marca\/modelo|brand\/model/.test(k)) {
+                    const parts = v.split(/\s*\/\s*|\s+/);
+                    devBrand = devBrand || parts[0];
+                    devModel = devModel || parts.slice(1).join(' ');
+                }
+                else if (/^marca\b|^brand\b/.test(k))      devBrand = devBrand || v;
+                else if (/^modelo\b|^model\b/.test(k))     devModel = devModel || v;
+                else if (/^device\b/.test(k))              devDevice = devDevice || v;
+                else if (/^android\b/.test(k)) {
+                    const am = v.match(/^([\d.]+)\s*(?:\(SDK\s+(\d+)\))?/i);
+                    if (am) { devAndroid = am[1]; if (am[2]) devSdk = am[2]; }
+                    else devAndroid = devAndroid || v;
+                }
+                else if (/^build\b/.test(k))               devBuild = devBuild || v;
+                else if (/^fingerprint\b/.test(k))         devFingerprint = devFingerprint || v;
+                else if (/^mac\s*wlan|^mac\s+wlan/.test(k)) devMac = devMac || v;
+                else if (/^bluetooth\s*mac/.test(k))       devBtMac = devBtMac || v;
+                else if (/^android\s*id/.test(k))          devAndroidId = devAndroidId || v;
+            }
+        }
+
+        // Detecta jailbreak/root markers no texto pra popular _jailbreakInfo
+        const jbMatch = body.match(/\b(magisk|kernelsu|supersu|busybox|frida|xposed|lsposed|edxposed|substrate|riru)\b/i);
+        if (jbMatch && tag !== 'OK' && tag !== 'CLEAN') {
+            const name = jbMatch[1].charAt(0).toUpperCase() + jbMatch[1].slice(1).toLowerCase();
+            if (!detectedJBNames.includes(name)) detectedJBNames.push(name);
         }
     }
-    if (totalSections === 0) {
-        warn("Não parece ser um relatório do a4ther.sh (sem cabeçalhos)");
+
+    // Sumário do parsing
+    if (totalSections === 0 && stats.alerts === 0 && stats.warns === 0 && stats.oks === 0 && stats.infos === 0) {
+        warn("Não foi possível parsear o relatório — formato não reconhecido");
+        warn("Esperado: relatório do a4ther.sh (linhas '●  ALERTA texto' / '●  AVISO texto' / etc)");
+        warn("Se você editou o arquivo, pode ter quebrado o formato. Gere um novo scan");
+        renderResults({ mode: 'android-txt' });
+        return;
+    }
+
+    ok(`Parser: ${totalSections} seções · ${stats.alerts} alertas · ${stats.warns} avisos · ${stats.oks} oks · ${stats.infos} infos`);
+
+    // Popula _deviceInfo pra renderResults mostrar o Device Info Card
+    const modelDisplay = devModel
+        ? (devBrand && !devModel.toLowerCase().includes(devBrand.toLowerCase()) ? `${devBrand} ${devModel}` : devModel)
+        : (devBrand || devDevice || 'Android Device');
+    _deviceInfo = {
+        serial: devSerial || devAndroidId || null,
+        udid: devFingerprint || null,
+        ecid: devMac || null,
+        hwidHash: devHwid || devHwidMd5 || null,
+        productType: devDevice || null,
+        modelName: modelDisplay,
+        iosVersion: devAndroid ? `Android ${devAndroid}` : null,
+        buildVersion: devBuild || (devSdk ? `SDK ${devSdk}` : null),
+        region: null,
+        regionCode: null,
+        appStoreCountry: null,
+        _platform: 'android',
+    };
+
+    // Popula _jailbreakInfo se algum marker foi detectado
+    if (detectedJBNames.length > 0) {
+        _jailbreakInfo = {
+            jailbroken: true,
+            tools: detectedJBNames,
+            names: detectedJBNames,
+        };
     } else {
-        ok(`Relatório a4ther.sh parseado: ${totalSections} seções`);
+        _jailbreakInfo = { jailbroken: false, tools: [], names: [] };
     }
-    if (model) ok(`Device: ${model}`);
-    if (android) ok(`Android: ${android}`);
-    // Tenta blacklist se HWID estiver presente
-    if (hwid && BLACKLIST_CONFIG.enabled) {
-        showLoading('Consultando blacklist...');
-        const bl = await checkBlacklist(hwid);
-        if (bl && bl.banned) {
-            alertF(`[CRITICAL][BLACKLIST] HWID BANIDO — motivo: ${bl.reason || '?'}`, bl.date ? `data: ${bl.date}` : '');
-        } else if (bl && !bl.error) {
-            ok("HWID limpo (não está na blacklist)");
+
+    // Blacklist lookup com TODAS as chaves disponíveis (igual iOS)
+    _blacklistResults = [];
+    const lookups = [];
+    if (devSerial)    lookups.push({ key: 'Serial',    val: devSerial });
+    if (devHwid)      lookups.push({ key: 'HWID',      val: devHwid });
+    if (devHwidMd5)   lookups.push({ key: 'HWID-MD5',  val: devHwidMd5 });
+    if (devAndroidId) lookups.push({ key: 'Android-ID',val: devAndroidId });
+
+    if (lookups.length > 0 && BLACKLIST_CONFIG.enabled) {
+        showLoading('Consultando blacklist…');
+        const results = await Promise.all(lookups.map(async (l) => ({
+            ...l, result: await checkBlacklist(l.val)
+        })));
+        let bannedFound = false;
+        for (const r of results) {
+            _blacklistResults.push(r);
+            if (!r.result) continue;
+            if (r.result.banned === true) {
+                bannedFound = true;
+                const motivos = (r.result.motivos && r.result.motivos.length > 0)
+                    ? `\nMotivos: ${r.result.motivos.join(' · ')}` : '';
+                const data = r.result.date ? ` em ${r.result.date}` : '';
+                alertF(
+                    `[CRITICAL][BLACKLIST] DEVICE BANIDO via ${r.key}: ${r.val}`,
+                    `${r.result.reason || 'banido'}${data}${motivos}\nFonte: lspainel.com.br/dashboard/blacklist`
+                );
+            } else if (!r.result.error) {
+                ok(`Blacklist ${r.key} (${String(r.val).slice(0,16)}…): clean`);
+            }
+        }
+        if (!bannedFound && results.some(r => r.result && r.result.banned === false)) {
+            ok(`Device NAO esta na blacklist lspainel`);
         }
     }
-    renderResults({});
+
+    renderResults({ mode: 'android-txt' });
 }
 
 async function handleNDJSON(file) {
