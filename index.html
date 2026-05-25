@@ -821,32 +821,52 @@ a:hover { color: var(--text); }
     position: relative;
     z-index: 2;
 }
-/* Card de fundo via ::before (vidro) */
-.loading::before {
-    content: '';
-    position: absolute;
+/* v4.4.38: substituído pseudo-element ::before por wrapper real .loading-card.
+   Estrutura mais robusta — flex centra a card como filho, e o card envolve
+   os children (spinner+texto+progress) com padding consistente. Sem cálculos
+   absolute que descalibram. */
+.loading-card {
+    position: relative;
     width: min(560px, 92vw);
-    max-width: 560px;
-    height: auto;
-    min-height: 380px;
-    background: linear-gradient(180deg, rgba(22, 18, 40, 0.85) 0%, rgba(14, 10, 26, 0.92) 100%);
-    border: 1px solid rgba(179, 136, 255, 0.22);
+    padding: 3.5rem 2rem 2.5rem;
+    background: linear-gradient(180deg, rgba(22, 18, 40, 0.92) 0%, rgba(14, 10, 26, 0.96) 100%);
+    border: 1px solid rgba(179, 136, 255, 0.25);
     border-radius: 22px;
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 80px rgba(179, 136, 255, 0.12);
-    z-index: 0;
-    pointer-events: none;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 80px rgba(179, 136, 255, 0.15);
+    text-align: center;
+    overflow: hidden;
+    animation: loading-card-in 400ms var(--ease) both;
 }
-/* Scan line no topo do card */
-.loading::after {
+@keyframes loading-card-in {
+    from { opacity: 0; transform: translateY(20px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.loading-scan-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(179, 136, 255, 0.85), transparent);
+    box-shadow: 0 0 12px rgba(179, 136, 255, 0.7);
+}
+.loading-card > .spinner-glow,
+.loading-card > .spinner,
+.loading-card > .loading-text,
+.loading-card > .loading-hint,
+.loading-card > .loading-progress {
+    position: relative;
+    z-index: 2;
+}
+/* Aurora sutil no fundo do card (substitui o antigo ::after da .loading) */
+.loading-card::after {
     content: '';
     position: absolute;
-    width: min(560px, 92vw);
-    height: 1px;
-    top: calc(50% - 190px);
-    background: linear-gradient(90deg, transparent, rgba(179, 136, 255, 0.7), transparent);
-    animation: loading-scan 2s linear infinite;
-    z-index: 1;
+    inset: -30%;
+    background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(179, 136, 255, 0.15), transparent 70%);
+    animation: loading-aurora 3s ease-in-out infinite;
     pointer-events: none;
+    z-index: 0;
 }
 /* Bloquear scroll do body quando loading ativo */
 body.is-loading { overflow: hidden; }
@@ -2277,7 +2297,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.37</span>
+        <span id="version">v4.4.38</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2490,22 +2510,25 @@ footer a:hover {
     </div>
 </section>
 
-<!-- ─── LOADING (v4.4.26) ─── -->
+<!-- ─── LOADING (v4.4.26 / v4.4.38 wrapper) ─── -->
 <div class="loading hidden" id="loading">
-    <div class="spinner-glow"></div>
-    <div class="spinner"><span></span></div>
-    <div class="loading-text" id="loadingText">Analisando</div>
-    <div class="loading-hint">A4ther Systems · Free Fire Anti-Cheat</div>
-    <div class="loading-progress" id="loadingProgress" hidden>
-        <div class="loading-bar"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
-        <div class="loading-meta">
-            <span id="loadingPercent">0%</span>
-            <span class="sep">·</span>
-            <span id="loadingSize">0 MB</span>
-            <span class="sep">·</span>
-            <span id="loadingETA">…</span>
+    <div class="loading-card">
+        <div class="loading-scan-line"></div>
+        <div class="spinner-glow"></div>
+        <div class="spinner"><span></span></div>
+        <div class="loading-text" id="loadingText">Analisando</div>
+        <div class="loading-hint">A4ther Systems · Free Fire Anti-Cheat</div>
+        <div class="loading-progress" id="loadingProgress" hidden>
+            <div class="loading-bar"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
+            <div class="loading-meta">
+                <span id="loadingPercent">0%</span>
+                <span class="sep">·</span>
+                <span id="loadingSize">0 MB</span>
+                <span class="sep">·</span>
+                <span id="loadingETA">…</span>
+            </div>
+            <div class="loading-warn" id="loadingWarn" hidden></div>
         </div>
-        <div class="loading-warn" id="loadingWarn" hidden></div>
     </div>
 </div>
 
@@ -2534,7 +2557,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.37";
+const VERSION = "4.4.38";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
