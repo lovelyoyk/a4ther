@@ -968,6 +968,161 @@ a:hover { color: var(--text); }
 .country-name { color: #22c55e; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
 .country-code { color: #5d7390; margin-left: 8px; }
 
+/* ═══════ Blacklist Helper (v4.4.21) ═══════ */
+.bl-helper {
+    background: linear-gradient(180deg, rgba(10, 18, 25, 0.95) 0%, rgba(15, 25, 36, 0.95) 100%);
+    border: 1px solid rgba(26, 42, 58, 0.8);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 0 50px rgba(0, 255, 255, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    position: relative;
+}
+.bl-helper::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.5), transparent);
+}
+.bl-helper-intro {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 16px 22px; font-size: 12px; color: var(--text-dim);
+    line-height: 1.55;
+    background: rgba(34, 211, 238, 0.04);
+    border-bottom: 1px solid rgba(26, 42, 58, 0.6);
+    font-family: var(--mono);
+}
+.bl-helper-intro .ico { color: var(--cyan); flex-shrink: 0; margin-top: 2px; }
+.bl-helper-intro a { color: var(--cyan); text-decoration: underline; text-decoration-color: rgba(34,211,238,0.3); }
+.bl-helper-intro a:hover { text-decoration-color: var(--cyan); }
+.bl-helper-rows {
+    padding: 4px 0;
+}
+.bl-row {
+    display: flex; align-items: center; gap: 14px;
+    padding: 12px 22px;
+    border-bottom: 1px solid rgba(26, 42, 58, 0.4);
+    flex-wrap: wrap;
+    transition: background 200ms ease;
+}
+.bl-row:last-of-type { border-bottom: none; }
+.bl-row:hover { background: rgba(34, 211, 238, 0.03); }
+.bl-row.recommended { background: rgba(34, 197, 94, 0.04); }
+.bl-row.recommended:hover { background: rgba(34, 197, 94, 0.08); }
+.bl-row-meta { display: flex; align-items: center; gap: 10px; min-width: 180px; flex: 1; }
+.bl-row-star {
+    width: 22px; height: 22px;
+    display: grid; place-items: center;
+    border-radius: 6px;
+    color: var(--text-faint);
+    font-size: 14px; font-weight: 700;
+    flex-shrink: 0;
+}
+.bl-row.recommended .bl-row-star {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.bl-row-text { min-width: 0; }
+.bl-row-label {
+    color: #fbbf24; font-size: 11px; letter-spacing: 0.2em;
+    text-transform: uppercase; font-weight: 700;
+    font-family: var(--mono);
+}
+.bl-row-why {
+    color: var(--text-faint); font-size: 10.5px;
+    margin-top: 3px; line-height: 1.4;
+    font-family: var(--mono);
+}
+.bl-row-value-wrap {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    flex: 2; min-width: 0;
+    justify-content: flex-end;
+}
+.bl-row-value {
+    color: var(--text); font-size: 11px;
+    font-family: var(--mono);
+    background: rgba(7, 6, 13, 0.6);
+    border: 1px solid rgba(179, 136, 255, 0.18);
+    padding: 6px 10px; border-radius: 8px;
+    word-break: break-all;
+    max-width: 100%;
+    flex: 1; min-width: 140px;
+    user-select: all; -webkit-user-select: all;
+}
+.bl-copy-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 8px;
+    background: linear-gradient(135deg, rgba(179, 136, 255, 0.16), rgba(122, 78, 255, 0.06));
+    border: 1px solid rgba(179, 136, 255, 0.3);
+    color: var(--text);
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+.bl-copy-btn:hover {
+    background: linear-gradient(135deg, rgba(179, 136, 255, 0.28), rgba(122, 78, 255, 0.14));
+    border-color: var(--purple);
+    box-shadow: 0 0 14px rgba(179, 136, 255, 0.25);
+    transform: translateY(-1px);
+}
+.bl-copy-btn.bl-copy-success {
+    background: rgba(34, 197, 94, 0.18); border-color: rgba(34, 197, 94, 0.5);
+    color: #22c55e;
+}
+.bl-copy-btn.bl-copy-error {
+    background: rgba(239, 68, 68, 0.18); border-color: rgba(239, 68, 68, 0.5);
+    color: #ef4444;
+}
+.bl-helper-actions {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    padding: 16px 22px;
+    background: rgba(4, 8, 13, 0.6);
+    border-top: 1px solid rgba(26, 42, 58, 0.6);
+}
+.bl-action-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px; border-radius: 10px;
+    font-family: var(--mono); font-size: 12px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    cursor: pointer; text-decoration: none;
+    transition: var(--transition);
+    border: 1px solid transparent;
+    flex: 1; min-width: 180px;
+    justify-content: center;
+}
+.bl-action-btn.primary {
+    background: linear-gradient(135deg, var(--purple), var(--purple-deep));
+    color: #fff;
+    border-color: var(--purple);
+    box-shadow: 0 4px 14px rgba(179, 136, 255, 0.3);
+}
+.bl-action-btn.primary:hover {
+    box-shadow: 0 6px 22px rgba(179, 136, 255, 0.5);
+    transform: translateY(-1px);
+}
+.bl-action-btn.primary.bl-copy-success {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border-color: #22c55e;
+    box-shadow: 0 4px 18px rgba(34, 197, 94, 0.4);
+}
+.bl-action-btn.secondary {
+    background: rgba(34, 211, 238, 0.08);
+    border-color: rgba(34, 211, 238, 0.4);
+    color: var(--cyan);
+}
+.bl-action-btn.secondary:hover {
+    background: rgba(34, 211, 238, 0.16);
+    border-color: var(--cyan);
+    box-shadow: 0 0 18px rgba(34, 211, 238, 0.3);
+    transform: translateY(-1px);
+}
+@media (max-width: 640px) {
+    .bl-row { flex-direction: column; align-items: stretch; gap: 8px; padding: 12px 16px; }
+    .bl-row-value-wrap { justify-content: flex-start; }
+    .bl-helper-actions { flex-direction: column; }
+    .bl-action-btn { width: 100%; }
+}
+
 /* ═══════ Status Cards (Blacklist + Jailbreak) ═══════ */
 .status-card {
     background: linear-gradient(180deg, rgba(10, 26, 18, 0.6) 0%, rgba(5, 18, 8, 0.6) 100%);
@@ -1632,7 +1787,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.20</span>
+        <span id="version">v4.4.21</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1919,7 +2074,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.20";
+const VERSION = "4.4.21";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -2851,6 +3006,10 @@ const ICONS = {
     hash:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>',
     clock:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
     'monitor':   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+    // copy + external link (v4.4.21)
+    copy:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+    'external-link': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>',
+    'list-checks':'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><line x1="13" y1="6" x2="21" y2="6"/><line x1="13" y1="12" x2="21" y2="12"/><line x1="13" y1="18" x2="21" y2="18"/></svg>',
     sparkles:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>',
 };
 
@@ -2989,8 +3148,10 @@ function renderDeviceCard(info, jbInfo, blResults) {
     const appStore = (info.appStoreCountry || '').toUpperCase();
     const appStoreInfo = COUNTRY_FLAGS[appStore];
 
-    // HWID badge
-    const hwidShort = info.hwidHash ? `${info.hwidHash.substring(0, 16)}…` : '—';
+    // HWID — display completo (não cortado mais; v4.4.21).
+    // Era truncado em 16 chars + "…" antes, o que impedia copiar pra cadastrar
+    // na blacklist. Agora mostra inteiro com `word-break:break-all` (já no CSS).
+    const hwidDisplay = info.hwidHash || '—';
     const serialDisplay = info.serial || '—';
 
     let html = `
@@ -3022,9 +3183,9 @@ function renderDeviceCard(info, jbInfo, blResults) {
                             : `<span class="device-badge ok">${iconSVG('check', { size: 12 })} CLEAN</span>`
                     }</span>
                 </div>
-                <div class="device-field" style="min-width:200px;">
+                <div class="device-field" style="min-width:200px;flex:1.5;">
                     <span class="device-field-label">HWID (SHA-256)</span>
-                    <span class="device-field-value muted">${escapeHTML(hwidShort)}</span>
+                    <span class="device-field-value muted" style="font-size:11px;">${escapeHTML(hwidDisplay)}</span>
                 </div>
             </div>
 
@@ -3100,7 +3261,120 @@ function renderDeviceCard(info, jbInfo, blResults) {
         </div>
     </div>`;
 
+    // ════════════════════════════════════════════════════════════
+    // v4.4.21: BLACKLIST HELPER — lista TODOS os IDs em formato cru
+    // pronto pra copiar e colar em lspainel.com.br/dashboard/blacklist
+    // ════════════════════════════════════════════════════════════
+    const keys = info._blacklistKeys || [];
+    if (keys.length > 0) {
+        html += `
+        <div class="device-section">
+            <div class="device-section-header">
+                <div class="device-section-icon">${iconSVG('list-checks', { size: 20 })}</div>
+                <span class="device-section-title">Cadastrar na Blacklist</span>
+                <span class="device-section-line"></span>
+            </div>
+            <div class="bl-helper">
+                <div class="bl-helper-intro">
+                    ${iconSVG('info', { size: 14 })}
+                    <span>Identificadores extraídos do dispositivo. Cole no painel <a href="https://lspainel.com.br/dashboard/blacklist" target="_blank" rel="noopener">lspainel.com.br/dashboard/blacklist</a> pra banir. <strong>Recomendado cadastrar pelo menos os 3 marcados em <span style="color:var(--cyan)">★</span></strong> — cobrem factory reset, troca de chip, etc.</span>
+                </div>
+                <div class="bl-helper-rows">`;
+        for (const k of keys) {
+            const id = 'bl-' + k.label.replace(/[^a-z0-9]/gi, '').toLowerCase();
+            html += `
+                    <div class="bl-row ${k.recommended ? 'recommended' : ''}">
+                        <div class="bl-row-meta">
+                            <span class="bl-row-star" title="${k.recommended ? 'Recomendado pra cadastrar' : 'Opcional / fallback'}">${k.recommended ? '★' : '·'}</span>
+                            <div class="bl-row-text">
+                                <div class="bl-row-label">${escapeHTML(k.label)}</div>
+                                <div class="bl-row-why">${escapeHTML(k.why)}</div>
+                            </div>
+                        </div>
+                        <div class="bl-row-value-wrap">
+                            <code class="bl-row-value" id="${id}-val">${escapeHTML(k.value)}</code>
+                            <button class="bl-copy-btn" type="button" data-copy-target="#${id}-val" title="Copiar ${escapeHTML(k.label)}">
+                                ${iconSVG('copy', { size: 14 })}
+                                <span class="bl-copy-text">Copiar</span>
+                            </button>
+                        </div>
+                    </div>`;
+        }
+        // Bloco "tudo" formatado pra colar — também botão "Copiar todos"
+        const allBlock = keys.map(k => `${k.label}: ${k.value}`).join('\n');
+        html += `
+                </div>
+                <div class="bl-helper-actions">
+                    <button class="bl-action-btn primary" type="button" data-copy-block="${escapeHTML(allBlock)}" title="Copia todos os IDs em formato 'Campo: valor' pronto pra colar no Discord/ticket">
+                        ${iconSVG('copy', { size: 14 })}
+                        <span>Copiar todos os IDs</span>
+                    </button>
+                    <a class="bl-action-btn secondary" href="https://lspainel.com.br/dashboard/blacklist" target="_blank" rel="noopener" title="Abrir o painel de blacklist em nova aba">
+                        ${iconSVG('external-link', { size: 14 })}
+                        <span>Abrir Painel Blacklist</span>
+                    </a>
+                </div>
+            </div>
+        </div>`;
+    }
+
     return html;
+}
+
+// v4.4.21: handler global pros botões "Copiar" do Blacklist Helper
+// Delegação no document — funciona pra elementos criados dinamicamente.
+async function _copyToClipboard(text) {
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (e) {}
+    // Fallback: textarea hidden + execCommand
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+        document.body.appendChild(ta); ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+    } catch (e) { return false; }
+}
+
+document.addEventListener('click', async (e) => {
+    // Botão "Copiar" individual
+    const copyBtn = e.target.closest('.bl-copy-btn');
+    if (copyBtn) {
+        const sel = copyBtn.getAttribute('data-copy-target');
+        const el = sel ? document.querySelector(sel) : null;
+        if (el) {
+            const txt = el.textContent.trim();
+            const ok = await _copyToClipboard(txt);
+            if (ok) _flashCopied(copyBtn, 'Copiado!');
+            else    _flashCopied(copyBtn, 'Erro', true);
+        }
+        return;
+    }
+    // Botão "Copiar todos"
+    const blockBtn = e.target.closest('[data-copy-block]');
+    if (blockBtn) {
+        const block = blockBtn.getAttribute('data-copy-block') || '';
+        const ok = await _copyToClipboard(block);
+        if (ok) _flashCopied(blockBtn, 'Todos copiados!');
+        else    _flashCopied(blockBtn, 'Erro', true);
+    }
+});
+
+function _flashCopied(btn, msg, isErr) {
+    const span = btn.querySelector('.bl-copy-text') || btn.querySelector('span');
+    if (!span) return;
+    const orig = span.textContent;
+    span.textContent = msg || 'Copiado!';
+    btn.classList.add(isErr ? 'bl-copy-error' : 'bl-copy-success');
+    setTimeout(() => {
+        span.textContent = orig;
+        btn.classList.remove('bl-copy-success', 'bl-copy-error');
+    }, 1400);
 }
 
 function renderResults(stats) {
@@ -3543,6 +3817,18 @@ async function handleAndroid(file) {
     const modelDisplay = devModel
         ? (devBrand && !devModel.toLowerCase().includes(devBrand.toLowerCase()) ? `${devBrand} ${devModel}` : devModel)
         : (devBrand || devDevice || 'Android Device');
+    // v4.4.21: blacklistKeys = TODOS os IDs em formato cru completo, prontos
+    // pra copiar e colar em lspainel.com.br/dashboard/blacklist.
+    const blacklistKeys = [];
+    if (devHwid)      blacklistKeys.push({ label: 'HWID SHA-256',  value: devHwid,      recommended: true,  why: 'identificador composto (8 fontes) — mais robusto' });
+    if (devSerial)    blacklistKeys.push({ label: 'Serial',        value: devSerial,    recommended: true,  why: 'gravado em hardware — só muda trocando placa' });
+    if (devMac)       blacklistKeys.push({ label: 'MAC wlan0',     value: devMac,       recommended: true,  why: 'gravado no chip Wi-Fi — sobrevive a factory reset' });
+    if (devHwidMd5)   blacklistKeys.push({ label: 'HWID MD5',      value: devHwidMd5,   recommended: false, why: 'fallback do HWID (Android ID + Serial + Boot)' });
+    if (devAndroidId) blacklistKeys.push({ label: 'Android ID',    value: devAndroidId, recommended: false, why: 'regenerado em factory reset (menos confiável)' });
+    if (devBtMac)     blacklistKeys.push({ label: 'Bluetooth MAC', value: devBtMac,     recommended: false, why: 'gravado no chip BT — alternativa robusta' });
+    if (devFingerprint && devFingerprint.length > 10)
+        blacklistKeys.push({ label: 'Fingerprint',  value: devFingerprint, recommended: false, why: 'string única da build instalada' });
+
     _deviceInfo = {
         serial: devSerial || devAndroidId || null,
         udid: devFingerprint || null,
@@ -3556,6 +3842,7 @@ async function handleAndroid(file) {
         regionCode: null,
         appStoreCountry: null,
         _platform: 'android',
+        _blacklistKeys: blacklistKeys,
     };
 
     // Popula _jailbreakInfo se algum marker foi detectado
@@ -4614,7 +4901,14 @@ async function extractHWID(files) {
         }
     }
 
-    const info = { serial, udid, ecid, hwidHash, productType, modelName, iosVersion, buildVersion, region, regionCode, appStoreCountry };
+    // v4.4.21: blacklistKeys pra Blacklist Helper UI
+    const blacklistKeys = [];
+    if (serial)   blacklistKeys.push({ label: 'Serial',       value: serial,   recommended: true,  why: 'gravado em hardware iOS — à prova de bypass via software' });
+    if (udid)     blacklistKeys.push({ label: 'UDID',         value: udid,     recommended: true,  why: 'identificador único do device — não muda em restore' });
+    if (hwidHash) blacklistKeys.push({ label: 'HWID SHA-256', value: hwidHash, recommended: true,  why: 'hash composto (Serial+UDID+ECID) — alternativa universal' });
+    if (ecid)     blacklistKeys.push({ label: 'ECID',         value: ecid,     recommended: false, why: 'Exclusive Chip ID — gravado em silício' });
+
+    const info = { serial, udid, ecid, hwidHash, productType, modelName, iosVersion, buildVersion, region, regionCode, appStoreCountry, _platform: 'ios', _blacklistKeys: blacklistKeys };
     // v4.4.17: persiste pro renderResults usar
     _deviceInfo = info;
     _blacklistResults = _allBlResults;
