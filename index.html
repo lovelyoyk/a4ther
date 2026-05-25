@@ -1531,7 +1531,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.17</span>
+        <span id="version">v4.4.18</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1770,7 +1770,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.17";
+const VERSION = "4.4.18";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -1991,6 +1991,10 @@ const CHEAT_APPS = {
     "com.hhnios.pubgvngatena":          { sev: "CRITICAL", name: "iGG by HHNiOS",          cat: "CHEAT",     desc: "FF/PUBG mixed menu" },
     "com.dts.freefirethack":            { sev: "CRITICAL", name: "Free Fire IPA Modded",   cat: "CHEAT",     desc: "Bundle modificado (re-pack)" },
     "com.dts.freefireth2":              { sev: "CRITICAL", name: "Free Fire IPA Re-sign",  cat: "CHEAT",     desc: "Bundle modificado (re-sign)" },
+    "com.dts.ffh4x":                    { sev: "CRITICAL", name: "FFH4X",                  cat: "CHEAT",     desc: "FFH4X mod menu — bundle modificado de FF" },
+    "com.dts.fth4x":                    { sev: "CRITICAL", name: "FFH4X (alt)",            cat: "CHEAT",     desc: "FFH4X variante — bundle modificado de FF" },
+    "com.dts.ffh4xmax":                 { sev: "CRITICAL", name: "FFH4X Max",              cat: "CHEAT",     desc: "FFH4X variante FF Max" },
+    "com.dts.h4xff":                    { sev: "CRITICAL", name: "H4X FF",                 cat: "CHEAT",     desc: "Variante FFH4X reversed" },
     "com.nextor.app":                   { sev: "CRITICAL", name: "Nextor Menu",            cat: "CHEAT",     desc: "Carrier app do menu Nextor" },
 
     // === Proxy / MITM ===
@@ -2559,6 +2563,8 @@ let lastReportText = "";
 let _deviceInfo = null;
 let _jailbreakInfo = null;
 let _blacklistResults = [];   // [{ key:'Serial', val:'FD7…', result:{banned, reason, date, …} }]
+// v4.4.18: contexto de crash analysis (Apple system + FF bundle modificado)
+let _crashInfo = null;
 
 function alertF(msg, detail) { alerts.push({ msg, detail }); }
 function warn(msg, detail)   { warnings.push({ msg, detail }); }
@@ -2566,6 +2572,7 @@ function ok(msg, detail)     { okItems.push({ msg, detail }); }
 function reset() {
     alerts = []; warnings = []; okItems = [];
     _deviceInfo = null; _jailbreakInfo = null; _blacklistResults = [];
+    _crashInfo = null;
 }
 
 /* ============================================================
@@ -2925,6 +2932,14 @@ function renderResults(stats) {
         if (stats.events !== undefined)  html += `<div class="stat"><div class="stat-num">${stats.events}</div><div class="stat-label">Eventos</div></div>`;
         if (stats.domains !== undefined) html += `<div class="stat"><div class="stat-num">${stats.domains}</div><div class="stat-label">Domínios</div></div>`;
         if (stats.ips !== undefined)     html += `<div class="stat"><div class="stat-num">${stats.ips}</div><div class="stat-label">IPs</div></div>`;
+    }
+    // v4.4.18: Crash stats (Apple crashes parseados + suspeitos)
+    if (_crashInfo && _crashInfo.total > 0) {
+        const crashColor = _crashInfo.suspicious > 0 ? 'alerts' : '';
+        html += `<div class="stat ${crashColor}"><div class="stat-num">${_crashInfo.total}</div><div class="stat-label">Crashes Apple</div></div>`;
+        if (_crashInfo.suspicious > 0) {
+            html += `<div class="stat alerts"><div class="stat-num">${_crashInfo.suspicious}</div><div class="stat-label">Crashes Suspeitos</div></div>`;
+        }
     }
     html += `</div>`;
 
@@ -4304,6 +4319,307 @@ async function detectJailbreakAggregated(files) {
     return _jailbreakInfo;
 }
 
+/* ============================================================
+   APPLE CRASH ANALYSIS (v4.4.18)
+   Parser de crashes_and_spins/*.ips — captura:
+     · Hang logs do tipo UIKit-runloop-freefireth-*.ips
+     · Crashes JSON (iOS 15+) com header line + body
+     · Crashes plaintext (iOS <15) "Incident Identifier:"
+     · Kernel panics (.panic, bug_type=210)
+
+   Detecta IOCs:
+     · Bundle ID modificado: com.dts.ffh4x / com.dts.fth4x / etc
+       (variantes do FFH4X que NÃO são com.dts.freefireth oficial)
+     · Path do binário freefireth com bundle ID errado = re-pack
+     · Crashes em SpringBoard/backboardd/mobile_installation > threshold
+     · Stack trace com /var/jb/ / MobileSubstrate / Frida = JB confirmado
+     · Kernel panic = patch de kernel (JB confirmado)
+   ============================================================ */
+const APPLE_FF_OFFICIAL_BUNDLES = new Set([
+    'com.dts.freefireth',
+    'com.dts.freefiremax',
+    'com.garena.global.freefire',
+    'com.garena.global.ffmax',
+    'com.garena.freefire.br',
+    'com.garena.freefire.kr',
+]);
+
+// Procs Apple cuja CRASH é altamente suspeita (raro/nunca em uso normal)
+const APPLE_SUSPICIOUS_PROCS = {
+    'kernel':              { sev: 'CRITICAL', desc: 'Kernel panic — patch de kernel ou exploit' },
+    'launchd':             { sev: 'HIGH',     desc: 'launchd crash — sistema instável (JB hint)' },
+    'backboardd':          { sev: 'HIGH',     desc: 'backboardd crash — tweak de UI/HID interferindo' },
+    'mobile_installation_proxy':{ sev: 'HIGH', desc: 'mobile_installation crash — tentativa de sideload anormal' },
+    'installd':            { sev: 'HIGH',     desc: 'installd crash — tentativa de install anormal' },
+    'mobileinstallationd': { sev: 'HIGH',     desc: 'mobileinstallationd crash — install anormal' },
+    'amfid':               { sev: 'CRITICAL', desc: 'amfid crash — bypass de Apple Mobile File Integrity (JB)' },
+    'securityd':           { sev: 'HIGH',     desc: 'securityd crash — tamper em camada de segurança' },
+    'lockdownd':           { sev: 'HIGH',     desc: 'lockdownd crash — tamper em pairing/lockdown' },
+    'configd':             { sev: 'MEDIUM',   desc: 'configd crash — sistema de rede instável' },
+    'jailbreakd':          { sev: 'CRITICAL', desc: 'jailbreakd ativo — JB daemon rodando' },
+    'launchdhook':         { sev: 'CRITICAL', desc: 'launchdhook ativo — Dopamine JB hook' },
+    'oobpcid':             { sev: 'CRITICAL', desc: 'oobpcid ativo — palera1n JB daemon' },
+    'palera1nd':           { sev: 'CRITICAL', desc: 'palera1nd ativo — palera1n JB daemon' },
+};
+
+// Procs Apple shell UI — pode crashar mas count alto é suspeito
+const APPLE_SHELL_PROCS = new Set([
+    'SpringBoard', 'mediaserverd', 'mediaplaybackd',
+    'MobileSafari', 'MobileMail', 'MobileSMS',
+    'symptomsd', 'wifid', 'fairplayd', 'bluetoothd',
+    'CommCenter', 'identityservicesd',
+]);
+
+function parseIPSCrash(raw, filename) {
+    // Tenta JSON header (iOS 15+) primeiro
+    const out = { proc: null, bundleID: null, path: null, version: null, osVersion: null,
+                  device: null, bugType: null, reason: null, isFirstParty: null,
+                  timestamp: null, hasJBArtifacts: false, jbMarkers: [] };
+    const firstLine = raw.split('\n', 1)[0];
+    if (firstLine.startsWith('{') && firstLine.endsWith('}')) {
+        try {
+            const hdr = JSON.parse(firstLine);
+            out.proc        = hdr.procName || hdr.app_name || null;
+            out.bundleID    = hdr.bundleID || hdr.bundle_id || null;
+            out.version     = hdr.app_version || null;
+            out.osVersion   = hdr.os_version || null;
+            out.bugType     = hdr.bug_type || null;
+            out.isFirstParty= hdr.is_first_party === 1 || hdr.is_first_party === true;
+            out.timestamp   = hdr.timestamp || null;
+            out.path        = hdr.procPath || null;
+        } catch (e) {}
+    }
+    // Plaintext fallback (iOS <15)
+    if (!out.proc) {
+        const pm = raw.match(/Process:\s*([A-Za-z0-9_.+-]+)/);
+        if (pm) out.proc = pm[1];
+    }
+    if (!out.bundleID) {
+        const im = raw.match(/Identifier:\s*([A-Za-z0-9_.+-]+)/);
+        if (im) out.bundleID = im[1];
+    }
+    if (!out.path) {
+        const pm = raw.match(/Path:\s*([^\n]+)/);
+        if (pm) out.path = pm[1].trim();
+    }
+    if (!out.osVersion) {
+        const om = raw.match(/OS Version:\s*([^\n]+)/);
+        if (om) out.osVersion = om[1].trim();
+    }
+    if (!out.device) {
+        const dm = raw.match(/Hardware Model:\s*([^\n]+)/);
+        if (dm) out.device = dm[1].trim();
+    }
+    if (!out.reason) {
+        const rm = raw.match(/(?:Reason|Exception Type):\s*([^\n]+)/);
+        if (rm) out.reason = rm[1].trim().substring(0, 120);
+    }
+    // JB artifacts em binaryImages + threads + stack
+    const jbPatterns = [
+        ['/var/jb/',         '/var/jb path'],
+        ['MobileSubstrate',  'MobileSubstrate hook'],
+        ['libsubstrate',     'libsubstrate hook'],
+        ['libsubstitute',    'substitute hook'],
+        ['libellekit',       'ElleKit hook'],
+        ['FridaGadget',      'Frida gadget'],
+        ['frida-gadget',     'Frida gadget'],
+        ['frida-server',     'Frida server'],
+        ['libhooker',        'libhooker'],
+        ['DYLD_INSERT_LIBRARIES', 'dyld lib injection'],
+        ['Cycript',          'Cycript runtime'],
+        ['/private/preboot/jb/', 'preboot JB path'],
+        ['palera1n',         'palera1n artifact'],
+        ['Dopamine',         'Dopamine artifact'],
+    ];
+    for (const [pat, label] of jbPatterns) {
+        if (raw.includes(pat)) {
+            out.hasJBArtifacts = true;
+            out.jbMarkers.push(label);
+        }
+    }
+    return out;
+}
+
+async function analyzeAppleCrashes(files) {
+    const crashFiles = files.filter(f => {
+        const n = (f.webkitRelativePath || f.name).toLowerCase();
+        // .ips + .panic em crashes_and_spins/ ou diagnostic_logs/CrashReporter/
+        return (n.endsWith('.ips') || n.endsWith('.panic') ||
+                n.endsWith('.crash') || n.endsWith('.ips.synced')) &&
+               (n.includes('crashes_and_spins/') || n.includes('crashreporter/') ||
+                n.includes('diagnosticreports/'));
+    });
+
+    if (crashFiles.length === 0) {
+        ok('Crashes Apple: nenhum arquivo de crash encontrado');
+        _crashInfo = { total: 0, parsed: 0, suspicious: 0, ffCheatBundles: [], details: [] };
+        return _crashInfo;
+    }
+
+    showLoading(`Crashes Apple: parseando ${crashFiles.length}…`);
+    ok(`Crashes Apple: ${crashFiles.length} arquivo(s) de crash encontrado(s)`);
+
+    // Cap pra perf — 80 arquivos cobrem +95% dos sysdiagnoses típicos
+    const CAP = 80;
+    const toProcess = crashFiles.slice(0, CAP);
+    const skipped = crashFiles.length - toProcess.length;
+    if (skipped > 0) ok(`Crashes: analisando ${CAP} mais recentes (${skipped} mais antigos pulados)`);
+
+    // Batches paralelos de 8 (mesma estratégia do Pass 8)
+    const BATCH = 8;
+    const parsed = [];
+    for (let i = 0; i < toProcess.length; i += BATCH) {
+        const batch = toProcess.slice(i, i + BATCH);
+        const reads = await Promise.all(batch.map(async (f) => {
+            // Cap 1 MB por crash — bastam pro header + binaryImages
+            const raw = await readSafe(f, 1024 * 1024);
+            return { f, raw };
+        }));
+        for (const { f, raw } of reads) {
+            if (!raw) continue;
+            const filename = (f.webkitRelativePath || f.name).split('/').pop();
+            try {
+                const info = parseIPSCrash(raw, filename);
+                info._file = filename;
+                parsed.push(info);
+            } catch (e) {}
+        }
+        await new Promise(r => setTimeout(r, 0));
+    }
+
+    // ─── AGREGAÇÃO ───
+    const byProc = new Map();           // proc → { count, files: [], lastTimestamp }
+    const ffSuspicious = new Map();     // bundleID modificado → { count, files }
+    const jbConfirmed = new Map();      // bundleID → { count, markers: Set, files: Set }
+    const apple1stParty = new Map();    // proc → count (só is_first_party)
+    let kernelPanics = 0;
+    const kernelPanicFiles = [];
+    let runloopHangs = 0;
+    const runloopHangFiles = [];
+
+    for (const p of parsed) {
+        if (!p.proc) continue;
+        // count global
+        if (!byProc.has(p.proc)) byProc.set(p.proc, { count: 0, files: [], lastTs: null });
+        const g = byProc.get(p.proc);
+        g.count++;
+        if (g.files.length < 3) g.files.push(p._file);
+        if (p.timestamp && (!g.lastTs || p.timestamp > g.lastTs)) g.lastTs = p.timestamp;
+
+        // Kernel panic detection
+        const isPanic = (p._file && p._file.endsWith('.panic')) ||
+                        p.bugType === '210' || p.bugType === '288' ||
+                        /kernel.*panic|^panic$/i.test(p.proc || '');
+        if (isPanic) {
+            kernelPanics++;
+            if (kernelPanicFiles.length < 5) kernelPanicFiles.push(p._file);
+        }
+
+        // UIKit runloop hang detection (Free Fire travando)
+        if (p._file && /uikit-runloop|hang/i.test(p._file)) {
+            runloopHangs++;
+            if (runloopHangFiles.length < 5) runloopHangFiles.push(p._file);
+        }
+
+        // ─── IOC #1: Bundle FF MODIFICADO (FFH4X, etc) ───
+        // Se o proc é freefireth OU o path passa por freefireth.app
+        // MAS o bundleID NÃO é oficial → CHEAT
+        const pathHasFF = p.path && /freefireth\.app|freefiremax\.app/i.test(p.path);
+        const procIsFF  = /^free?fire/i.test(p.proc);
+        if ((procIsFF || pathHasFF) && p.bundleID && !APPLE_FF_OFFICIAL_BUNDLES.has(p.bundleID)) {
+            if (!ffSuspicious.has(p.bundleID)) ffSuspicious.set(p.bundleID, { count: 0, files: [], proc: p.proc, path: p.path });
+            const s = ffSuspicious.get(p.bundleID);
+            s.count++;
+            if (s.files.length < 5) s.files.push(p._file);
+        }
+
+        // ─── IOC #2: JB artifacts em stack/binaryImages ───
+        if (p.hasJBArtifacts) {
+            if (!jbConfirmed.has(p.bundleID || p.proc)) {
+                jbConfirmed.set(p.bundleID || p.proc, { count: 0, markers: new Set(), files: new Set() });
+            }
+            const j = jbConfirmed.get(p.bundleID || p.proc);
+            j.count++;
+            for (const m of p.jbMarkers) j.markers.add(m);
+            j.files.add(p._file);
+        }
+
+        // ─── IOC #3: Apple system proc crashando ───
+        if (p.isFirstParty || (p.bundleID || '').startsWith('com.apple.')) {
+            apple1stParty.set(p.proc, (apple1stParty.get(p.proc) || 0) + 1);
+        }
+    }
+
+    // ─── ALERTS ───
+    let alertCount = 0;
+
+    // Kernel panics — sempre CRITICAL
+    if (kernelPanics > 0) {
+        alertF(`[CRITICAL][KERNEL] ${kernelPanics} kernel panic(s) detectado(s)`,
+            `Patch de kernel ou exploit ativo · arquivos: ${kernelPanicFiles.join(', ')}`);
+        alertCount++;
+    }
+
+    // FF bundle modificado (FFH4X family) — IOC principal das screenshots do user
+    for (const [bundleID, info] of ffSuspicious) {
+        const known = CHEAT_APPS[bundleID];
+        const name = known ? known.name : `Bundle FF não-oficial: ${bundleID}`;
+        const desc = known ? known.desc : `Free Fire com bundle ID modificado (cheat re-pack)`;
+        alertF(`[CRITICAL][CHEAT] ${name} via crash log`,
+            `${desc} · ${info.count} crash(es)/hang(s) registrados\nBundle ID: ${bundleID} (oficial é com.dts.freefireth)\nPath: ${(info.path || '?').substring(0, 100)}\nArquivos: ${info.files.slice(0,3).join(', ')}`);
+        alertCount++;
+    }
+
+    // JB confirmado via stack trace
+    for (const [target, info] of jbConfirmed) {
+        const markers = Array.from(info.markers).join(', ');
+        const fileList = Array.from(info.files).slice(0, 3).join(', ');
+        alertF(`[CRITICAL][JAILBREAK] Crash com artefatos JB em ${target}`,
+            `Indicadores no stack: ${markers} · ${info.count} crash(es) · arquivos: ${fileList}`);
+        alertCount++;
+    }
+
+    // Procs Apple suspeitos
+    for (const [proc, count] of apple1stParty) {
+        const susp = APPLE_SUSPICIOUS_PROCS[proc];
+        if (susp) {
+            alertF(`[${susp.sev}][CRASH] Apple proc suspeito: ${proc} (${count} crash${count > 1 ? 'es' : ''})`,
+                `${susp.desc} · arquivos: ${(byProc.get(proc).files || []).join(', ')}`);
+            alertCount++;
+        } else if (APPLE_SHELL_PROCS.has(proc) && count >= 5) {
+            warn(`[MEDIUM][CRASH] ${proc} crashou ${count}× — instabilidade do sistema`,
+                `Sistema com problema · pode ser tweak/JB · arquivos: ${(byProc.get(proc).files || []).join(', ')}`);
+            alertCount++;
+        }
+    }
+
+    // UIKit runloop hangs em FF (sem bundle modificado mas ainda assim hang) — info
+    if (runloopHangs > 0 && ffSuspicious.size === 0) {
+        warn(`[LOW][PERF] ${runloopHangs} hang log(s) UIKit-runloop registrados`,
+            `Free Fire travou no main thread · ${runloopHangFiles.slice(0,3).join(', ')} · pode ser cheat ou só perf`);
+    }
+
+    // Resumo
+    const totalCrashes = parsed.length;
+    if (alertCount === 0) {
+        ok(`Crashes Apple: ${totalCrashes} parseados · nenhum padrão suspeito`);
+    } else {
+        ok(`Crashes Apple: ${totalCrashes} parseados · ${alertCount} alert(s)/aviso(s) emitido(s)`);
+    }
+
+    _crashInfo = {
+        total: crashFiles.length,
+        parsed: totalCrashes,
+        suspicious: alertCount,
+        ffCheatBundles: Array.from(ffSuspicious.keys()),
+        kernelPanics,
+        runloopHangs,
+        jbInStack: jbConfirmed.size,
+        details: parsed.slice(0, 20),  // pra renderResults (caso queira mostrar)
+    };
+    return _crashInfo;
+}
+
 async function handleSysdiagnose(filesList, opts) {
     opts = opts || {};
     if (!opts.fromTarGz) showLoading('Lendo pasta sysdiagnose…');
@@ -5290,6 +5606,14 @@ async function handleSysdiagnose(filesList, opts) {
     // ─── PASS 11: HWID EXTRACTION + JAILBREAK DETECT (v4.4.15) ───
     await extractHWID(files);
     await detectJailbreakAggregated(files);
+
+    // ─── PASS 12: APPLE CRASH ANALYSIS (v4.4.18) ───
+    // Parse .ips/.panic em crashes_and_spins/ pra detectar:
+    //  · Free Fire com bundle ID modificado (FFH4X, etc) — IOC principal
+    //  · Stack trace com MobileSubstrate/Frida/var-jb (JB confirmado)
+    //  · Kernel panics (.panic ou bug_type=210)
+    //  · Crashes anormais em SpringBoard/backboardd/installd (tweak interference)
+    await analyzeAppleCrashes(files);
 
     // ─── Emite alerts agregados ───
     // v4.4.14: AGRUPA por cheatId.name (Pass 8 final emit). Profiles do mesmo
