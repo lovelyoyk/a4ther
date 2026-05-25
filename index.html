@@ -92,14 +92,18 @@
 
 html { font-size: 16px; -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
 
+/* v4.4.40: background fallback HARDCODED em html+body pra garantir
+   que NUNCA fica branco mesmo se var(--bg) falhar ou JS crashar */
+html { background: #07060d; min-height: 100vh; }
 body {
     font-family: var(--sans);
     font-feature-settings: 'cv02', 'cv11', 'ss01';
-    background:
+    background-color: #07060d;
+    background-image:
         radial-gradient(ellipse 90% 60% at 50% -10%, rgba(179, 136, 255, 0.16), transparent 60%),
         radial-gradient(ellipse 70% 50% at 100% 100%, rgba(122, 78, 255, 0.10), transparent 60%),
-        radial-gradient(ellipse 60% 50% at 0% 75%, rgba(149, 117, 255, 0.07), transparent 55%),
-        var(--bg);
+        radial-gradient(ellipse 60% 50% at 0% 75%, rgba(149, 117, 255, 0.07), transparent 55%);
+    min-height: 100vh;
     color: var(--text);
     line-height: 1.55;
     min-height: 100vh;
@@ -2358,7 +2362,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.39</span>
+        <span id="version">v4.4.40</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2740,7 +2744,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.39";
+const VERSION = "4.4.40";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -7224,70 +7228,82 @@ async function _doHandleSysdiagnose(filesList, opts) {
     // CADA batch (não a cada 100ms) — Chrome/Safari só pinta na yield, e
     // bloqueios sequenciais >5s disparam "page unresponsive". Yield curto após
     // cada batch garante que a UI repaint pelo menos 1× por batch.
-    // v4.4.34: yields mais agressivos pra evitar Page Unresponsive.
-    // Antes: batch 8 + yield apenas entre batches → blocava 200-400ms CPU
-    //        em sysdiagnoses grandes (1500+ arquivos), causando aviso de
-    //        unresponsive em ~10-15s.
-    // Agora: batch 4 + yield obrigatório a cada batch + yield extra se
-    //        algum arquivo demorar > 50ms em CPU (regex grande).
-    const PASS8_BATCH = 4;
-    let batchYield = performance.now();
-    for (let i = 0; i < allScanFiles.length; i += PASS8_BATCH) {
-        const batch = allScanFiles.slice(i, i + PASS8_BATCH);
-        // 4 file.text() em paralelo (browser usa thread separada por leitura)
+    // v4.4.40: yields ULTRA-agressivos + hard cap pra eliminar Page Unresponsive.
+    // Em sysdiagnoses muito grandes (5000+ arquivos) o Pass 8 ainda bloqueava.
+    // Agora: batch 2 + yield após CADA arquivo individual + hard cap 1500
+    // arquivos processados (se passar, warn e skip o resto).
+    const PASS8_HARD_CAP = 1500;
+    const filesToScan = allScanFiles.slice(0, PASS8_HARD_CAP);
+    if (allScanFiles.length > PASS8_HARD_CAP) {
+        warn(`[PERF] Sysdiagnose com ${allScanFiles.length} arquivos — limitado a ${PASS8_HARD_CAP} mais relevantes pra Pass 8 (evita travar)`);
+    }
+    const PASS8_BATCH = 2;
+    let lastYield = performance.now();
+    for (let i = 0; i < filesToScan.length; i += PASS8_BATCH) {
+        const batch = filesToScan.slice(i, i + PASS8_BATCH);
         const reads = await Promise.all(batch.map(async (f) => ({ f, raw: await readSafe(f) })));
-        // Process CPU sync com yields intermediários
         for (const { f, raw } of reads) {
             scanCount++;
-            _pass8ProcessFile(f, raw);
-            // Yield extra se processar > 80ms sem dar respiro
-            if (performance.now() - batchYield > 80) {
+            try {
+                _pass8ProcessFile(f, raw);
+            } catch (e) {
+                console.warn('[a4ther] Pass 8 file error:', e);
+            }
+            // Yield agressivo: a cada 60ms OU a cada arquivo (o que vier primeiro)
+            if (performance.now() - lastYield > 60) {
                 await new Promise(r => setTimeout(r, 0));
-                batchYield = performance.now();
+                lastYield = performance.now();
             }
         }
-        // UI feedback + yield obrigatório a cada batch
-        const pct = Math.round((scanCount / allScanFiles.length) * 100);
-        if (i % (PASS8_BATCH * 4) === 0) {
-            // Update do showLoading só a cada 16 arquivos (evita layout thrash)
-            showLoading(`Pass 8: ${scanCount}/${allScanFiles.length} (${pct}%)…`);
+        // UI update a cada 32 arquivos
+        if (i % 32 === 0) {
+            const pct = Math.round((scanCount / filesToScan.length) * 100);
+            showLoading(`Pass 8: ${scanCount}/${filesToScan.length} (${pct}%)…`);
         }
+        // Yield obrigatório entre batches
         await new Promise(r => setTimeout(r, 0));
-        batchYield = performance.now();
+        lastYield = performance.now();
     }
 
     const _pass8Ms = Math.round(performance.now() - _pass8Start);
     ok(`Pass 8: ${totalScanned} varridos · ${totalSkipped} skipados · ${_pass8Ms}ms`);
     console.log(`[a4ther] Pass 8 done in ${_pass8Ms}ms · ${totalScanned}/${allScanFiles.length} files`);
 
+    // v4.4.40: cada pass envolto em try/catch individual — se UM pass quebrar,
+    // os outros continuam. Antes uma exception em qualquer pass parava o scan
+    // inteiro e às vezes causava tela branca por falta de renderResults.
+    const _safePass = async (name, fn) => {
+        try { await fn(); }
+        catch (e) {
+            console.warn(`[a4ther] ${name} ERROR:`, e);
+            warn(`[PASS] ${name} falhou: ${String(e?.message || e).slice(0, 120)}`);
+        }
+        await new Promise(r => setTimeout(r, 0)); // yield entre passes
+    };
+
     // ─── PASS 9: PC PAIRING ───
-    scanPCPairings(files);
+    await _safePass('Pass 9 (PC Pairing)', () => scanPCPairings(files));
 
     // ─── PASS 10: INTEGRIDADE / TAMPER (7 sub-checks) ───
-    await checkSysdiagnoseIntegrity(files, byType, {
+    await _safePass('Pass 10 (Integrity)', () => checkSysdiagnoseIntegrity(files, byType, {
         gzipMtime: opts.gzipMtime,
         tarFilename: opts.tarFilename,
-    });
+    }));
 
     // ─── PASS 10b: Manual Wi-Fi Proxy ───
-    await checkManualProxy(files);
+    await _safePass('Pass 10b (Manual Proxy)', () => checkManualProxy(files));
 
     // ─── PASS 11: HWID EXTRACTION + JAILBREAK DETECT (v4.4.15) ───
-    await extractHWID(files);
-    await detectJailbreakAggregated(files);
+    await _safePass('Pass 11 (HWID)', () => extractHWID(files));
+    await _safePass('Pass 11 (Jailbreak)', () => detectJailbreakAggregated(files));
 
     // ─── PASS 12: APPLE CRASH ANALYSIS (v4.4.18) ───
-    // Parse .ips/.panic em crashes_and_spins/ pra detectar:
-    //  · Free Fire com bundle ID modificado (FFH4X, etc) — IOC principal
-    //  · Stack trace com MobileSubstrate/Frida/var-jb (JB confirmado)
-    //  · Kernel panics (.panic ou bug_type=210)
-    //  · Crashes anormais em SpringBoard/backboardd/installd (tweak interference)
-    await analyzeAppleCrashes(files);
+    await _safePass('Pass 12 (Apple Crashes)', () => analyzeAppleCrashes(files));
 
     // ─── PASS 13: FF LOG PRESENCE CHECK (v4.4.36) ───
-    // Equivalente "Log (0x7216)" do KellerSS — verifica se há referências
-    // ao Free Fire no sysdiagnose. Ausência = device sem FF ou adulterado.
-    _ffLogInfo = await checkFFLogPresence(files);
+    await _safePass('Pass 13 (FF Log Check)', async () => {
+        _ffLogInfo = await checkFFLogPresence(files);
+    });
 
     // ─── Emite alerts agregados ───
     // v4.4.14: AGRUPA por cheatId.name (Pass 8 final emit). Profiles do mesmo
