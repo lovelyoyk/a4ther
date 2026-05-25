@@ -1047,17 +1047,23 @@ a:hover { color: var(--text); }
     flex: 1; min-width: 140px;
     user-select: all; -webkit-user-select: all;
 }
-.bl-copy-btn {
+.bl-row-btns {
+    display: inline-flex; gap: 6px; flex-shrink: 0;
+}
+.bl-ban-btn, .bl-copy-btn {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 6px 12px; border-radius: 8px;
-    background: linear-gradient(135deg, rgba(179, 136, 255, 0.16), rgba(122, 78, 255, 0.06));
-    border: 1px solid rgba(179, 136, 255, 0.3);
-    color: var(--text);
     font-family: var(--mono); font-size: 11px; font-weight: 700;
     letter-spacing: 0.06em; text-transform: uppercase;
-    cursor: pointer;
+    cursor: pointer; text-decoration: none;
     transition: var(--transition);
     flex-shrink: 0;
+    border: 1px solid transparent;
+}
+.bl-copy-btn {
+    background: linear-gradient(135deg, rgba(179, 136, 255, 0.16), rgba(122, 78, 255, 0.06));
+    border-color: rgba(179, 136, 255, 0.3);
+    color: var(--text);
 }
 .bl-copy-btn:hover {
     background: linear-gradient(135deg, rgba(179, 136, 255, 0.28), rgba(122, 78, 255, 0.14));
@@ -1072,6 +1078,18 @@ a:hover { color: var(--text); }
 .bl-copy-btn.bl-copy-error {
     background: rgba(239, 68, 68, 0.18); border-color: rgba(239, 68, 68, 0.5);
     color: #ef4444;
+}
+.bl-ban-btn {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.08));
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #ef4444;
+}
+.bl-ban-btn:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.35), rgba(220, 38, 38, 0.18));
+    border-color: #ef4444;
+    color: #fff;
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.4);
+    transform: translateY(-1px);
 }
 .bl-helper-actions {
     display: flex; gap: 10px; flex-wrap: wrap;
@@ -1787,7 +1805,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.21</span>
+        <span id="version">v4.4.22</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2074,7 +2092,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.21";
+const VERSION = "4.4.22";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3264,9 +3282,30 @@ function renderDeviceCard(info, jbInfo, blResults) {
     // ════════════════════════════════════════════════════════════
     // v4.4.21: BLACKLIST HELPER — lista TODOS os IDs em formato cru
     // pronto pra copiar e colar em lspainel.com.br/dashboard/blacklist
+    // v4.4.22: botão "Banir" abre painel direto com prefill via URL
     // ════════════════════════════════════════════════════════════
     const keys = info._blacklistKeys || [];
     if (keys.length > 0) {
+        // Constrói motivo automático baseado nas detecções pra prefillar no painel
+        const motiveBits = [];
+        if (jbInfo && jbInfo.jailbroken && jbInfo.names.length > 0) {
+            motiveBits.push(`Jailbreak/Root: ${jbInfo.names.slice(0,3).join(', ')}`);
+        }
+        // Procura cheats nos alerts pra contextualizar (FFH4X, Zeex, etc)
+        const cheatNames = new Set();
+        for (const a of alerts) {
+            const m = (typeof a === 'string' ? a : a.msg) || '';
+            const cm = m.match(/\b(FFH4X|Zeex|Fatality|Luxe|Dash|XTREMO|Nextor|Aimbot|Wallhack|ESP|Mod Menu|Substrate|Frida|MobileSubstrate)\b/i);
+            if (cm) cheatNames.add(cm[1]);
+        }
+        if (cheatNames.size > 0) {
+            motiveBits.push(`Cheats detectados: ${Array.from(cheatNames).slice(0,3).join(', ')}`);
+        }
+        if (motiveBits.length === 0) {
+            motiveBits.push('Detectado pelo A4ther Scanner');
+        }
+        const autoMotive = motiveBits.join(' · ') + ` (v${VERSION})`;
+
         html += `
         <div class="device-section">
             <div class="device-section-header">
@@ -3277,11 +3316,13 @@ function renderDeviceCard(info, jbInfo, blResults) {
             <div class="bl-helper">
                 <div class="bl-helper-intro">
                     ${iconSVG('info', { size: 14 })}
-                    <span>Identificadores extraídos do dispositivo. Cole no painel <a href="https://lspainel.com.br/dashboard/blacklist" target="_blank" rel="noopener">lspainel.com.br/dashboard/blacklist</a> pra banir. <strong>Recomendado cadastrar pelo menos os 3 marcados em <span style="color:var(--cyan)">★</span></strong> — cobrem factory reset, troca de chip, etc.</span>
+                    <span><strong>Banir:</strong> clica no botão → abre o painel já logado com modal aberto e Serial preenchido, só confirmar. <strong>Copiar:</strong> só copia o valor pra colar manualmente. <strong>Recomendado banir pelo menos os 3 IDs marcados com <span style="color:var(--cyan)">★</span></strong> (cobrem factory reset, troca de chip).</span>
                 </div>
                 <div class="bl-helper-rows">`;
         for (const k of keys) {
             const id = 'bl-' + k.label.replace(/[^a-z0-9]/gi, '').toLowerCase();
+            // URL deep-link pro painel com prefill
+            const banUrl = `https://lspainel.com.br/dashboard/blacklist?prefill_serial=${encodeURIComponent(k.value)}&prefill_motivo=${encodeURIComponent(`[${k.label}] ${autoMotive}`)}`;
             html += `
                     <div class="bl-row ${k.recommended ? 'recommended' : ''}">
                         <div class="bl-row-meta">
@@ -3293,10 +3334,16 @@ function renderDeviceCard(info, jbInfo, blResults) {
                         </div>
                         <div class="bl-row-value-wrap">
                             <code class="bl-row-value" id="${id}-val">${escapeHTML(k.value)}</code>
-                            <button class="bl-copy-btn" type="button" data-copy-target="#${id}-val" title="Copiar ${escapeHTML(k.label)}">
-                                ${iconSVG('copy', { size: 14 })}
-                                <span class="bl-copy-text">Copiar</span>
-                            </button>
+                            <div class="bl-row-btns">
+                                <a class="bl-ban-btn" href="${banUrl}" target="_blank" rel="noopener" title="Abre o painel já logado com este ID preenchido — confirma e banido">
+                                    ${iconSVG('shield-alert', { size: 14 })}
+                                    <span>Banir</span>
+                                </a>
+                                <button class="bl-copy-btn" type="button" data-copy-target="#${id}-val" title="Copiar ${escapeHTML(k.label)}">
+                                    ${iconSVG('copy', { size: 14 })}
+                                    <span class="bl-copy-text">Copiar</span>
+                                </button>
+                            </div>
                         </div>
                     </div>`;
         }
