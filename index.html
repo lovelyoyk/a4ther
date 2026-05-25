@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.10</span>
+        <span id="version">v4.4.11</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1321,16 +1321,6 @@ footer a:hover {
                     <span class="dropdown-option-text">
                         <span class="dropdown-option-title">iOS · sysdiagnose <code>.tar.gz</code></span>
                         <span class="dropdown-option-desc">Recomendado — análise completa, sem extrair</span>
-                    </span>
-                    <svg class="dropdown-option-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </button>
-                <button class="dropdown-option" data-tab="sysdiag" role="option" type="button">
-                    <span class="dropdown-option-emoji">📁</span>
-                    <span class="dropdown-option-text">
-                        <span class="dropdown-option-title">iOS · sysdiagnose (pasta)</span>
-                        <span class="dropdown-option-desc">Pasta já extraída do <code>.tar.gz</code></span>
                     </span>
                     <svg class="dropdown-option-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1416,27 +1406,6 @@ footer a:hover {
                 <li>Joga FF por 5-10 minutos pra popular o log</li>
                 <li>Em <code>App Privacy Report</code> toque em <code>Save App Privacy Report</code></li>
                 <li>Compartilha o arquivo <code>.ndjson</code> pra cá (AirDrop, iCloud, etc.)</li>
-            </ol>
-        </div>
-    </div>
-
-    <!-- Sysdiagnose -->
-    <div class="tab-panel" data-panel="sysdiag">
-        <label class="dropzone" id="dz-sysdiag">
-            <span class="dropzone-icon">📁</span>
-            <div class="dropzone-text">Clique para selecionar a pasta sysdiagnose extraída</div>
-            <div class="dropzone-hint">Pasta deve conter <code>logs/</code>, <code>summaries/</code>, <code>ps.txt</code>, etc.</div>
-            <input type="file" id="file-sysdiag" webkitdirectory directory multiple />
-        </label>
-        <div class="help-box">
-            <strong>Como gerar:</strong>
-            <ol>
-                <li>iPhone: aperte <code>Vol+ + Vol- + Side</code> simultaneamente por 1 segundo</li>
-                <li>Aguarde ~5min (continue usando normalmente)</li>
-                <li><code>Settings → Privacy → Analytics &amp; Improvements → Analytics Data</code></li>
-                <li>Procure <code>sysdiagnose_AAAA.MM.DD_*.tar.gz</code>, compartilhe para Files</li>
-                <li>No Files: toque e segure → <code>Uncompress</code> (vira pasta)</li>
-                <li>Exporte a <strong>pasta inteira</strong> pra cá (AirDrop ou ZIP)</li>
             </ol>
         </div>
     </div>
@@ -1587,7 +1556,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.10";
+const VERSION = "4.4.11";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -4511,6 +4480,11 @@ async function handleSysdiagnose(filesList, opts) {
     const opaqueRe = /[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/g;
     const dnsRe = /(?:com|io)\.[a-zA-Z0-9._-]+\.(?:nextdns|controld|adguard|cloudflare|warp|opendns|quad9)[a-zA-Z0-9._-]*/gi;
     const ckRe = /\b(esign|feather|ksign|gbox|scarlet|trollstore|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|iosgods|filza|ifunbox|geranium|frida|cycript|substrate|libhooker|ffh4x|aimbot|wallhack|cheat\.menu|mod\.menu|injector)\b/gi;
+    // v4.4.11: hash sweep — captura hashes SHA256 puros (60-68 hex) com OU sem
+    // UUID suffix em QUALQUER arquivo da sysdiagnose. Necessário pra cruzar com
+    // CHEAT_PROFILE_PREFIXES (Zeex/Fatality/Luxe/Dash/XTREMO/proxies) cujos IDs
+    // têm prefixes curtos (06, 78f, bd32, etc) que só batem em hashes inteiros.
+    const hashSweepRe = /[a-f0-9]{60,68}(?:-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})?/gi;
 
     // Processa 1 arquivo (lê + corre regex passes + atualiza Maps globais)
     // Side-effects only: muta foundProfiles/foundBundles/etc e contadores.
@@ -4577,6 +4551,26 @@ async function handleSysdiagnose(filesList, opts) {
                 if (!arr.includes(sourceName)) arr.push(sourceName);
             }
         }
+
+        // 6) Hash sweep — captura SHA256 puros (60-68 hex) pra cross-check com
+        // CHEAT_PROFILE_PREFIXES (Zeex/Fatality/Luxe/Dash/XTREMO/proxies). Limita
+        // a 50 matches por arquivo pra evitar bloat em logs muito grandes.
+        hashSweepRe.lastIndex = 0;
+        let hm, hashCount = 0;
+        while ((hm = hashSweepRe.exec(strings)) !== null && hashCount < 50) {
+            const hash = hm[0];
+            if (seenInThisFile.has('h:' + hash)) continue;
+            seenInThisFile.add('h:' + hash);
+            // Só registra se identifyCheatProfile reconhecer o prefix — evita
+            // poluir foundProfiles com TODOS hashes SHA256 (que sysdiagnose tem
+            // milhares: certs, manifests, etc).
+            if (identifyCheatProfile(hash)) {
+                if (!foundProfiles.has(hash)) foundProfiles.set(hash, []);
+                const arr = foundProfiles.get(hash);
+                if (!arr.includes(sourceName)) arr.push(sourceName);
+                hashCount++;
+            }
+        }
     }
 
     // Loop em batches paralelos: I/O concorrente, CPU sequencial.
@@ -4621,14 +4615,23 @@ async function handleSysdiagnose(filesList, opts) {
     await extractHWID(files);
 
     // ─── Emite alerts agregados ───
+    // v4.4.11: cross-check com CHEAT_PROFILE_PREFIXES (Zeex/Fatality/Luxe/Dash/
+    // XTREMO/proxies). Antes o identifyCheatProfile só rodava no Pass 2.5
+    // (MCProfileEvents) — profiles capturados via Pass 8 (grep recursivo nos
+    // demais arquivos) passavam sem identificação do cheat conhecido.
     if (foundProfiles.size > 0) {
         ok(`◆ ${foundProfiles.size} profile identifiers encontrados via grep recursivo`);
         for (const [pid, sources] of foundProfiles) {
+            const cheatId = identifyCheatProfile(pid);
             const c = classifyBundle(pid);
-            if (c) {
-                alertF(`[${c.sev}] PROFILE: ${pid}`, `${c.desc} · fontes: ${sources.slice(0,3).join(', ')}${sources.length>3 ? ` +${sources.length-3}` : ''}`);
+            const srcStr = `fontes: ${sources.slice(0,3).join(', ')}${sources.length>3 ? ` +${sources.length-3}` : ''}`;
+            if (cheatId) {
+                alertF(`[${cheatId.sev}] CHEAT IDENTIFICADO → ${cheatId.name}: ${pid}`,
+                    `${cheatId.desc} · IOC match: ${cheatId.match} · ${srcStr}`);
+            } else if (c) {
+                alertF(`[${c.sev}] PROFILE: ${pid}`, `${c.desc} · ${srcStr}`);
             } else if (!pid.startsWith('com.apple.')) {
-                warn(`[MEDIUM] Profile não-catalogado: ${pid}`, `fontes: ${sources.slice(0,2).join(', ')}`);
+                warn(`[MEDIUM] Profile não-catalogado: ${pid}`, srcStr);
             }
         }
     }
@@ -4735,9 +4738,6 @@ $('#file-ndjson').addEventListener('change', e => {
 $('#file-profile').addEventListener('change', e => {
     if (e.target.files.length) handleProfile(e.target.files[0]);
 });
-$('#file-sysdiag').addEventListener('change', e => {
-    if (e.target.files.length) handleSysdiagnose(e.target.files);
-});
 $('#file-targz').addEventListener('change', e => {
     if (e.target.files.length) handleTarGz(e.target.files[0]);
 });
@@ -4765,7 +4765,6 @@ function wireDrop(dzId, handler, isFolder) {
 wireDrop('#dz-targz',   handleTarGz, false);
 wireDrop('#dz-ndjson',  handleNDJSON, false);
 wireDrop('#dz-profile', handleProfile, false);
-wireDrop('#dz-sysdiag', handleSysdiagnose, true);
 wireDrop('#dz-android', handleAndroid, false);
 
 // Actions
