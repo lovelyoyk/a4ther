@@ -1805,7 +1805,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.22</span>
+        <span id="version">v4.4.23</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1838,7 +1838,7 @@ footer a:hover {
 </header>
 
 <!-- Capability cards (v4.4.19) — sumário visual do que o scanner detecta -->
-<section class="capabilities" data-reveal="fade-up">
+<section class="capabilities">
     <div class="cap-card">
         <div class="cap-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="0.6" fill="currentColor"/></svg></div>
         <div class="cap-title">Cheat Detection</div>
@@ -2092,7 +2092,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.22";
+const VERSION = "4.4.23";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -6604,8 +6604,20 @@ $('#btn-share').addEventListener('click', async () => {
 })();
 
 (function setupReveals() {
-    if (!('IntersectionObserver' in window)) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // v4.4.23: failsafe — se IntersectionObserver não tá disponível OU se
+    // por algum motivo o callback não disparar (alguns browsers/iframes têm
+    // bugs), força .in-view em TUDO depois de 1.5s pra evitar conteúdo
+    // permanentemente invisível (opacity:0 do CSS [data-reveal]).
+    const forceAllVisible = () => {
+        document.querySelectorAll('[data-reveal]:not(.in-view)').forEach(el => {
+            el.classList.add('in-view');
+        });
+    };
+    if (!('IntersectionObserver' in window) ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        forceAllVisible();
+        return;
+    }
 
     const io = new IntersectionObserver((entries) => {
         for (const entry of entries) {
@@ -6625,6 +6637,11 @@ $('#btn-share').addEventListener('click', async () => {
         document.querySelectorAll('[data-reveal]:not(.in-view)').forEach(el => io.observe(el));
     }
     observeAll();
+
+    // Failsafe absoluto: após 1.5s, força .in-view em qualquer data-reveal
+    // que ainda não disparou (cobre bugs de IntersectionObserver em browsers
+    // mobile, WebView, ou quando o elemento foi criado depois do load).
+    setTimeout(forceAllVisible, 1500);
 
     /* Auto-anota seções/items dos resultados (criados dinamicamente)
        Stagger automático nos primeiros 10 items */
