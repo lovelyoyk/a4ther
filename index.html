@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.9</span>
+        <span id="version">v4.4.10</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1587,7 +1587,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.9";
+const VERSION = "4.4.10";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -4077,9 +4077,12 @@ async function handleSysdiagnose(filesList, opts) {
             // profile em 3-4 formatos: SHA256 puro (64 chars), SHA256-UUID (102 chars),
             // hash embedded em outra string. Aqui dedupe mantendo a versão MAIS
             // LONGA (mais informação) e mergeando os events.
+            // v4.4.10: yield UI a cada 50 outer iterations — dedup é O(N²), com
+            // 500+ profiles seria 250k iterações sync que travam o tab.
             {
                 const ids = Array.from(profileOps.keys()).sort((a, b) => b.length - a.length);
                 const canonical = new Map(); // id_curto → id_mais_longo
+                let _dedupOuter = 0;
                 for (const long of ids) {
                     if (canonical.has(long)) continue;
                     canonical.set(long, long);
@@ -4102,6 +4105,9 @@ async function handleSysdiagnose(filesList, opts) {
                             }
                             profileOps.delete(short);
                         }
+                    }
+                    if (++_dedupOuter % 50 === 0 && ids.length > 100) {
+                        await new Promise(r => setTimeout(r, 0));
                     }
                 }
             }
@@ -4574,27 +4580,25 @@ async function handleSysdiagnose(filesList, opts) {
     }
 
     // Loop em batches paralelos: I/O concorrente, CPU sequencial.
-    const PASS8_BATCH = 16;
-    let lastYield = performance.now();
+    // v4.4.10: batch 8 (era 16) — menos memória pico + processa mais rápido por
+    // batch (regex em 8 files demora ~30-80ms vs 60-160ms em 16). Yield UI APÓS
+    // CADA batch (não a cada 100ms) — Chrome/Safari só pinta na yield, e
+    // bloqueios sequenciais >5s disparam "page unresponsive". Yield curto após
+    // cada batch garante que a UI repaint pelo menos 1× por batch.
+    const PASS8_BATCH = 8;
     for (let i = 0; i < allScanFiles.length; i += PASS8_BATCH) {
         const batch = allScanFiles.slice(i, i + PASS8_BATCH);
-        // 16 file.text() em paralelo (browser usa thread separada por leitura)
+        // 8 file.text() em paralelo (browser usa thread separada por leitura)
         const reads = await Promise.all(batch.map(async (f) => ({ f, raw: await readSafe(f) })));
         // Process CPU sync (regex passes não bloqueiam por muito tempo cada)
         for (const { f, raw } of reads) {
             scanCount++;
             _pass8ProcessFile(f, raw);
         }
-        // UI feedback a cada 4 batches
-        if ((i / PASS8_BATCH) % 4 === 0) {
-            const pct = Math.round((scanCount / allScanFiles.length) * 100);
-            showLoading(`Pass 8: ${scanCount}/${allScanFiles.length} (${pct}%)…`);
-        }
-        // Yield UI a cada 100ms
-        if ((performance.now() - lastYield) > 100) {
-            await new Promise(r => setTimeout(r, 0));
-            lastYield = performance.now();
-        }
+        // UI feedback + yield obrigatório a cada batch (8 arquivos)
+        const pct = Math.round((scanCount / allScanFiles.length) * 100);
+        showLoading(`Pass 8: ${scanCount}/${allScanFiles.length} (${pct}%)…`);
+        await new Promise(r => setTimeout(r, 0));
     }
 
     const _pass8Ms = Math.round(performance.now() - _pass8Start);
