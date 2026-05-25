@@ -158,12 +158,23 @@ a:hover { color: var(--text); }
 /* SVG oculto — voltou FIGlet ASCII */
 .logo-svg { display: none; }
 
-/* FIGlet ASCII A4THER — drop-shadow glow (segue shape composta, não cada char) */
+/* ═══════════════════════════════════════════════════════════════
+   FIGlet A4THER — GLITCH/HACKER EFFECT (v4.4.27)
+   3 layers (base + RGB shift red/cyan) + jitter + scan lines + flicker
+   ═══════════════════════════════════════════════════════════════ */
+.glitch-wrap {
+    position: relative;
+    display: inline-block;
+    margin: 0 auto;
+    isolation: isolate;
+}
 .logo-art {
     color: var(--purple);
-    font-family: 'SF Mono', Menlo, 'JetBrains Mono', monospace;
+    /* JetBrains Mono priorizado — melhor render dos Box Drawing chars (█ ╗ ║)
+       com width consistente. SF Mono tem variação leve em algumas telas. */
+    font-family: 'JetBrains Mono', 'SF Mono', Menlo, 'Cascadia Code', ui-monospace, monospace;
     font-size: clamp(0.36rem, 1.55vw, 0.78rem);
-    font-weight: normal;
+    font-weight: 700;
     line-height: 1.1;
     white-space: pre;
     display: inline-block;
@@ -174,22 +185,115 @@ a:hover { color: var(--text); }
         drop-shadow(0 0 1.5px var(--purple))
         drop-shadow(0 0 8px var(--purple-glow))
         drop-shadow(0 0 22px rgba(179, 136, 255, 0.35));
-    animation: glow-pulse 4.5s ease-in-out infinite;
     user-select: none;
+    /* Jitter sutil + flicker aleatório */
+    animation: hacker-jitter 6s steps(1) infinite, hacker-flicker 4.2s steps(1) infinite;
 }
-@keyframes glow-pulse {
-    0%, 100% {
-        filter:
-            drop-shadow(0 0 1.5px var(--purple))
-            drop-shadow(0 0 8px var(--purple-glow))
-            drop-shadow(0 0 22px rgba(179, 136, 255, 0.35));
+/* RGB split layers — sobrepostos com blend mode */
+.glitch-layer {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    user-select: none;
+    mix-blend-mode: screen;
+    opacity: 0;
+    filter: none;
+    /* Mesma config tipográfica que a base — evita misalignment */
+    font-family: 'JetBrains Mono', 'SF Mono', Menlo, 'Cascadia Code', ui-monospace, monospace;
+    font-size: clamp(0.36rem, 1.55vw, 0.78rem);
+    font-weight: 700;
+    line-height: 1.1;
+    white-space: pre;
+    text-align: left;
+    margin: 0;
+}
+.glitch-r { color: #ff2864; animation: hacker-glitch-r 3.6s steps(1) infinite; }
+.glitch-c { color: #00f0ff; animation: hacker-glitch-c 3.6s steps(1) infinite; }
+
+@keyframes hacker-jitter {
+    0%, 90%, 100% { transform: translate(0, 0); }
+    91% { transform: translate(1px, -1px); }
+    92% { transform: translate(-1px, 1px); }
+    93% { transform: translate(0, 0); }
+    94% { transform: translate(2px, 0); }
+    95% { transform: translate(0, 1px); }
+    96% { transform: translate(-1px, 0); }
+}
+@keyframes hacker-flicker {
+    0%, 100% { opacity: 1; }
+    18%      { opacity: 0.92; }
+    18.5%    { opacity: 1; }
+    47%      { opacity: 0.88; }
+    47.4%    { opacity: 1; }
+    73%      { opacity: 0.95; }
+    73.5%    { opacity: 1; }
+    98%      { opacity: 0.6; }
+    98.6%    { opacity: 1; }
+}
+/* RED channel — desloca pra esquerda, aparece em bandas via clip-path */
+@keyframes hacker-glitch-r {
+    0%, 9%, 26%, 41%, 67%, 100% {
+        opacity: 0; clip-path: inset(0 0 100% 0); transform: translate(0, 0);
     }
-    50% {
-        filter:
-            drop-shadow(0 0 2px var(--purple))
-            drop-shadow(0 0 12px var(--purple-glow))
-            drop-shadow(0 0 32px rgba(179, 136, 255, 0.5));
+    10% { opacity: 0.85; clip-path: inset(15% 0 70% 0); transform: translate(-3px, 0); }
+    14% { opacity: 0.7;  clip-path: inset(55% 0 25% 0); transform: translate(-2px, 1px); }
+    27% { opacity: 0.8;  clip-path: inset(35% 0 40% 0); transform: translate(-4px, 0); }
+    31% { opacity: 0.6;  clip-path: inset(70% 0 10% 0); transform: translate(-2px, 0); }
+    42% { opacity: 0.75; clip-path: inset(25% 0 50% 0); transform: translate(-3px, -1px); }
+    68% { opacity: 0.8;  clip-path: inset(50% 0 30% 0); transform: translate(-3px, 0); }
+}
+/* CYAN channel — desloca pra direita, bandas opostas */
+@keyframes hacker-glitch-c {
+    0%, 9%, 26%, 41%, 67%, 100% {
+        opacity: 0; clip-path: inset(0 0 100% 0); transform: translate(0, 0);
     }
+    10% { opacity: 0.85; clip-path: inset(15% 0 70% 0); transform: translate(3px, 0); }
+    14% { opacity: 0.7;  clip-path: inset(55% 0 25% 0); transform: translate(2px, -1px); }
+    27% { opacity: 0.8;  clip-path: inset(35% 0 40% 0); transform: translate(4px, 0); }
+    31% { opacity: 0.6;  clip-path: inset(70% 0 10% 0); transform: translate(2px, 0); }
+    42% { opacity: 0.75; clip-path: inset(25% 0 50% 0); transform: translate(3px, 1px); }
+    68% { opacity: 0.8;  clip-path: inset(50% 0 30% 0); transform: translate(3px, 0); }
+}
+/* Scan lines + CRT vignette sobre o logo */
+.glitch-wrap::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    pointer-events: none;
+    background:
+        repeating-linear-gradient(
+            to bottom,
+            transparent 0,
+            transparent 2px,
+            rgba(0, 0, 0, 0.18) 2px,
+            rgba(0, 0, 0, 0.18) 3px
+        );
+    mix-blend-mode: multiply;
+    opacity: 0.5;
+    z-index: 1;
+}
+/* Scan line atravessando (horizontal sweep ocasional) */
+.glitch-wrap::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 14%;
+    background: linear-gradient(to bottom,
+        transparent,
+        rgba(179, 136, 255, 0.14) 40%,
+        rgba(179, 136, 255, 0.28) 50%,
+        rgba(179, 136, 255, 0.14) 60%,
+        transparent);
+    pointer-events: none;
+    z-index: 2;
+    animation: hacker-scanline 5s linear infinite;
+}
+@keyframes hacker-scanline {
+    0%   { transform: translateY(-100%); opacity: 0; }
+    8%   { opacity: 0.9; }
+    50%  { transform: translateY(400%); opacity: 0.9; }
+    60%  { opacity: 0; }
+    100% { transform: translateY(400%); opacity: 0; }
 }
 
 /* logo-text só como fallback semântico para a11y — visualmente oculto */
@@ -1990,17 +2094,31 @@ footer a:hover {
 
 <!-- ─── HERO A4THER ─── -->
 <header class="hero">
-    <pre class="logo-art" aria-hidden="true">    █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗
-   ██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗
-   ███████║███████║   ██║   ███████║█████╗  ██████╔╝
-   ██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗
-   ██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║
-   ╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</pre>
+    <div class="glitch-wrap">
+        <pre class="logo-art" aria-hidden="true"> █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗
+██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗
+███████║███████║   ██║   ███████║█████╗  ██████╔╝
+██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗
+██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║
+╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</pre>
+        <pre class="logo-art glitch-layer glitch-r" aria-hidden="true"> █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗
+██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗
+███████║███████║   ██║   ███████║█████╗  ██████╔╝
+██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗
+██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║
+╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</pre>
+        <pre class="logo-art glitch-layer glitch-c" aria-hidden="true"> █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗
+██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗
+███████║███████║   ██║   ███████║█████╗  ██████╔╝
+██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗
+██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║
+╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝</pre>
+    </div>
     <h1 class="logo-text">A4THER</h1>
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.26</span>
+        <span id="version">v4.4.27</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2257,7 +2375,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.26";
+const VERSION = "4.4.27";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
