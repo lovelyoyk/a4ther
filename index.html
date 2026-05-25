@@ -786,21 +786,70 @@ a:hover { color: var(--text); }
 /* ═══════════════════════════════════════════════════════════════
    LOADING (v4.4.26) — glassmorphism + triple spinner + glow + cursor
    ═══════════════════════════════════════════════════════════════ */
-.loading {
-    position: relative;
-    text-align: center;
-    padding: 4rem 2rem 4.5rem;
-    margin: 2rem auto;
-    max-width: 560px;
-    background: linear-gradient(180deg, rgba(22, 18, 40, 0.6) 0%, rgba(14, 10, 26, 0.7) 100%);
-    border: 1px solid rgba(179, 136, 255, 0.18);
-    border-radius: 22px;
-    backdrop-filter: blur(32px) saturate(180%);
-    -webkit-backdrop-filter: blur(32px) saturate(180%);
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 80px rgba(179, 136, 255, 0.08);
-    overflow: hidden;
-    animation: loading-in 500ms var(--ease) both;
+/* v4.4.37: loader como OVERLAY fixed em cima de TUDO (incluindo dropdown).
+   Backdrop semi-transparente bloqueia interação atrás. Conteúdo do loader
+   (spinner + texto + progress) fica num card centralizado. */
+.loading-backdrop {
+    /* não usado — backdrop é feito direto no .loading via background */
 }
+.loading {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    /* Backdrop blur escuro cobrindo tudo */
+    background: rgba(7, 6, 13, 0.78);
+    backdrop-filter: blur(14px) saturate(150%);
+    -webkit-backdrop-filter: blur(14px) saturate(150%);
+    /* Card interno simulado via box-shadow inset NÃO — fica direto via children */
+    animation: loading-fade-in 280ms var(--ease) both;
+}
+@keyframes loading-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+/* Texto e spinner direto no centro com card visual via "wrapper" semântico */
+.loading > .spinner-glow,
+.loading > .spinner,
+.loading > .loading-text,
+.loading > .loading-hint,
+.loading > .loading-progress {
+    position: relative;
+    z-index: 2;
+}
+/* Card de fundo via ::before (vidro) */
+.loading::before {
+    content: '';
+    position: absolute;
+    width: min(560px, 92vw);
+    max-width: 560px;
+    height: auto;
+    min-height: 380px;
+    background: linear-gradient(180deg, rgba(22, 18, 40, 0.85) 0%, rgba(14, 10, 26, 0.92) 100%);
+    border: 1px solid rgba(179, 136, 255, 0.22);
+    border-radius: 22px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6), 0 0 80px rgba(179, 136, 255, 0.12);
+    z-index: 0;
+    pointer-events: none;
+}
+/* Scan line no topo do card */
+.loading::after {
+    content: '';
+    position: absolute;
+    width: min(560px, 92vw);
+    height: 1px;
+    top: calc(50% - 190px);
+    background: linear-gradient(90deg, transparent, rgba(179, 136, 255, 0.7), transparent);
+    animation: loading-scan 2s linear infinite;
+    z-index: 1;
+    pointer-events: none;
+}
+/* Bloquear scroll do body quando loading ativo */
+body.is-loading { overflow: hidden; }
 @keyframes loading-in {
     from { opacity: 0; transform: scale(0.96) translateY(20px); }
     to   { opacity: 1; transform: scale(1) translateY(0); }
@@ -2228,7 +2277,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.36</span>
+        <span id="version">v4.4.37</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2485,7 +2534,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.36";
+const VERSION = "4.4.37";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3468,15 +3517,24 @@ function renderItem(item, color) {
 }
 
 function showLoading(text) {
+    // v4.4.37: loader como OVERLAY em cima do uploadSection (não esconde
+    // o dropdown nem nada). Mantém o conteúdo visível atrás do backdrop.
     $('#loading').classList.remove('hidden');
+    document.body.classList.add('is-loading');
     $('#loadingText').textContent = text || 'Analisando…';
-    $('#loadingProgress').hidden = true;
-    $('#loadingWarn').hidden = true;
+    // Mantém estado anterior dos sub-elementos (progress/warn) se já configurados
+    if (!$('#loadingProgress').hidden && $('#loadingProgress').hasAttribute('data-keep')) {
+        // não toca em loadingProgress
+    } else {
+        $('#loadingProgress').hidden = true;
+        $('#loadingWarn').hidden = true;
+    }
     $('#results').classList.add('hidden');
     $('#actions').classList.add('hidden');
 }
 function hideLoading() {
     $('#loading').classList.add('hidden');
+    document.body.classList.remove('is-loading');
     $('#loadingProgress').hidden = true;
     $('#loadingWarn').hidden = true;
 }
@@ -5973,6 +6031,33 @@ async function handleSysdiagnose(filesList, opts) {
     if (!opts.fromTarGz) showLoading('Lendo pasta sysdiagnose…');
     if (!opts.fromTarGz) reset();
 
+    // v4.4.37: try/catch GLOBAL — garante que renderResults SEMPRE roda,
+    // mesmo se algum pass quebrar com exceção. Antes: exceção em qualquer
+    // pass parava tudo, deixava o loader visível ou (pior) tela preta sem
+    // resultado. Agora: exceção é capturada, alertF emite o erro, e o
+    // finally garante render do que conseguimos extrair até ali.
+    try {
+        await _doHandleSysdiagnose(filesList, opts);
+    } catch (e) {
+        console.error('[a4ther] handleSysdiagnose ERROR:', e);
+        alertF(`[CRITICAL] Erro durante scan: ${String(e?.message || e).slice(0, 200)}`,
+               'Veja o console pra stack trace. Renderizando resultados parciais.');
+        try {
+            renderResults({ mode: opts.fromTarGz ? 'sysdiagnose-targz' : 'sysdiagnose-folder', error: true });
+        } catch (e2) {
+            console.error('[a4ther] renderResults ALSO FAILED:', e2);
+            hideLoading();
+            const elResults = $('#results');
+            if (elResults) {
+                elResults.classList.remove('hidden');
+                elResults.innerHTML = `<div class="verdict red"><div class="verdict-title">ERRO</div>` +
+                    `<div class="verdict-subtitle">${String(e?.message || e).slice(0, 200)}</div></div>`;
+            }
+        }
+    }
+}
+
+async function _doHandleSysdiagnose(filesList, opts) {
     const _scanStartedAt = performance.now();
     // v4.4.9: yield UI ANTES do Array.from — em iOS Safari, FileList com 1500+
     // entries leva ~500ms só pra materializar; deixa o spinner aparecer primeiro.
