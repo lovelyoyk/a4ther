@@ -2744,7 +2744,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.41";
+const VERSION = "4.4.42";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -4018,9 +4018,25 @@ function renderDeviceCard(info, jbInfo, blResults) {
     // v4.4.21: BLACKLIST HELPER — lista TODOS os IDs em formato cru
     // pronto pra copiar e colar em lspainel.com.br/dashboard/blacklist
     // v4.4.22: botão "Banir" abre painel direto com prefill via URL
+    // v4.4.42: se _noIdentifiers, mostra aviso explicativo em vez de lista vazia
     // ════════════════════════════════════════════════════════════
     const keys = info._blacklistKeys || [];
-    if (keys.length > 0) {
+    if (info._noIdentifiers && keys.length === 0) {
+        html += `
+        <div class="device-section">
+            <div class="device-section-header">
+                <div class="device-section-icon">${iconSVG('list-checks', { size: 20 })}</div>
+                <span class="device-section-title">Cadastrar na Blacklist</span>
+                <span class="device-section-line"></span>
+            </div>
+            <div class="bl-helper">
+                <div class="bl-helper-intro" style="border-bottom:none; background:rgba(251, 191, 36, 0.05);">
+                    ${iconSVG('alert-triangle', { size: 14 })}
+                    <span><strong style="color:#fbbf24;">Sysdiagnose incompleto:</strong> os arquivos <code>remotectl_dumpstate.txt</code> e <code>SystemVersion.plist</code> não foram encontrados, então os IDs do device (Serial, UDID, ECID) não puderam ser extraídos. Verifique se o sysdiagnose foi gerado em <em>Settings → Privacy → Analytics → Analytics Data → "sysdiagnose_…"</em> e enviado <strong>completo</strong> (.tar.gz original). Se sim, mas mesmo assim falhou, o device pode estar usando build modificada que oculta esses arquivos.</span>
+                </div>
+            </div>
+        </div>`;
+    } else if (keys.length > 0) {
         // Constrói motivo automático baseado nas detecções pra prefillar no painel
         const motiveBits = [];
         if (jbInfo && jbInfo.jailbroken && jbInfo.names.length > 0) {
@@ -4200,9 +4216,18 @@ function renderResults(stats) {
 
     // ════════════════════════════════════════════════════════════
     // v4.4.17: DEVICE INFO CARD — só renderiza quando temos dados reais
-    // extraídos do sysdiagnose (extractHWID populou _deviceInfo).
+    // v4.4.42: relaxa a condição — qualquer campo de identificação serve.
+    // Antes o card iOS sumia inteiro se faltassem serial+udid+modelName,
+    // mesmo tendo productType / iosVersion / buildVersion / region.
     // ════════════════════════════════════════════════════════════
-    if (_deviceInfo && (_deviceInfo.serial || _deviceInfo.udid || _deviceInfo.modelName)) {
+    const _hasAnyDeviceInfo = _deviceInfo && (
+        _deviceInfo.serial || _deviceInfo.udid || _deviceInfo.ecid ||
+        _deviceInfo.hwidHash || _deviceInfo.modelName || _deviceInfo.productType ||
+        _deviceInfo.iosVersion || _deviceInfo.buildVersion || _deviceInfo.regionCode ||
+        (_deviceInfo._blacklistKeys && _deviceInfo._blacklistKeys.length > 0) ||
+        (_deviceInfo._extras && Object.keys(_deviceInfo._extras).length > 0)
+    );
+    if (_hasAnyDeviceInfo) {
         html += renderDeviceCard(_deviceInfo, _jailbreakInfo, _blacklistResults);
     }
 
@@ -4685,16 +4710,18 @@ async function handleAndroid(file) {
     // v4.4.21: blacklistKeys = TODOS os IDs em formato cru completo, prontos
     // pra copiar e colar em lspainel.com.br/dashboard/blacklist.
     // v4.4.41: blinda contra strings de erro do cmd settings (defesa em profundidade)
+    // v4.4.42: TODOS os IDs viram recommended:true (★) — user banir todos é seguro,
+    // cada ID cobre um vetor de bypass diferente (factory reset, troca de chip, etc).
     const _validId = (v) => v && typeof v === 'string' && v.trim() && !_isErrorValue(v);
     const blacklistKeys = [];
-    if (_validId(devHwid))      blacklistKeys.push({ label: 'HWID SHA-256',  value: devHwid,      recommended: true,  why: 'identificador composto (8 fontes) — mais robusto' });
-    if (_validId(devSerial))    blacklistKeys.push({ label: 'Serial',        value: devSerial,    recommended: true,  why: 'gravado em hardware — só muda trocando placa' });
-    if (_validId(devMac))       blacklistKeys.push({ label: 'MAC wlan0',     value: devMac,       recommended: true,  why: 'gravado no chip Wi-Fi — sobrevive a factory reset' });
-    if (_validId(devHwidMd5))   blacklistKeys.push({ label: 'HWID MD5',      value: devHwidMd5,   recommended: false, why: 'fallback do HWID (Android ID + Serial + Boot)' });
-    if (_validId(devAndroidId)) blacklistKeys.push({ label: 'Android ID',    value: devAndroidId, recommended: false, why: 'regenerado em factory reset (menos confiável)' });
-    if (_validId(devBtMac))     blacklistKeys.push({ label: 'Bluetooth MAC', value: devBtMac,     recommended: false, why: 'gravado no chip BT — alternativa robusta' });
+    if (_validId(devHwid))      blacklistKeys.push({ label: 'HWID SHA-256',  value: devHwid,      recommended: true, why: 'identificador composto (8 fontes) — mais robusto' });
+    if (_validId(devSerial))    blacklistKeys.push({ label: 'Serial',        value: devSerial,    recommended: true, why: 'gravado em hardware — só muda trocando placa' });
+    if (_validId(devMac))       blacklistKeys.push({ label: 'MAC wlan0',     value: devMac,       recommended: true, why: 'gravado no chip Wi-Fi — sobrevive a factory reset' });
+    if (_validId(devHwidMd5))   blacklistKeys.push({ label: 'HWID MD5',      value: devHwidMd5,   recommended: true, why: 'fallback do HWID (Android ID + Serial + Boot)' });
+    if (_validId(devAndroidId)) blacklistKeys.push({ label: 'Android ID',    value: devAndroidId, recommended: true, why: 'regenerado em factory reset — banir junto bloqueia reinstall' });
+    if (_validId(devBtMac))     blacklistKeys.push({ label: 'Bluetooth MAC', value: devBtMac,     recommended: true, why: 'gravado no chip BT — alternativa robusta' });
     if (_validId(devFingerprint) && devFingerprint.length > 10)
-        blacklistKeys.push({ label: 'Fingerprint',  value: devFingerprint, recommended: false, why: 'string única da build instalada' });
+        blacklistKeys.push({ label: 'Fingerprint',  value: devFingerprint, recommended: true, why: 'string única da build instalada — sobrevive até factory reset' });
 
     // v4.4.41: helper pra retornar null em vez de string de erro do cmd settings
     const _clean = (v) => _validId(v) ? v : null;
@@ -5655,30 +5682,53 @@ async function extractHWID(files) {
     let productName = null;   // "iPhone OS"
     let productClass = null;  // "iPhone"
 
+    // v4.4.42: helpers pra extrair de qualquer arquivo (não só dumpstate)
+    // Sysdiagnoses minimal (.tar.gz curado, dump parcial, etc) podem não ter
+    // remotectl_dumpstate.txt — então fazemos sweep dos campos em outros plists
+    // e logs que costumam carregar IDs Apple.
+    const _pull = (raw, re, current) => {
+        if (current) return current;
+        const m = raw.match(re);
+        return m ? m[1] : current;
+    };
+
     for (const f of files) {
         const name = (f.webkitRelativePath || f.name).toLowerCase();
         // remotectl_dumpstate.txt → serial, UDID, ECID, ProductType, BuildVersion
         if (name.endsWith('remotectl_dumpstate.txt')) {
             const raw = await readSafe(f);
             if (raw) {
-                const sm = raw.match(/SerialNumber[\s:=]+([A-Z0-9]+)/i);
-                if (sm) serial = sm[1];
-                const um = raw.match(/UniqueDeviceID[\s:=]+([A-Fa-f0-9-]+)/i) ||
-                           raw.match(/UDID[\s:=]+([A-Fa-f0-9-]+)/i);
-                if (um) udid = um[1];
-                const em = raw.match(/ECID[\s:=]+([A-Fa-f0-9x]+)/i);
-                if (em) ecid = em[1];
-                const pm = raw.match(/ProductType[\s:=]+([A-Za-z0-9,]+)/i);
-                if (pm) productType = pm[1];
-                const bm = raw.match(/BuildVersion[\s:=]+([A-Z0-9]+)/i);
-                if (bm) buildVersion = bm[1];
+                serial      = _pull(raw, /SerialNumber[\s:=]+([A-Z0-9]+)/i, serial);
+                udid        = _pull(raw, /UniqueDeviceID[\s:=]+([A-Fa-f0-9-]+)/i, udid) ||
+                              _pull(raw, /UDID[\s:=]+([A-Fa-f0-9-]+)/i, udid);
+                ecid        = _pull(raw, /ECID[\s:=]+([A-Fa-f0-9x]+)/i, ecid);
+                productType = _pull(raw, /ProductType[\s:=]+([A-Za-z0-9,]+)/i, productType);
+                buildVersion= _pull(raw, /BuildVersion[\s:=]+([A-Z0-9]+)/i, buildVersion);
                 const rm = raw.match(/RegionInfo[\s:=]+([A-Z]+\/[A-Z]+)/i);
-                if (rm) regionCode = rm[1].split('/')[0];
+                if (rm && !regionCode) regionCode = rm[1].split('/')[0];
                 // v4.4.34: novos campos do dumpstate
-                const sim = raw.match(/SystemImage(?:ID|UUID)[\s:=]+([A-F0-9-]{20,})/i);
-                if (sim) sysImageId = sim[1];
-                const pcm = raw.match(/ProductClass[\s:=]+([A-Za-z]+)/i);
-                if (pcm) productClass = pcm[1];
+                sysImageId   = _pull(raw, /SystemImage(?:ID|UUID)[\s:=]+([A-F0-9-]{20,})/i, sysImageId);
+                productClass = _pull(raw, /ProductClass[\s:=]+([A-Za-z]+)/i, productClass);
+            }
+        }
+        // v4.4.42: fallback genérico pra QUALQUER arquivo (.plist, .log, .txt) que
+        // possa carregar SerialNumber/UDID/ECID — sysdiagnoses minimal não têm
+        // remotectl_dumpstate.txt mas guardam isso em backups parciais, lockdown
+        // plists, ou logs do MobileBackup.
+        if (!serial || !udid || !ecid) {
+            if (name.endsWith('.plist') || name.endsWith('.txt') || name.endsWith('.log') ||
+                name.endsWith('.xml') || name.includes('lockdown') || name.includes('activation')) {
+                const raw = await readSafe(f);
+                if (raw && raw.length < 2_000_000) { // skip arquivos muito grandes
+                    serial = _pull(raw, /<key>SerialNumber<\/key>\s*<string>([A-Z0-9]{8,16})<\/string>/i, serial) ||
+                             _pull(raw, /\bSerialNumber["']?\s*[=:]\s*["']?([A-Z0-9]{8,16})\b/i, serial);
+                    udid   = _pull(raw, /<key>(?:UniqueDeviceID|UDID)<\/key>\s*<string>([A-Fa-f0-9-]{20,45})<\/string>/i, udid) ||
+                             _pull(raw, /\b(?:UniqueDeviceID|UDID)["']?\s*[=:]\s*["']?([A-Fa-f0-9-]{20,45})\b/i, udid);
+                    ecid   = _pull(raw, /<key>(?:UniqueChipID|ECID)<\/key>\s*<(?:integer|string)>([A-Fa-f0-9x]+)</i, ecid) ||
+                             _pull(raw, /\bECID["']?\s*[=:]\s*["']?([A-Fa-f0-9x]{8,20})\b/i, ecid);
+                    productType  = _pull(raw, /<key>ProductType<\/key>\s*<string>([A-Za-z0-9,]+)<\/string>/i, productType);
+                    productClass = _pull(raw, /<key>ProductClass<\/key>\s*<string>([A-Za-z]+)<\/string>/i, productClass);
+                }
             }
         }
         // SystemVersion.plist → ProductVersion, BuildVersion, ProductName
@@ -5809,11 +5859,12 @@ async function extractHWID(files) {
     }
 
     // v4.4.21: blacklistKeys pra Blacklist Helper UI
+    // v4.4.42: TODOS recommended:true (★) — cada ID cobre vetor diferente, banir os 4 é seguro
     const blacklistKeys = [];
-    if (serial)   blacklistKeys.push({ label: 'Serial',       value: serial,   recommended: true,  why: 'gravado em hardware iOS — à prova de bypass via software' });
-    if (udid)     blacklistKeys.push({ label: 'UDID',         value: udid,     recommended: true,  why: 'identificador único do device — não muda em restore' });
-    if (hwidHash) blacklistKeys.push({ label: 'HWID SHA-256', value: hwidHash, recommended: true,  why: 'hash composto (Serial+UDID+ECID) — alternativa universal' });
-    if (ecid)     blacklistKeys.push({ label: 'ECID',         value: ecid,     recommended: false, why: 'Exclusive Chip ID — gravado em silício' });
+    if (serial)   blacklistKeys.push({ label: 'Serial',       value: serial,   recommended: true, why: 'gravado em hardware iOS — à prova de bypass via software' });
+    if (udid)     blacklistKeys.push({ label: 'UDID',         value: udid,     recommended: true, why: 'identificador único do device — não muda em restore' });
+    if (hwidHash) blacklistKeys.push({ label: 'HWID SHA-256', value: hwidHash, recommended: true, why: 'hash composto (Serial+UDID+ECID) — alternativa universal' });
+    if (ecid)     blacklistKeys.push({ label: 'ECID',         value: ecid,     recommended: true, why: 'Exclusive Chip ID — gravado em silício, impossível spoofar' });
 
     // v4.4.34: _extras com campos extras pra mostrar no Device Card iOS
     // (mesmo padrão do Android — Build ID, Sys Image, Product Name, etc)
@@ -7355,6 +7406,21 @@ async function _doHandleSysdiagnose(filesList, opts) {
 
     // ─── PASS 11: HWID EXTRACTION + JAILBREAK DETECT (v4.4.15) ───
     await _safePass('Pass 11 (HWID)', () => extractHWID(files));
+    // v4.4.42: garante _deviceInfo SEMPRE populado pra iOS — se extractHWID explodiu
+    // OU se o sysdiagnose não tinha remotectl_dumpstate/SystemVersion, ainda
+    // renderiza o card com placeholder + explicação. Antes o card sumia inteiro
+    // (Device Info, Jailbreak, HWID, Blacklist Helper) — agora aparece com aviso.
+    if (!_deviceInfo) {
+        _deviceInfo = {
+            serial: null, udid: null, ecid: null, hwidHash: null,
+            productType: null, modelName: null,
+            iosVersion: null, buildVersion: null,
+            region: null, regionCode: null, appStoreCountry: null,
+            _platform: 'ios', _blacklistKeys: [], _extras: null,
+            _noIdentifiers: true, // flag pro card mostrar aviso
+        };
+        warn('Sysdiagnose sem remotectl_dumpstate.txt nem SystemVersion.plist — IDs do device não puderam ser extraídos. Card mostra estrutura mas sem IDs pra banir.');
+    }
     await _safePass('Pass 11 (Jailbreak)', () => detectJailbreakAggregated(files));
 
     // ─── PASS 12: APPLE CRASH ANALYSIS (v4.4.18) ───
