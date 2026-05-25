@@ -2198,7 +2198,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.34</span>
+        <span id="version">v4.4.35</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2455,7 +2455,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.34";
+const VERSION = "4.4.35";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3120,32 +3120,30 @@ const KNOWN_CHEAT_IPS = {
 // 1/256 = 0.4% chance random). Lista mantida porque o user confirmou que esses
 // prefixes específicos NUNCA aparecem em profiles legítimos no ecossistema
 // observado. Greedy match (mais longo wins) ordena pra precisão.
+// v4.4.35: tabela de prefixes de cheats conhecidos.
+// REMOVIDOS todos os prefixes ≤ 2 chars — tinham 1/256 = ~0.4% chance
+// de bater em qualquer hash hex aleatório, gerando ~20 falsos positivos
+// por sysdiagnose (que tem milhares de hashes). Mantidos apenas prefixes
+// ≥ 3 chars (1/4096 = 0.024% FP rate) e ≥ 4 chars (1/65536).
+// Cheaters conhecidos com prefix curto demais (06, b0, 2c, 9d, b9, a4,
+// 84, 7d, 0d) agora só detectam via outros sinais (bundle ID, domain,
+// keyword) — ainda funciona, só não via prefix-only match.
 const CHEAT_PROFILE_PREFIXES = {
-    // Zeex free/vip
+    // Zeex free/vip (3-char prefixes)
     "78f":  { name: "Zeex (free/vip)",      sev: "CRITICAL", desc: "Cheat panel Zeex — proxy conhecido (free/vip variants)" },
     "d14":  { name: "Zeex (free/vip)",      sev: "CRITICAL", desc: "Cheat panel Zeex — proxy conhecido (free/vip variants)" },
     "140":  { name: "Zeex (free/vip)",      sev: "CRITICAL", desc: "Cheat panel Zeex — proxy conhecido (free/vip variants)" },
-    "06":   { name: "Zeex (free/vip)",      sev: "CRITICAL", desc: "Cheat panel Zeex — proxy conhecido (free/vip variants)" },
     // Fatality bypass
     "1ea":  { name: "Fatality (bypass)",    sev: "CRITICAL", desc: "Cheat Fatality — bypass profile" },
-    "b0":   { name: "Fatality (bypass)",    sev: "CRITICAL", desc: "Cheat Fatality — bypass profile" },
-    "2c":   { name: "Fatality (bypass)",    sev: "CRITICAL", desc: "Cheat Fatality — bypass profile" },
-    "9d":   { name: "Fatality (bypass)",    sev: "CRITICAL", desc: "Cheat Fatality — bypass profile" },
-    // Luxe cheats (nova att)
-    "b9":   { name: "Luxe Cheats",          sev: "CRITICAL", desc: "Cheat Luxe — versão recente" },
-    "a4":   { name: "Luxe Cheats",          sev: "CRITICAL", desc: "Cheat Luxe — versão recente" },
     // Dash
     "60a":  { name: "Dash",                 sev: "CRITICAL", desc: "Cheat Dash — proxy conhecido" },
-    // "Desconhecida" — proxies confirmados sem panel attribution
-    "84":   { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
-    "7d":   { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    // Proxies confirmados sem panel attribution (3+ char prefixes)
     "70a":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
     "051":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
     "3c4":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
     "ae7":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
     "0af":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
     "704":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
-    "0d":   { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída · era 'Od' na fonte, lido como 0d)" },
     "40e":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
     "59ac": { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
     "4cf":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
@@ -6755,22 +6753,36 @@ async function handleSysdiagnose(filesList, opts) {
         }
 
         // 6) Hash sweep — captura SHA256 puros (60-68 hex) pra cross-check com
-        // CHEAT_PROFILE_PREFIXES (Zeex/Fatality/Luxe/Dash/XTREMO/proxies). Limita
-        // a 50 matches por arquivo pra evitar bloat em logs muito grandes.
-        hashSweepRe.lastIndex = 0;
-        let hm, hashCount = 0;
-        while ((hm = hashSweepRe.exec(strings)) !== null && hashCount < 50) {
-            const hash = hm[0];
-            if (seenInThisFile.has('h:' + hash)) continue;
-            seenInThisFile.add('h:' + hash);
-            // Só registra se identifyCheatProfile reconhecer o prefix — evita
-            // poluir foundProfiles com TODOS hashes SHA256 (que sysdiagnose tem
-            // milhares: certs, manifests, etc).
-            if (identifyCheatProfile(hash)) {
-                if (!foundProfiles.has(hash)) foundProfiles.set(hash, []);
-                const arr = foundProfiles.get(hash);
-                if (!arr.includes(sourceName)) arr.push(sourceName);
-                hashCount++;
+        // CHEAT_PROFILE_PREFIXES (Zeex/Fatality/Luxe/Dash/XTREMO/proxies).
+        //
+        // v4.4.35: GUARD DE CONTEXTO — só faz sweep em arquivos que ESPERAMOS
+        // ter profiles (mcstate, MCProfileEvents, MCSettingsEvents, *.mobileconfig,
+        // *.stub). Antes varria QUALQUER arquivo (incluindo crashes_and_spins,
+        // diagnostic logs, ps.txt, etc) e os prefixes de 3 chars batiam por
+        // acaso em hashes de cert/receipt/keychain/file fingerprint, causando
+        // falsos positivos absurdos.
+        // Files válidos: mcstate/, MCProfileEvents, MCSettingsEvents, .mobileconfig, .stub
+        const sourceLower = sourceName.toLowerCase();
+        const isProfileContext = sourceLower.includes('mcstate') ||
+                                 sourceLower.includes('mcprofileevents') ||
+                                 sourceLower.includes('mcsettingsevents') ||
+                                 sourceLower.includes('mdmprofileevents') ||
+                                 sourceLower.endsWith('.mobileconfig') ||
+                                 sourceLower.endsWith('.stub') ||
+                                 sourceLower.endsWith('configurationprofiles.plist');
+        if (isProfileContext) {
+            hashSweepRe.lastIndex = 0;
+            let hm, hashCount = 0;
+            while ((hm = hashSweepRe.exec(strings)) !== null && hashCount < 50) {
+                const hash = hm[0];
+                if (seenInThisFile.has('h:' + hash)) continue;
+                seenInThisFile.add('h:' + hash);
+                if (identifyCheatProfile(hash)) {
+                    if (!foundProfiles.has(hash)) foundProfiles.set(hash, []);
+                    const arr = foundProfiles.get(hash);
+                    if (!arr.includes(sourceName)) arr.push(sourceName);
+                    hashCount++;
+                }
             }
         }
     }
