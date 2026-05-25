@@ -1072,6 +1072,36 @@ a:hover { color: var(--text); }
 .device-platform-android .device-field-value.cyan { color: #3ddc84; }
 
 /* ═══════════════════════════════════════════════════════════════
+   FF LOG BANNER (v4.4.36) — "Log (0xXXXX) encontrado/não encontrado"
+   ═══════════════════════════════════════════════════════════════ */
+.ff-log-banner {
+    margin-top: 14px;
+    padding: 12px 18px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+}
+.ff-log-banner.ok {
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: #22c55e;
+}
+.ff-log-banner.warn {
+    background: rgba(251, 191, 36, 0.08);
+    border: 1px solid rgba(251, 191, 36, 0.4);
+    color: #fbbf24;
+}
+.ff-log-banner .ico { flex-shrink: 0; }
+.ff-log-banner span { color: var(--text-dim); }
+.ff-log-banner.ok span { color: var(--text); }
+.ff-log-banner.warn span { color: var(--text); }
+.ff-log-banner strong { color: inherit; font-weight: 700; }
+
+/* ═══════════════════════════════════════════════════════════════
    SPECS GRID (v4.4.30) — bloco extra de Hardware/ABI/Kernel/etc
    ═══════════════════════════════════════════════════════════════ */
 .device-specs {
@@ -2198,7 +2228,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.35</span>
+        <span id="version">v4.4.36</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2455,7 +2485,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.35";
+const VERSION = "4.4.36";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3333,6 +3363,8 @@ let _jailbreakInfo = null;
 let _blacklistResults = [];   // [{ key:'Serial', val:'FD7…', result:{banned, reason, date, …} }]
 // v4.4.18: contexto de crash analysis (Apple system + FF bundle modificado)
 let _crashInfo = null;
+// v4.4.36: contexto do FF log check (equivalente "Log 0x7216" do KellerSS)
+let _ffLogInfo = null;
 
 function alertF(msg, detail) { alerts.push({ msg, detail }); }
 function warn(msg, detail)   { warnings.push({ msg, detail }); }
@@ -3340,7 +3372,7 @@ function ok(msg, detail)     { okItems.push({ msg, detail }); }
 function reset() {
     alerts = []; warnings = []; okItems = [];
     _deviceInfo = null; _jailbreakInfo = null; _blacklistResults = [];
-    _crashInfo = null;
+    _crashInfo = null; _ffLogInfo = null;
 }
 
 /* ============================================================
@@ -3652,6 +3684,24 @@ function renderDeviceCard(info, jbInfo, blResults) {
                 <span class="device-country">${iconSVG('shield', { size: 12 })} ${escapeHTML(hasRegion ? flag.name : (isAndroid ? 'Android Device' : 'iOS Device'))}</span>
             </div>
         </div>
+        ${(() => {
+            // v4.4.36: banner FF log check (equivalente "Log (0x7216)" do KellerSS)
+            // Mostra abaixo do device card APENAS quando FF não foi detectado
+            if (!_ffLogInfo) return '';
+            if (_ffLogInfo.found) {
+                return `
+        <div class="ff-log-banner ok">
+            ${iconSVG('check-circle', { size: 16 })}
+            <span><strong>Log ${escapeHTML(_ffLogInfo.logHex)}</strong> · Free Fire encontrado <span style="color:var(--text-faint)">— ${escapeHTML(_ffLogInfo.marker)} em ${escapeHTML(_ffLogInfo.file || '?')}</span></span>
+        </div>`;
+            } else {
+                return `
+        <div class="ff-log-banner warn">
+            ${iconSVG('alert-triangle', { size: 16 })}
+            <span><strong>Log ${escapeHTML(_ffLogInfo.logHex)}</strong> — Free Fire <strong>não encontrado</strong> no sysdiagnose <span style="color:var(--text-faint)">(sysdiagnose pode ter sido limpo ou device não tem FF)</span></span>
+        </div>`;
+            }
+        })()}
     </div>
 
     <div class="device-section device-platform-${platformAccent}">
@@ -5460,6 +5510,96 @@ async function extractHWID(files) {
    Emite 1 alert AGREGADO com TODOS os indicadores encontrados (em vez de
    N alerts soltos).
    ============================================================ */
+/* ============================================================
+   FF LOG PRESENCE CHECK (v4.4.36) — equivalente "Log (0x7216)" do KellerSS
+   Verifica se há referências ao Free Fire no sysdiagnose. Se não houver:
+   - Ou o player NUNCA abriu FF naquele device (anti-fraude: provavelmente
+     usou outro device pra rodar o sysdiagnose)
+   - Ou o sysdiagnose foi LIMPO/ADULTERADO (alguém removeu os arquivos
+     relacionados ao FF pra esconder evidências)
+   Em qualquer caso, é um sinal forte de fraude.
+
+   O "hash" 0x7216 do KellerSS é só um identifier visual. Vamos gerar
+   um hash CRC16 simples baseado nos bundle IDs esperados pra ter um
+   identifier consistente que pode ser logado/comparado.
+   ============================================================ */
+function _crc16(str) {
+    // CRC-16 simples (CCITT) — só pra ter um identifier hex consistente
+    let crc = 0xFFFF;
+    for (let i = 0; i < str.length; i++) {
+        crc ^= (str.charCodeAt(i) & 0xFF) << 8;
+        for (let j = 0; j < 8; j++) {
+            crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) : (crc << 1);
+            crc &= 0xFFFF;
+        }
+    }
+    return crc;
+}
+
+async function checkFFLogPresence(files) {
+    // Identifier hex (estável) do conjunto de bundle IDs do FF
+    // Resulta em algo como 0x7216, 0x4A8C, etc — só pra display
+    const ffLogId = _crc16('freefire+ffmax+garena');
+    const ffLogHex = '0x' + ffLogId.toString(16).toUpperCase().padStart(4, '0');
+
+    // Padrões que indicam presença de FF no device
+    const FF_MARKERS = [
+        'freefireth',           // bundle/binary FF
+        'freefiremax',          // bundle/binary FF Max
+        'garena',               // dev account
+        'com.dts.free',         // bundle prefix oficial
+        'com.dts.ffh4x',        // bundle FFH4X (cheat)
+        'com.dts.fth4x',
+        '111006',               // FF iTunes ID (parcial)
+    ];
+
+    // Files candidatos: install logs, mcstate, crashes, app caches
+    // (varremos só types específicos pra não custar muito CPU)
+    const candidates = files.filter(f => {
+        const n = (f.webkitRelativePath || f.name).toLowerCase();
+        return n.endsWith('mobile_installation.log') ||
+               n.endsWith('.log') ||
+               n.endsWith('.ips') ||
+               n.endsWith('.crash') ||
+               n.endsWith('containers.sqlite3') ||
+               n.endsWith('storedownloads.sqlitedb') ||
+               n.includes('mcstate/') ||
+               n.includes('mcprofileevents');
+    });
+
+    let found = false;
+    let firstHit = null;
+    // Cap em 100 arquivos pra perf
+    for (const f of candidates.slice(0, 100)) {
+        try {
+            const raw = await readSafe(f, 512 * 1024); // 512KB cap por arquivo
+            if (!raw) continue;
+            const lower = raw.toLowerCase();
+            for (const marker of FF_MARKERS) {
+                if (lower.includes(marker)) {
+                    found = true;
+                    firstHit = { marker, file: (f.webkitRelativePath || f.name).split('/').pop() };
+                    break;
+                }
+            }
+            if (found) break;
+        } catch (e) {}
+    }
+
+    if (found) {
+        ok(`Log ${ffLogHex} · Free Fire encontrado (${firstHit.marker} em ${firstHit.file})`);
+        return { found: true, logHex: ffLogHex, marker: firstHit.marker, file: firstHit.file };
+    } else {
+        alertF(
+            `[CRITICAL][TAMPER] Log ${ffLogHex} · Free Fire NÃO encontrado no sysdiagnose`,
+            `Nenhuma referência a freefire/garena/com.dts.* em ${candidates.length} arquivo(s) analisados.\n` +
+            `Possibilidades: (a) device nunca teve FF instalado/aberto, (b) sysdiagnose adulterado/limpo, ` +
+            `(c) jogador rodou sysdiagnose em device DIFERENTE do que tem o FF (fraude clássica).`
+        );
+        return { found: false, logHex: ffLogHex };
+    }
+}
+
 async function detectJailbreakAggregated(files) {
     const INDICATORS = {
         palera1n:   { name: 'palera1n',   markers: ['/var/jb/', 'palera1nd', '/palera1n/', 'com.opa334.palera1n', 'palera1nLoader'] },
@@ -6852,6 +6992,11 @@ async function handleSysdiagnose(filesList, opts) {
     //  · Kernel panics (.panic ou bug_type=210)
     //  · Crashes anormais em SpringBoard/backboardd/installd (tweak interference)
     await analyzeAppleCrashes(files);
+
+    // ─── PASS 13: FF LOG PRESENCE CHECK (v4.4.36) ───
+    // Equivalente "Log (0x7216)" do KellerSS — verifica se há referências
+    // ao Free Fire no sysdiagnose. Ausência = device sem FF ou adulterado.
+    _ffLogInfo = await checkFFLogPresence(files);
 
     // ─── Emite alerts agregados ───
     // v4.4.14: AGRUPA por cheatId.name (Pass 8 final emit). Profiles do mesmo
