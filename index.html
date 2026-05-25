@@ -2744,7 +2744,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.49";
+const VERSION = "4.4.50";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5815,7 +5815,13 @@ async function extractHWID(files) {
             // plists em iOS 18 são maiores
             if (!raw || raw.length > 3_000_000) continue;
             // Substring guard — pula 99% dos arquivos sem ID Apple
-            if (!_hasIdKeyword(raw)) continue;
+            // v4.4.50: também aceita pattern direto UDID iPhone moderno OU
+            // ProductType iPhoneN,N — esses patterns são MUITO específicos
+            // (00008101-... só aparece em UDIDs A10+), então passar pelo guard
+            // por pattern é seguro (raro falso positivo).
+            const _hasUdidPattern = !udid && /0000[0-9A-Fa-f]{4}-[0-9A-Fa-f]{16}/.test(raw);
+            const _hasProdPattern = !productType && /\b(?:iPhone|iPad|iPod|Watch)\d+,\d+\b/.test(raw);
+            if (!_hasIdKeyword(raw) && !_hasUdidPattern && !_hasProdPattern) continue;
             _fallbackCount++;
             {
                 // === Serial (12 chars Apple ou 8 chars antigo) ===
@@ -5881,6 +5887,18 @@ async function extractHWID(files) {
                     const ivm = raw.match(/<key>ProductVersion<\/key>\s*<string>([\d.]+)<\/string>/i) ||
                                 raw.match(/\bProductVersion\s*[:=]\s*([\d.]+)\b/i);
                     if (ivm) iosVersion = ivm[1];
+                }
+                // v4.4.50: ÚLTIMO RECURSO — pattern-only direct match em qualquer
+                // posição do buffer. UDID moderno (0000XXXX-...) e ProductType
+                // (iPhoneN,N) têm padrões tão específicos que dispensam keyword.
+                // Cobre bplist binário onde a key não aparece como string ASCII.
+                if (!udid) {
+                    const um = raw.match(/\b(0000[0-9A-Fa-f]{4}-[0-9A-Fa-f]{16})\b/);
+                    if (um) udid = um[1];
+                }
+                if (!productType) {
+                    const pm = raw.match(/\b(iPhone\d+,\d+|iPad\d+,\d+|iPod\d+,\d+|Watch\d+,\d+)\b/);
+                    if (pm) productType = pm[1];
                 }
             }
         }
