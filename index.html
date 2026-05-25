@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.15</span>
+        <span id="version">v4.4.16</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1528,14 +1528,17 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.15";
+const VERSION = "4.4.16";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
    ============================================================ */
 const API_BASE = "https://lspainel.com.br/api/a4ther";
 const BLACKLIST_CONFIG = {
-    apiUrl: `${API_BASE}/blacklist/check`,
+    // v4.4.16: usa rota pública do painel /api/public/a4ther-blacklist-check
+    // que consulta a tabela `blacklist_serials` no Supabase (mesmo source de
+    // dados da UI /dashboard/blacklist). Aceita ?serial=X ou ?hwid=X (alias).
+    apiUrl: `https://lspainel.com.br/api/public/a4ther-blacklist-check`,
     submitUrl: `${API_BASE}/blacklist/submit`,
     intelUrl: `${API_BASE}/intel/feed.json`,
     scanLogUrl: `${API_BASE}/scan/log`,
@@ -1546,7 +1549,9 @@ const BLACKLIST_CONFIG = {
 async function checkBlacklist(hwid) {
     if (!BLACKLIST_CONFIG.enabled || !BLACKLIST_CONFIG.apiUrl || !hwid) return null;
     try {
-        const url = `${BLACKLIST_CONFIG.apiUrl}?hwid=${encodeURIComponent(hwid)}`;
+        // v4.4.16: rota nova aceita ?serial= (canônico) e ?hwid= (alias)
+        // Mantemos hwid pra retrocompat com backend antigo
+        const url = `${BLACKLIST_CONFIG.apiUrl}?serial=${encodeURIComponent(hwid)}&hwid=${encodeURIComponent(hwid)}`;
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), BLACKLIST_CONFIG.timeoutMs);
         const res = await fetch(url, { signal: ctrl.signal, mode: 'cors' });
