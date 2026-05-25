@@ -2744,7 +2744,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.48";
+const VERSION = "4.4.49";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5759,7 +5759,12 @@ async function extractHWID(files) {
         raw.indexOf('ProductVersion') !== -1 ||
         raw.indexOf('ProductName') !== -1 ||
         raw.indexOf('ProductBuildVersion') !== -1 ||
-        raw.indexOf('BuildVersion') !== -1;
+        raw.indexOf('BuildVersion') !== -1 ||
+        // v4.4.49: HardwareModel/DeviceModel/DeviceClass cobrem modelos
+        // (iPhone16,2 etc) em arquivos sem ProductType direto
+        raw.indexOf('HardwareModel') !== -1 ||
+        raw.indexOf('DeviceModel') !== -1 ||
+        raw.indexOf('DeviceClass') !== -1;
     let _fallbackCount = 0;
     const _FALLBACK_CAP = 300; // v4.4.47: substring guard skipa 99% de arquivos sem ID
 
@@ -5804,9 +5809,11 @@ async function extractHWID(files) {
         // texto-like, mas só roda regex se o conteúdo realmente menciona
         // SerialNumber/UDID/ECID. Cobre 100% dos arquivos (não só 30 paths
         // whitelistados) sem perda de perf graças ao indexOf rápido.
-        else if ((!serial || !udid || !ecid) && _fallbackCount < _FALLBACK_CAP && _isTextLike(name)) {
+        else if ((!serial || !udid || !ecid || !productType) && _fallbackCount < _FALLBACK_CAP && _isTextLike(name)) {
             const raw = await readSafe(f);
-            if (!raw || raw.length > 1_500_000) continue;
+            // v4.4.49: cap subiu pra 3MB (era 1.5MB) — alguns lockdown/aggregated
+            // plists em iOS 18 são maiores
+            if (!raw || raw.length > 3_000_000) continue;
             // Substring guard — pula 99% dos arquivos sem ID Apple
             if (!_hasIdKeyword(raw)) continue;
             _fallbackCount++;
@@ -5819,16 +5826,53 @@ async function extractHWID(files) {
                 udid = _pull(raw, /<key>(?:UniqueDeviceID|UDID)<\/key>\s*<string>([A-Fa-f0-9-]{20,45})<\/string>/i, udid) ||
                        _pull(raw, /"(?:UniqueDeviceID|UDID)"\s*:\s*"([A-Fa-f0-9-]{20,45})"/i, udid) ||
                        _pull(raw, /\b(?:UniqueDeviceID|Unique Device ID|UDID|Hardware UDID)\s*[:=]\s*([A-Fa-f0-9-]{20,45})\b/i, udid);
+                // v4.4.49: pattern-only UDID search em bplist binário. Em bplist
+                // a key UDID e o value são separados por bytes binários (offsets),
+                // então o regex "UDID[:=]value" falha. Mas o pattern do UDID 24-char
+                // (8hex-16hex) é específico o suficiente — só buscamos próximo a
+                // uma menção da key num raio de 100 chars.
+                if (!udid && raw.indexOf('UniqueDeviceID') !== -1) {
+                    const keyIdx = raw.indexOf('UniqueDeviceID');
+                    const nearby = raw.substring(keyIdx, keyIdx + 150);
+                    const pm = nearby.match(/([A-Fa-f0-9]{8}-[A-Fa-f0-9]{16})\b/);
+                    if (pm) udid = pm[1];
+                    else {
+                        // fallback iPhone < 6s (40 hex straight)
+                        const pm2 = nearby.match(/\b([A-Fa-f0-9]{40})\b/);
+                        if (pm2) udid = pm2[1];
+                    }
+                }
                 // === ECID (decimal grande ou hex 0x...) ===
                 ecid = _pull(raw, /<key>(?:UniqueChipID|ECID)<\/key>\s*<(?:integer|string)>([A-Fa-f0-9x]+)</i, ecid) ||
                        _pull(raw, /"(?:UniqueChipID|ECID)"\s*:\s*"?(0x[A-Fa-f0-9]+|\d{10,20})"?/i, ecid) ||
                        _pull(raw, /\b(?:UniqueChipID|ECID|chip[\s_]?id)\s*[:=]\s*(0x[A-Fa-f0-9]+|\d{10,20})\b/i, ecid);
-                // === Product Type ===
-                productType  = _pull(raw, /<key>ProductType<\/key>\s*<string>([A-Za-z0-9,]+)<\/string>/i, productType) ||
-                               _pull(raw, /"ProductType"\s*:\s*"([A-Za-z0-9,]+)"/i, productType) ||
-                               _pull(raw, /\bProductType\s*[:=]\s*([A-Za-z]+\d+,\d+)\b/i, productType);
-                productClass = _pull(raw, /<key>ProductClass<\/key>\s*<string>([A-Za-z]+)<\/string>/i, productClass) ||
-                               _pull(raw, /"ProductClass"\s*:\s*"([A-Za-z]+)"/i, productClass);
+                // v4.4.49: pattern-only ECID search no bplist binário (proximity)
+                if (!ecid) {
+                    const ecidKey = raw.indexOf('UniqueChipID') !== -1 ? 'UniqueChipID' : (raw.indexOf('ECID') !== -1 ? 'ECID' : null);
+                    if (ecidKey) {
+                        const keyIdx = raw.indexOf(ecidKey);
+                        const nearby = raw.substring(keyIdx, keyIdx + 100);
+                        const pm = nearby.match(/(0x[A-Fa-f0-9]{8,20}|\d{12,20})/);
+                        if (pm) ecid = pm[1];
+                    }
+                }
+                // === Product Type / Hardware Model / Device Model ===
+                productType  = _pull(raw, /<key>(?:ProductType|HardwareModel|DeviceModel)<\/key>\s*<string>([A-Za-z0-9,]+)<\/string>/i, productType) ||
+                               _pull(raw, /"(?:ProductType|HardwareModel|DeviceModel)"\s*:\s*"([A-Za-z0-9,]+)"/i, productType) ||
+                               _pull(raw, /\b(?:ProductType|HardwareModel|DeviceModel)\s*[:=]\s*([A-Za-z]+\d+,\d+)\b/i, productType);
+                // v4.4.49: pattern-only ProductType search (iPhoneN,N / iPad13,18 etc)
+                if (!productType && (raw.indexOf('ProductType') !== -1 || raw.indexOf('HardwareModel') !== -1 || raw.indexOf('DeviceModel') !== -1)) {
+                    const keyIdx = Math.max(
+                        raw.indexOf('ProductType'),
+                        raw.indexOf('HardwareModel'),
+                        raw.indexOf('DeviceModel')
+                    );
+                    const nearby = raw.substring(keyIdx, keyIdx + 100);
+                    const pm = nearby.match(/\b(iPhone\d+,\d+|iPad\d+,\d+|iPod\d+,\d+|Watch\d+,\d+)\b/);
+                    if (pm) productType = pm[1];
+                }
+                productClass = _pull(raw, /<key>(?:ProductClass|DeviceClass)<\/key>\s*<string>([A-Za-z]+)<\/string>/i, productClass) ||
+                               _pull(raw, /"(?:ProductClass|DeviceClass)"\s*:\s*"([A-Za-z]+)"/i, productClass);
                 // === Build version (caso não tenha vindo do dumpstate) ===
                 buildVersion = _pull(raw, /<key>(?:ProductBuildVersion|BuildVersion)<\/key>\s*<string>([A-Z0-9]{4,12})<\/string>/i, buildVersion) ||
                                _pull(raw, /\bBuildVersion\s*[:=]\s*([A-Z0-9]{4,12})\b/i, buildVersion);
