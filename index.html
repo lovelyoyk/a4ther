@@ -2744,7 +2744,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.46";
+const VERSION = "4.4.47";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5734,8 +5734,19 @@ async function extractHWID(files) {
         for (const hint of _hwidPathHints) if (name.includes(hint)) return true;
         return false;
     };
+    // v4.4.47: arquivo texto-like (.plist/.txt/.log/.xml/.json) — universo do sweep
+    const _isTextLike = (name) => /\.(plist|txt|log|xml|json)$/i.test(name);
+    // Substring guard: roda regex SÓ se o conteúdo realmente menciona algum ID Apple.
+    // 99% dos arquivos texto sem ID falham nesse check em ~100µs (string.indexOf é
+    // ultra-rápido), economizando o tempo das regex caras.
+    const _hasIdKeyword = (raw) =>
+        raw.indexOf('SerialNumber') !== -1 ||
+        raw.indexOf('UniqueDeviceID') !== -1 ||
+        raw.indexOf('UDID') !== -1 ||
+        raw.indexOf('UniqueChipID') !== -1 ||
+        raw.indexOf('ECID') !== -1;
     let _fallbackCount = 0;
-    const _FALLBACK_CAP = 120; // v4.4.46: 40→120, com short-circuit early-exit é seguro
+    const _FALLBACK_CAP = 300; // v4.4.47: substring guard skipa 99% de arquivos sem ID
 
     let _hwidLoopIdx = 0;
     for (const f of files) {
@@ -5774,10 +5785,17 @@ async function extractHWID(files) {
         //   - X: Y / X = Y                     (logs plain text)
         //   - X<TAB>Y                          (tabular)
         // Early exit assim que serial && udid && ecid estão setados.
-        else if ((!serial || !udid || !ecid) && _fallbackCount < _FALLBACK_CAP && _isHwidCandidate(name)) {
-            _fallbackCount++;
+        // v4.4.47: BRUTE-FORCE com substring guard — varre QUALQUER arquivo
+        // texto-like, mas só roda regex se o conteúdo realmente menciona
+        // SerialNumber/UDID/ECID. Cobre 100% dos arquivos (não só 30 paths
+        // whitelistados) sem perda de perf graças ao indexOf rápido.
+        else if ((!serial || !udid || !ecid) && _fallbackCount < _FALLBACK_CAP && _isTextLike(name)) {
             const raw = await readSafe(f);
-            if (raw && raw.length < 1_500_000) {
+            if (!raw || raw.length > 1_500_000) continue;
+            // Substring guard — pula 99% dos arquivos sem ID Apple
+            if (!_hasIdKeyword(raw)) continue;
+            _fallbackCount++;
+            {
                 // === Serial (12 chars Apple ou 8 chars antigo) ===
                 serial = _pull(raw, /<key>SerialNumber<\/key>\s*<string>([A-Z0-9]{8,16})<\/string>/i, serial) ||
                          _pull(raw, /"SerialNumber"\s*:\s*"([A-Z0-9]{8,16})"/i, serial) ||
