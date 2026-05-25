@@ -434,6 +434,14 @@ a:hover { color: var(--text); }
     font-size: 0.92rem;
     transition: background 200ms var(--ease), transform 200ms var(--ease);
     position: relative;
+    /* v4.4.25: opacity 1 por padrão. Animação só dispara quando o dropdown
+       abre — antes a animação rodava enquanto o menu estava invisível
+       (visibility:hidden) e em alguns browsers o estado FROM (opacity:0)
+       ficava aplicado permanentemente via fill:both, deixando as opções
+       invisíveis ao abrir. */
+    opacity: 1;
+}
+.dropdown.open .dropdown-option {
     animation: option-in 360ms var(--ease) both;
 }
 .dropdown.open .dropdown-option:nth-child(1) { animation-delay: 30ms; }
@@ -1805,7 +1813,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.24</span>
+        <span id="version">v4.4.25</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2060,7 +2068,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.24";
+const VERSION = "4.4.25";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
