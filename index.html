@@ -2744,7 +2744,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.44";
+const VERSION = "4.4.45";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3584,9 +3584,14 @@ const PROFILE_PAYLOADS = {
     "com.apple.vpn.managed":                            { sev: "CRITICAL", cat: "VPN", desc: "VPN configurada - roteia TODO tráfego" },
     "com.apple.vpn.managed.applayer":                   { sev: "CRITICAL", cat: "VPN", desc: "Per-app VPN" },
     "com.apple.proxy.http.global":                      { sev: "CRITICAL", cat: "PROXY", desc: "HTTP Proxy global (MITM clássico)" },
-    "com.apple.security.root":                          { sev: "CRITICAL", cat: "CA", desc: "CA Root cert (MITM completo)" },
-    "com.apple.security.pkcs1":                         { sev: "CRITICAL", cat: "CA", desc: "PKCS#1 cert" },
-    "com.apple.security.pkcs12":                        { sev: "CRITICAL", cat: "CA", desc: "PKCS#12 cert" },
+    // v4.4.45: rebaixado CRITICAL → MEDIUM. CA/PKCS sozinhos podem ser MDM
+    // corporativo legítimo (escola, empresa), NextDNS profile, TestFlight beta,
+    // ou cert de dev pessoal. Só são CRITICAL quando combinados com OUTROS sinais
+    // (cheat bundle, JB, payload suspeito). Pra Free Fire em device normal,
+    // essas certs sozinhas geram falso positivo grosseiro.
+    "com.apple.security.root":                          { sev: "MEDIUM",   cat: "CA", desc: "CA Root cert (pode ser MDM legítimo)" },
+    "com.apple.security.pkcs1":                         { sev: "MEDIUM",   cat: "CA", desc: "PKCS#1 cert (pode ser cert dev)" },
+    "com.apple.security.pkcs12":                        { sev: "MEDIUM",   cat: "CA", desc: "PKCS#12 cert (pode ser cert pessoal)" },
     "com.apple.security.scep":                          { sev: "CRITICAL", cat: "CA", desc: "SCEP cert enrollment" },
     "com.apple.webcontent-filter":                      { sev: "CRITICAL", cat: "FILTER", desc: "Web Content Filter" },
     "com.apple.dnsSettings.managed":                    { sev: "CRITICAL", cat: "DNS", desc: "DNS custom (sequester FF)" },
@@ -5576,16 +5581,24 @@ async function checkSysdiagnoseIntegrity(files, byType, opts) {
 
     // ─── chkC + chkD: timestomping (timestamps adulterados) ───
     // Sysdiagnose lastModified de cada arquivo
+    // v4.4.45: chkD é SKIP quando o sysdiagnose veio de tar.gz extraído pelo browser
+    // — DecompressionStream + tar parser no JS resetam mtimes pro momento da extração,
+    // gerando 1 timestamp distinto pra TODOS os 1000+ arquivos. Isso disparava
+    // CRITICAL [TAMPER] em sysdiagnoses legítimos. O check só faz sentido pra
+    // sysdiagnose extraído nativamente no macOS (onde mtimes originais são preservados).
     const mtimes = files.map(f => f.lastModified || 0).filter(t => t > 0);
+    const fromTarGz = !!(opts && opts.fromTarGz);
     if (mtimes.length > 100) {
-        // chkC: muitos arquivos com mtime > captureTime? (não temos captureTime, mas podemos checar uniformidade)
-        // chkD: timestomping = todos arquivos com EXATAMENTE o mesmo timestamp
-        const uniqueMtimes = new Set(mtimes);
-        if (uniqueMtimes.size < mtimes.length / 20) {
-            alertF(`[CRITICAL][TAMPER] (chkD) Timestomping: ${mtimes.length} arquivos com só ${uniqueMtimes.size} timestamps distintos`,
-                "Uniformidade impossível em sysdiagnose real");
+        // chkD: timestomping — todos arquivos com EXATAMENTE o mesmo timestamp.
+        // SKIP se tar.gz extraído pelo browser (mtimes resetados pra extract time).
+        if (!fromTarGz) {
+            const uniqueMtimes = new Set(mtimes);
+            if (uniqueMtimes.size < mtimes.length / 20) {
+                alertF(`[CRITICAL][TAMPER] (chkD) Timestomping: ${mtimes.length} arquivos com só ${uniqueMtimes.size} timestamps distintos`,
+                    "Uniformidade impossível em sysdiagnose real");
+            }
         }
-        // chkC: mtime futuro?
+        // chkC: mtime futuro? (continua válido mesmo pra tar.gz — mtime > now é IOC genuíno)
         const now = Date.now();
         const futureCount = mtimes.filter(t => t > now + 3600000).length;
         if (futureCount > 0) {
@@ -6958,15 +6971,17 @@ async function _doHandleSysdiagnose(filesList, opts) {
             // da v4.3 — ReferenceError silencioso). Substituído pelas Maps reais.
             if (profileOps.size === 0 && payloadTypes.size === 0 && proxyHosts.size === 0 && proxyIps.size === 0) {
                 ok("MCProfileEvents: sem eventos de profile suspeitos");
-                // DEBUG v4.4.4: quando NÃO achou nada mas o file não é trivialmente
-                // vazio, mostra amostra do conteúdo pra diagnosticar formato exótico.
+                // v4.4.4: DEBUG quando NÃO achou nada — mostra amostra do conteúdo
+                // pra diagnosticar formato exótico.
+                // v4.4.45: rebaixado warn → console.debug (não polui o relatório).
+                // Esses logs eram ruído puro pro user — só úteis em dev quando o
+                // parser falha. Mantidos no console pra debug remoto.
                 if (buf && buf.length > 200) {
                     const sample = textForRegex.substring(0, 500).replace(/\s+/g, ' ').trim();
-                    warn(`[DEBUG] MCProfileEvents amostra (${buf.length}B): ${sample.slice(0, 400)}…`);
-                    // Conta tags <key> pra saber se é XML estruturado mesmo
+                    console.debug(`[a4ther] MCProfileEvents amostra (${buf.length}B): ${sample.slice(0, 400)}…`);
                     const keyTags = (textForRegex.match(/<key>/gi) || []).length;
                     const dictTags = (textForRegex.match(/<dict>/gi) || []).length;
-                    warn(`[DEBUG] tags: <key>×${keyTags} <dict>×${dictTags} · ${stringPool.length} strings no pool · isXml=${isXmlPlist} isBplist=${isBplist}`);
+                    console.debug(`[a4ther] MCProfileEvents tags: <key>×${keyTags} <dict>×${dictTags} · ${stringPool.length} strings · isXml=${isXmlPlist} isBplist=${isBplist}`);
                 }
             }
     }
@@ -7175,8 +7190,15 @@ async function _doHandleSysdiagnose(filesList, opts) {
         ok(`${byType.crashIPS.length} crash logs`);
         for (const f of byType.crashIPS.slice(0, 30)) {
             const name = (f.webkitRelativePath || f.name);
-            if (/freefire|frida|cheat|dts\.freefire|dopamine|trollstore|substrate/i.test(name)) {
-                alertF(`[HIGH] Crash file suspeito: ${name.split('/').pop()}`);
+            const baseName = name.split('/').pop();
+            // v4.4.45: skip AppleDouble resource forks (._foo é metadata HFS+/APFS
+            // do macOS, não crash real). Aparecem em tar.gz gerados no macOS.
+            if (baseName.startsWith('._')) continue;
+            // v4.4.45: "freefire" no NOME do crash não é IOC — sysdiagnose captura
+            // crash logs do app por design, e FF pode crashar por OOM/bug. Só JB
+            // tools/cheat names no nome ainda viram suspeito (frida/dopamine/etc).
+            if (/frida|dopamine|trollstore|substrate|cycript|cheat|injector|gadget/i.test(name)) {
+                alertF(`[HIGH] Crash file suspeito: ${baseName}`);
             }
             // Read top crashes pra ver injection
             const raw = await readSafe(f, 1024 * 1024); // max 1MB por crash
@@ -7264,8 +7286,17 @@ async function _doHandleSysdiagnose(filesList, opts) {
 
     // Processa 1 arquivo (lê + corre regex passes + atualiza Maps globais)
     // Side-effects only: muta foundProfiles/foundBundles/etc e contadores.
+    // v4.4.45 PERF: short-circuit substring check antes de cada regex caro.
+    // O Pass 8 tava demorando 280-700s em sysdiagnoses normais — agora valida
+    // se a string CONTÉM o substring chave antes de gastar tempo no regex.
+    // Ex: opaqueRe só roda se strings.includes('profile-'). Ganho ~10× em files
+    // que não têm profile content (a maioria — logs, plist de prefs, etc).
     function _pass8ProcessFile(f, raw) {
         if (!raw) { totalSkipped++; return; }
+        // v4.4.45 PERF: skip arquivos > 4MB — taskinfo/largeLog raramente têm
+        // profile IDs e gastam segundos em regex match. Se houver, Pass 1-7
+        // específicos já cobriram.
+        if (raw.length > 4_000_000) { totalSkipped++; return; }
         totalScanned++;
 
         const sourceName = (f.webkitRelativePath || f.name).split('/').slice(-2).join('/');
@@ -7274,34 +7305,54 @@ async function _doHandleSysdiagnose(filesList, opts) {
         const strings = raw.length > 50000 ? raw : extractStrings(raw, 6).join('\n');
 
         const seenInThisFile = new Set();
-
-        // 1) Profile IDs com UUID opaco
         let m;
-        opaqueRe.lastIndex = 0;
-        while ((m = opaqueRe.exec(strings)) !== null) {
-            if (seenInThisFile.has(m[0])) continue;
-            seenInThisFile.add(m[0]);
-            if (!foundProfiles.has(m[0])) foundProfiles.set(m[0], []);
-            foundProfiles.get(m[0]).push(sourceName);
+
+        // 1) Profile IDs com UUID opaco — short-circuit: pula se "profile-" ausente
+        if (strings.indexOf('profile-') !== -1 || strings.indexOf('.profile-') !== -1) {
+            opaqueRe.lastIndex = 0;
+            while ((m = opaqueRe.exec(strings)) !== null) {
+                if (seenInThisFile.has(m[0])) continue;
+                seenInThisFile.add(m[0]);
+                if (!foundProfiles.has(m[0])) foundProfiles.set(m[0], []);
+                foundProfiles.get(m[0]).push(sourceName);
+            }
         }
 
-        // 2) Profile IDs DNS reseller (NextDNS/ControlD/etc)
-        dnsRe.lastIndex = 0;
-        while ((m = dnsRe.exec(strings)) !== null) {
-            if (seenInThisFile.has(m[0])) continue;
-            seenInThisFile.add(m[0]);
-            if (!foundProfiles.has(m[0])) foundProfiles.set(m[0], []);
-            foundProfiles.get(m[0]).push(sourceName);
+        // 2) Profile IDs DNS reseller — short-circuit: pula se DNS reseller ausente
+        if (strings.indexOf('nextdns') !== -1 || strings.indexOf('controld') !== -1 ||
+            strings.indexOf('adguard') !== -1 || strings.indexOf('cloudflare') !== -1 ||
+            strings.indexOf('opendns') !== -1 || strings.indexOf('quad9') !== -1 ||
+            strings.indexOf('warp') !== -1) {
+            dnsRe.lastIndex = 0;
+            while ((m = dnsRe.exec(strings)) !== null) {
+                if (seenInThisFile.has(m[0])) continue;
+                seenInThisFile.add(m[0]);
+                if (!foundProfiles.has(m[0])) foundProfiles.set(m[0], []);
+                foundProfiles.get(m[0]).push(sourceName);
+            }
         }
 
-        // 3) Cheat keywords
-        ckRe.lastIndex = 0;
-        while ((m = ckRe.exec(strings)) !== null) {
-            const kw = m[0].toLowerCase();
-            if (seenInThisFile.has('kw:' + kw)) continue;
-            seenInThisFile.add('kw:' + kw);
-            if (!foundCheatStrings.has(kw)) foundCheatStrings.set(kw, []);
-            foundCheatStrings.get(kw).push(sourceName);
+        // 3) Cheat keywords — short-circuit: pula se nenhum prefix conhecido
+        if (strings.indexOf('cheat') !== -1 || strings.indexOf('hack') !== -1 ||
+            strings.indexOf('frida') !== -1 || strings.indexOf('cycript') !== -1 ||
+            strings.indexOf('substrate') !== -1 || strings.indexOf('mod.menu') !== -1 ||
+            strings.indexOf('aimbot') !== -1 || strings.indexOf('wallhack') !== -1 ||
+            strings.indexOf('injector') !== -1 || strings.indexOf('ffh4x') !== -1 ||
+            strings.indexOf('dopamine') !== -1 || strings.indexOf('palera1n') !== -1 ||
+            strings.indexOf('unc0ver') !== -1 || strings.indexOf('sileo') !== -1 ||
+            strings.indexOf('cydia') !== -1 || strings.indexOf('zebra') !== -1 ||
+            strings.indexOf('altstore') !== -1 || strings.indexOf('feather') !== -1 ||
+            strings.indexOf('esign') !== -1 || strings.indexOf('scarlet') !== -1 ||
+            strings.indexOf('trollstore') !== -1 || strings.indexOf('filza') !== -1 ||
+            strings.indexOf('geranium') !== -1) {
+            ckRe.lastIndex = 0;
+            while ((m = ckRe.exec(strings)) !== null) {
+                const kw = m[0].toLowerCase();
+                if (seenInThisFile.has('kw:' + kw)) continue;
+                seenInThisFile.add('kw:' + kw);
+                if (!foundCheatStrings.has(kw)) foundCheatStrings.set(kw, []);
+                foundCheatStrings.get(kw).push(sourceName);
+            }
         }
 
         // 4) Cheat domains (alternation pre-compilada)
@@ -7373,12 +7424,16 @@ async function _doHandleSysdiagnose(filesList, opts) {
     // Em sysdiagnoses muito grandes (5000+ arquivos) o Pass 8 ainda bloqueava.
     // Agora: batch 2 + yield após CADA arquivo individual + hard cap 1500
     // arquivos processados (se passar, warn e skip o resto).
-    const PASS8_HARD_CAP = 1500;
+    // v4.4.45: com short-circuit nas regex (skip se substring chave ausente),
+    // cada arquivo ficou ~10× mais rápido. Aumento batch 2 → 6 + reduzo hard
+    // cap 1500 → 1200 (sysdiagnoses normais têm 500-1500 files, 1200 já cobre
+    // a esmagadora maioria). Era 280-700s, deve cair pra 30-90s.
+    const PASS8_HARD_CAP = 1200;
     const filesToScan = allScanFiles.slice(0, PASS8_HARD_CAP);
     if (allScanFiles.length > PASS8_HARD_CAP) {
         warn(`[PERF] Sysdiagnose com ${allScanFiles.length} arquivos — limitado a ${PASS8_HARD_CAP} mais relevantes pra Pass 8 (evita travar)`);
     }
-    const PASS8_BATCH = 2;
+    const PASS8_BATCH = 6;
     let lastYield = performance.now();
     for (let i = 0; i < filesToScan.length; i += PASS8_BATCH) {
         const batch = filesToScan.slice(i, i + PASS8_BATCH);
@@ -7514,11 +7569,23 @@ async function _doHandleSysdiagnose(filesList, opts) {
     if (foundBundles.size > 0) {
         const newOnes = [...foundBundles.keys()].filter(b => !alerts.some(a => a.msg && a.msg.includes(b)));
         if (newOnes.length > 0) {
-            ok(`◆ ${newOnes.length} cheat bundles encontrados via grep recursivo`);
-            for (const b of newOnes) {
-                const info = CHEAT_APPS[b];
-                const sources = foundBundles.get(b);
-                alertF(`[${info.sev}] CHEAT BUNDLE: ${b}`, `${info.desc} · fontes: ${sources.slice(0,3).join(', ')}${sources.length>3 ? ` +${sources.length-3}` : ''}`);
+            // v4.4.45: DEV bundles (Xcode, Developer Settings, TestFlight) são
+            // SKIP no emit — Apple loga essas referências em parsecd/skapp_data
+            // por design (TestFlight beta path, Xcode dev cert chain). Sozinhos
+            // não são evidência de cheat — só importam se combinados com cheat
+            // payloads ou JB. Emitido como info, não alert.
+            const realCheats = newOnes.filter(b => (CHEAT_APPS[b]?.cat || '') !== 'DEV');
+            const devTools = newOnes.filter(b => (CHEAT_APPS[b]?.cat || '') === 'DEV');
+            if (devTools.length > 0) {
+                ok(`◆ DEV tools encontrados (não-cheat): ${devTools.map(b => CHEAT_APPS[b]?.name || b).join(', ')}`);
+            }
+            if (realCheats.length > 0) {
+                ok(`◆ ${realCheats.length} cheat bundles encontrados via grep recursivo`);
+                for (const b of realCheats) {
+                    const info = CHEAT_APPS[b];
+                    const sources = foundBundles.get(b);
+                    alertF(`[${info.sev}] CHEAT BUNDLE: ${b}`, `${info.desc} · fontes: ${sources.slice(0,3).join(', ')}${sources.length>3 ? ` +${sources.length-3}` : ''}`);
+                }
             }
         }
     }
