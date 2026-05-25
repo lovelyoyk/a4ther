@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.4"
+VERSION="4.4.30"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -208,6 +208,27 @@ info "Android:      $(gp ro.build.version.release) (SDK $(gp ro.build.version.sd
 info "Build:        $(gp ro.build.display.id)"
 info "Fingerprint:  $(gp ro.build.fingerprint)"
 info "Kernel:       $(uname -r 2>/dev/null)"
+
+# === REGIÃO / LOCALE / PLAY STORE (v4.4.30) ===
+LOCALE=$(gp ro.product.locale)
+[ -z "$LOCALE" ] && LOCALE=$(gp persist.sys.locale)
+[ -z "$LOCALE" ] && LOCALE=$(gp ro.product.locale.language)
+COUNTRY=$(gp ro.product.locale.region)
+[ -z "$COUNTRY" ] && COUNTRY=$(gp ro.csc.countryiso_code)
+[ -z "$COUNTRY" ] && COUNTRY=$(gp persist.sys.country)
+[ -z "$COUNTRY" ] && [ -n "$LOCALE" ] && COUNTRY=$(echo "$LOCALE" | sed -nE 's/.*[-_]([A-Z]{2}).*/\1/p')
+TIMEZONE=$(gp persist.sys.timezone)
+[ -z "$TIMEZONE" ] && TIMEZONE=$(have date && date +%Z 2>/dev/null)
+# Play Store country — vem de Google Services account ou geo da SIM
+PLAY_COUNTRY=$(gp ro.com.google.gmsversion 2>/dev/null | sed -nE 's/.*_([A-Z]{2}).*/\1/p')
+# fallback: gservices.country ou SIM country
+[ -z "$PLAY_COUNTRY" ] && PLAY_COUNTRY=$(gp gsm.operator.iso-country 2>/dev/null | tr '[:lower:]' '[:upper:]')
+[ -z "$PLAY_COUNTRY" ] && PLAY_COUNTRY=$(gp gsm.sim.operator.iso-country 2>/dev/null | tr '[:lower:]' '[:upper:]')
+
+info "Locale:       ${LOCALE:-?}"
+info "Country:      ${COUNTRY:-?}"
+info "Timezone:     ${TIMEZONE:-?}"
+info "Play Store:   ${PLAY_COUNTRY:-?}"
 
 UPTIME=0
 [ -r /proc/uptime ] && UPTIME=$(awk '{print int($1)}' /proc/uptime 2>/dev/null)

@@ -1037,6 +1037,81 @@ a:hover { color: var(--text); }
 .ico svg { width: 100%; height: 100%; display: block; }
 
 /* ═══════════════════════════════════════════════════════════════
+   PLATFORM ACCENTS (v4.4.30) — iOS=cyan/azul, Android=verde
+   Aplica nos descendentes do .device-platform-{ios|android} pra
+   distinguir scans de plataformas diferentes visualmente.
+   ═══════════════════════════════════════════════════════════════ */
+.device-platform-ios .device-section-icon,
+.device-platform-ios .device-section-title { color: #22d3ee; }
+.device-platform-ios .device-section-icon  {
+    background: linear-gradient(135deg, #0c2236, #051528);
+    border-color: rgba(34, 211, 238, 0.35);
+    box-shadow: 0 0 18px rgba(34, 211, 238, 0.18), inset 0 0 10px rgba(10, 31, 53, 0.5);
+}
+.device-platform-ios .device-section-line  { background: linear-gradient(90deg, rgba(34, 211, 238, 0.4), transparent); }
+.device-platform-ios .device-card::before  { background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.5), transparent); }
+.device-platform-ios .device-hero-icon     { color: #22d3ee; border-color: rgba(34, 211, 238, 0.3); box-shadow: inset 0 0 18px rgba(0, 255, 255, 0.08); }
+.device-platform-ios .device-hero-version  { border-color: rgba(34, 211, 238, 0.4); box-shadow: 0 0 24px rgba(34, 211, 238, 0.1); }
+.device-platform-ios .device-hero-version .ver       { color: #22d3ee; text-shadow: 0 0 12px rgba(34, 211, 238, 0.5); }
+.device-platform-ios .device-hero-version .ver-label { color: #0891b2; }
+
+/* Android accent: verde Material #3DDC84 */
+.device-platform-android .device-section-icon,
+.device-platform-android .device-section-title { color: #3ddc84; }
+.device-platform-android .device-section-icon  {
+    background: linear-gradient(135deg, #0a2818, #051a0e);
+    border-color: rgba(61, 220, 132, 0.35);
+    box-shadow: 0 0 18px rgba(61, 220, 132, 0.2), inset 0 0 10px rgba(10, 36, 22, 0.5);
+}
+.device-platform-android .device-section-line  { background: linear-gradient(90deg, rgba(61, 220, 132, 0.45), transparent); }
+.device-platform-android .device-card::before  { background: linear-gradient(90deg, transparent, rgba(61, 220, 132, 0.5), transparent); }
+.device-platform-android .device-hero-icon     { color: #3ddc84; border-color: rgba(61, 220, 132, 0.35); box-shadow: inset 0 0 18px rgba(61, 220, 132, 0.1); }
+.device-platform-android .device-hero-version  { border-color: rgba(61, 220, 132, 0.4); box-shadow: 0 0 24px rgba(61, 220, 132, 0.12); }
+.device-platform-android .device-hero-version .ver       { color: #3ddc84; text-shadow: 0 0 12px rgba(61, 220, 132, 0.55); }
+.device-platform-android .device-hero-version .ver-label { color: #1a7d4d; }
+.device-platform-android .device-field-value.cyan { color: #3ddc84; }
+
+/* ═══════════════════════════════════════════════════════════════
+   SPECS GRID (v4.4.30) — bloco extra de Hardware/ABI/Kernel/etc
+   ═══════════════════════════════════════════════════════════════ */
+.device-specs {
+    padding: 16px 28px;
+    border-bottom: 1px solid rgba(26, 42, 58, 0.6);
+    background: rgba(4, 8, 13, 0.4);
+}
+.device-specs-title {
+    display: flex; align-items: center; gap: 8px;
+    color: #5d7390; font-size: 10px; letter-spacing: 0.32em;
+    text-transform: uppercase; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 10px;
+}
+.device-specs-title .ico { color: #5d7390; }
+.device-specs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+}
+.device-spec {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 8px 10px;
+    background: rgba(10, 18, 25, 0.5);
+    border: 1px solid rgba(26, 42, 58, 0.6);
+    border-radius: 8px;
+}
+.device-spec-label {
+    color: #fbbf24; font-size: 9px; letter-spacing: 0.22em;
+    text-transform: uppercase; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+}
+.device-spec-value {
+    color: #d4dde6; font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    word-break: break-all; line-height: 1.4;
+}
+.device-platform-android .device-spec-label { color: #3ddc84; }
+
+/* ═══════════════════════════════════════════════════════════════
    DEVICE INFO CARD (v4.4.17) — terminal/cyber style
    ═══════════════════════════════════════════════════════════════ */
 .device-section { margin: 0 0 28px; }
@@ -2123,7 +2198,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.30</span>
+        <span id="version">v4.4.31</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2380,7 +2455,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.30";
+const VERSION = "4.4.31";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3443,6 +3518,10 @@ function renderDeviceCard(info, jbInfo, blResults) {
     const isAndroid = info._platform === 'android' || /^Android /.test(info.iosVersion || '');
     const isIOS = !isAndroid && (info.iosVersion || info.productType || '').toString().length > 0;
     const heroIcon = isAndroid ? 'bot' : (isIOS ? 'apple' : 'smartphone');
+    // v4.4.30: paletas distintas por plataforma (escopo do card)
+    // iOS: cyan/azul-elétrico clássico Apple-tech
+    // Android: verde-android (#3DDC84 família) + amarelo build
+    const platformAccent = isAndroid ? 'android' : 'ios';
     const modelDisplay = info.modelName || info.productType || 'Dispositivo Desconhecido';
     // v4.4.30: subtitle e build label dependem da plataforma (era hardcoded iPhone/iOS)
     const platformLabel = isAndroid ? 'Android' : (isIOS ? 'iPhone' : 'Device');
@@ -3470,10 +3549,10 @@ function renderDeviceCard(info, jbInfo, blResults) {
     const serialDisplay = info.serial || '—';
 
     let html = `
-    <div class="device-section">
+    <div class="device-section device-platform-${platformAccent}">
         <div class="device-section-header">
-            <div class="device-section-icon">${iconSVG('cpu', { size: 20 })}</div>
-            <span class="device-section-title">Device Identification</span>
+            <div class="device-section-icon">${iconSVG(isAndroid ? 'bot' : 'cpu', { size: 20 })}</div>
+            <span class="device-section-title">${isAndroid ? 'Android Device' : 'iOS Device'} — Identificação</span>
             <span class="device-section-line"></span>
         </div>
         <div class="device-card">
@@ -3534,14 +3613,42 @@ function renderDeviceCard(info, jbInfo, blResults) {
                 </div>
             </div>` : ''}
 
+            ${(() => {
+                // v4.4.30: bloco de Especificações expandido pra Android (Hardware/ABI/Kernel/Locale/etc)
+                const x = info._extras || {};
+                if (!isAndroid) return '';
+                const specs = [];
+                if (x.hardware)   specs.push(['Chipset', x.hardware]);
+                if (x.abi)        specs.push(['ABI', x.abi]);
+                if (x.kernel)     specs.push(['Kernel', x.kernel]);
+                if (x.locale)     specs.push(['Locale', x.locale]);
+                if (x.timezone)   specs.push(['Timezone', x.timezone]);
+                if (x.uptime)     specs.push(['Uptime', x.uptime]);
+                if (x.usbState)   specs.push(['USB', x.usbState]);
+                if (x.btMac)      specs.push(['BT MAC', x.btMac]);
+                if (x.androidId)  specs.push(['Android ID', x.androidId]);
+                if (specs.length === 0) return '';
+                return `
+            <div class="device-specs">
+                <div class="device-specs-title">${iconSVG('cpu', { size: 12 })} Especificações</div>
+                <div class="device-specs-grid">
+                    ${specs.map(([k, v]) => `
+                        <div class="device-spec">
+                            <span class="device-spec-label">${escapeHTML(k)}</span>
+                            <span class="device-spec-value">${escapeHTML(String(v))}</span>
+                        </div>`).join('')}
+                </div>
+            </div>`;
+            })()}
+
             <div class="device-footer">
-                <span>A4ther Systems · Device Forensics</span>
+                <span>A4ther Systems · ${isAndroid ? 'Android Forensics' : 'iOS Forensics'}</span>
                 <span class="device-country">${iconSVG('shield', { size: 12 })} ${escapeHTML(hasRegion ? flag.name : (isAndroid ? 'Android Device' : 'iOS Device'))}</span>
             </div>
         </div>
     </div>
 
-    <div class="device-section">
+    <div class="device-section device-platform-${platformAccent}">
         <div class="device-section-header">
             <div class="device-section-icon">${iconSVG('shield-check', { size: 20 })}</div>
             <span class="device-section-title">Security Status</span>
@@ -3560,19 +3667,25 @@ function renderDeviceCard(info, jbInfo, blResults) {
             </div>
         </div>`;
 
-    // Jailbreak card
+    // v4.4.30: Jailbreak (iOS) ou Root (Android) — labels e listas distintas
     const jbBanned = jbInfo && jbInfo.jailbroken;
+    const rootLabel  = isAndroid ? 'Root' : 'Jailbreak';
+    const rootStatus = isAndroid ? (jbBanned ? 'ROOTED' : 'STOCK') : (jbBanned ? 'JAILBROKEN' : 'STOCK');
+    const iosTools = 'palera1n · Dopamine · Unc0ver · Taurine · Checkra1n · TrollStore · Sileo · Cydia · Zebra · Substrate · Frida';
+    const androidTools = 'Magisk · KernelSU · SuperSU · BusyBox · Xposed · LSPosed · EdXposed · Riru · Substrate · Frida';
     html += `
         <div class="status-card ${jbBanned ? 'banned' : ''}">
             <div class="status-icon-box">${iconSVG(jbBanned ? 'lock-open' : 'lock', { size: 22 })}</div>
             <div class="status-info">
-                <div class="status-title">Jailbreak Status</div>
+                <div class="status-title">${rootLabel} Status</div>
                 <div class="status-detail">${
                     jbBanned
-                        ? `JAILBROKEN · ${escapeHTML(jbInfo.names.slice(0,3).join(' · '))}${jbInfo.names.length > 3 ? ` +${jbInfo.names.length-3}` : ''}`
-                        : 'STOCK · Nenhum indicador de jailbreak detectado'
+                        ? `${rootStatus} · ${escapeHTML(jbInfo.names.slice(0,3).join(' · '))}${jbInfo.names.length > 3 ? ` +${jbInfo.names.length-3}` : ''}`
+                        : `${rootStatus} · Nenhum indicador de ${isAndroid ? 'root' : 'jailbreak'} detectado`
                 }</div>
-                ${jbBanned ? `<div class="status-meta">${jbInfo.names.length} ferramenta(s) · palera1n/Dopamine/Unc0ver/Taurine/Checkra1n/TrollStore</div>` : `<div class="status-meta">Checagem: palera1n · Dopamine · Unc0ver · Taurine · Checkra1n · TrollStore · Sileo · Cydia · Zebra · Substrate · Frida</div>`}
+                ${jbBanned
+                    ? `<div class="status-meta">${jbInfo.names.length} ferramenta(s) detectada(s)</div>`
+                    : `<div class="status-meta">Checagem: ${isAndroid ? androidTools : iosTools}</div>`}
             </div>
         </div>
     </div>`;
@@ -4068,6 +4181,10 @@ async function handleAndroid(file) {
     let devModel = null, devBrand = null, devDevice = null;
     let devAndroid = null, devSdk = null, devBuild = null;
     let devFingerprint = null, devMac = null, devBtMac = null, devAndroidId = null;
+    // v4.4.30: campos extras pra mostrar info mais rica
+    let devHardware = null, devAbi = null, devKernel = null;
+    let devLocale = null, devCountry = null, devTimezone = null, devPlayStore = null;
+    let devUptime = null, devUsbState = null;
     let detectedJBNames = [];
 
     // Detecta versão do scan (a4ther.sh v4.4.4, etc) — só pra log
@@ -4141,6 +4258,16 @@ async function handleAndroid(file) {
                 else if (/^mac\s*wlan|^mac\s+wlan/.test(k)) devMac = devMac || v;
                 else if (/^bluetooth\s*mac/.test(k))       devBtMac = devBtMac || v;
                 else if (/^android\s*id/.test(k))          devAndroidId = devAndroidId || v;
+                // v4.4.30: campos novos
+                else if (/^hardware\b/.test(k))            devHardware = devHardware || v;
+                else if (/^abi\b/.test(k))                 devAbi = devAbi || v;
+                else if (/^kernel\b/.test(k))              devKernel = devKernel || v;
+                else if (/^locale\b/.test(k))              devLocale = devLocale || v;
+                else if (/^country\b/.test(k))             devCountry = devCountry || v.toUpperCase().slice(0, 2);
+                else if (/^timezone\b/.test(k))            devTimezone = devTimezone || v;
+                else if (/^play\s*store/.test(k))          devPlayStore = devPlayStore || v.toUpperCase().slice(0, 2);
+                else if (/^uptime\b/.test(k))              devUptime = devUptime || v;
+                else if (/^usb\s*state/.test(k))           devUsbState = devUsbState || v;
             }
         }
 
@@ -4188,11 +4315,25 @@ async function handleAndroid(file) {
         modelName: modelDisplay,
         iosVersion: devAndroid ? `Android ${devAndroid}` : null,
         buildVersion: devBuild || (devSdk ? `SDK ${devSdk}` : null),
+        // v4.4.30: agora pega region/country do Android também
         region: null,
-        regionCode: null,
-        appStoreCountry: null,
+        regionCode: devCountry || null,
+        appStoreCountry: devPlayStore || null,
         _platform: 'android',
         _blacklistKeys: blacklistKeys,
+        // v4.4.30: campos extras pra mostrar no card expandido
+        _extras: {
+            hardware: devHardware,
+            abi: devAbi,
+            kernel: devKernel,
+            locale: devLocale,
+            timezone: devTimezone,
+            uptime: devUptime,
+            usbState: devUsbState,
+            manufacturer: devBrand,
+            androidId: devAndroidId,
+            btMac: devBtMac,
+        },
     };
 
     // Popula _jailbreakInfo se algum marker foi detectado
