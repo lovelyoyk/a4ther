@@ -2123,7 +2123,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.29</span>
+        <span id="version">v4.4.30</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2380,7 +2380,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.29";
+const VERSION = "4.4.30";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3444,15 +3444,24 @@ function renderDeviceCard(info, jbInfo, blResults) {
     const isIOS = !isAndroid && (info.iosVersion || info.productType || '').toString().length > 0;
     const heroIcon = isAndroid ? 'bot' : (isIOS ? 'apple' : 'smartphone');
     const modelDisplay = info.modelName || info.productType || 'Dispositivo Desconhecido';
-    const productLine = info.productType ? `${info.productType} · ${info.modelName ? 'iPhone' : 'Device'}` : 'iOS Device';
+    // v4.4.30: subtitle e build label dependem da plataforma (era hardcoded iPhone/iOS)
+    const platformLabel = isAndroid ? 'Android' : (isIOS ? 'iPhone' : 'Device');
+    const productLine = info.productType ? `${info.productType} · ${platformLabel}` : `${platformLabel} Device`;
     const iosLabel = info.iosVersion ? info.iosVersion : '—';
-    const buildLine = info.buildVersion ? `BUILD ${info.buildVersion}` : 'IOS VERSION';
+    const buildVerLabel = isAndroid ? 'BUILD' : (info.buildVersion ? 'BUILD' : 'IOS VERSION');
+    const buildLine = info.buildVersion ? `${buildVerLabel} ${info.buildVersion}` : (isAndroid ? 'ANDROID VERSION' : 'IOS VERSION');
+
+    // Labels do bloco UDID/ECID variam por plataforma
+    // iOS: UDID + ECID · Android: Fingerprint + MAC wlan0
+    const idField1Label = isAndroid ? 'FINGERPRINT' : 'UDID';
+    const idField2Label = isAndroid ? 'MAC WLAN0'  : 'ECID';
 
     // País → flag info
     const cc = (info.regionCode || '').toUpperCase();
-    const flag = COUNTRY_FLAGS[cc] || { name: info.region || cc || 'Desconhecido', g: 'linear-gradient(135deg, #555, #333)' };
+    const flag = COUNTRY_FLAGS[cc] || { name: info.region || cc || (isAndroid ? 'Android Device' : 'Desconhecido'), g: 'linear-gradient(135deg, #555, #333)' };
     const appStore = (info.appStoreCountry || '').toUpperCase();
     const appStoreInfo = COUNTRY_FLAGS[appStore];
+    const hasRegion = !!cc || !!info.appStoreCountry;
 
     // HWID — display completo (não cortado mais; v4.4.21).
     // Era truncado em 16 chars + "…" antes, o que impedia copiar pra cadastrar
@@ -3497,15 +3506,16 @@ function renderDeviceCard(info, jbInfo, blResults) {
 
             <div class="device-grid2">
                 <div class="device-field">
-                    <span class="device-field-label">UDID</span>
+                    <span class="device-field-label">${idField1Label}</span>
                     <span class="device-field-value muted">${escapeHTML(info.udid || '—')}</span>
                 </div>
                 <div class="device-field">
-                    <span class="device-field-label">ECID</span>
+                    <span class="device-field-label">${idField2Label}</span>
                     <span class="device-field-value muted">${escapeHTML(info.ecid || '—')}</span>
                 </div>
             </div>
 
+            ${hasRegion ? `
             <div class="device-grid2">
                 <div class="device-field">
                     <span class="device-field-label">Região do Device</span>
@@ -3515,18 +3525,18 @@ function renderDeviceCard(info, jbInfo, blResults) {
                     </span>
                 </div>
                 <div class="device-field">
-                    <span class="device-field-label">App Store Region</span>
+                    <span class="device-field-label">${isAndroid ? 'Play Store Region' : 'App Store Region'}</span>
                     <span class="device-field-value cyan">
                         ${appStoreInfo
                             ? `<span class="country-flag" style="background:${appStoreInfo.g}"></span> ${escapeHTML(appStoreInfo.name)} <span class="country-code">${escapeHTML(appStore)}</span>`
                             : (appStore ? `<span class="country-code">${escapeHTML(appStore)}</span>` : '—')}
                     </span>
                 </div>
-            </div>
+            </div>` : ''}
 
             <div class="device-footer">
                 <span>A4ther Systems · Device Forensics</span>
-                <span class="device-country">${iconSVG('shield', { size: 12 })} ${escapeHTML(flag.name)}</span>
+                <span class="device-country">${iconSVG('shield', { size: 12 })} ${escapeHTML(hasRegion ? flag.name : (isAndroid ? 'Android Device' : 'iOS Device'))}</span>
             </div>
         </div>
     </div>
