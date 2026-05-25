@@ -2198,7 +2198,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.33</span>
+        <span id="version">v4.4.34</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2455,7 +2455,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.33";
+const VERSION = "4.4.34";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3614,19 +3614,27 @@ function renderDeviceCard(info, jbInfo, blResults) {
             </div>` : ''}
 
             ${(() => {
-                // v4.4.30: bloco de Especificações expandido pra Android (Hardware/ABI/Kernel/Locale/etc)
+                // v4.4.34: bloco de Especificações pra Android E iOS
+                // Android: Hardware/ABI/Kernel/Locale/Timezone/Uptime/USB/BT/AndroidID
+                // iOS: Produto/Build ID/Sys Image (estilo KellerSS)
                 const x = info._extras || {};
-                if (!isAndroid) return '';
                 const specs = [];
-                if (x.hardware)   specs.push(['Chipset', x.hardware]);
-                if (x.abi)        specs.push(['ABI', x.abi]);
-                if (x.kernel)     specs.push(['Kernel', x.kernel]);
-                if (x.locale)     specs.push(['Locale', x.locale]);
-                if (x.timezone)   specs.push(['Timezone', x.timezone]);
-                if (x.uptime)     specs.push(['Uptime', x.uptime]);
-                if (x.usbState)   specs.push(['USB', x.usbState]);
-                if (x.btMac)      specs.push(['BT MAC', x.btMac]);
-                if (x.androidId)  specs.push(['Android ID', x.androidId]);
+                if (isAndroid) {
+                    if (x.hardware)   specs.push(['Chipset', x.hardware]);
+                    if (x.abi)        specs.push(['ABI', x.abi]);
+                    if (x.kernel)     specs.push(['Kernel', x.kernel]);
+                    if (x.locale)     specs.push(['Locale', x.locale]);
+                    if (x.timezone)   specs.push(['Timezone', x.timezone]);
+                    if (x.uptime)     specs.push(['Uptime', x.uptime]);
+                    if (x.usbState)   specs.push(['USB', x.usbState]);
+                    if (x.btMac)      specs.push(['BT MAC', x.btMac]);
+                    if (x.androidId)  specs.push(['Android ID', x.androidId]);
+                } else {
+                    if (x.productName)  specs.push(['Produto', x.productName]);
+                    if (x.productClass) specs.push(['Classe', x.productClass]);
+                    if (x.buildId)      specs.push(['Build', x.buildId]);
+                    if (x.sysImageId)   specs.push(['Sys Image', x.sysImageId]);
+                }
                 if (specs.length === 0) return '';
                 return `
             <div class="device-specs">
@@ -5266,6 +5274,10 @@ async function extractHWID(files) {
     let region      = null;   // Brasil / BR
     let regionCode  = null;   // BR
     let appStoreCountry = null; // BR (App Store loja)
+    // v4.4.34: campos extras estilo KellerSS
+    let sysImageId  = null;   // SystemImageID UUID
+    let productName = null;   // "iPhone OS"
+    let productClass = null;  // "iPhone"
 
     for (const f of files) {
         const name = (f.webkitRelativePath || f.name).toLowerCase();
@@ -5286,6 +5298,11 @@ async function extractHWID(files) {
                 if (bm) buildVersion = bm[1];
                 const rm = raw.match(/RegionInfo[\s:=]+([A-Z]+\/[A-Z]+)/i);
                 if (rm) regionCode = rm[1].split('/')[0];
+                // v4.4.34: novos campos do dumpstate
+                const sim = raw.match(/SystemImage(?:ID|UUID)[\s:=]+([A-F0-9-]{20,})/i);
+                if (sim) sysImageId = sim[1];
+                const pcm = raw.match(/ProductClass[\s:=]+([A-Za-z]+)/i);
+                if (pcm) productClass = pcm[1];
             }
         }
         // SystemVersion.plist → ProductVersion, BuildVersion, ProductName
@@ -5296,6 +5313,20 @@ async function extractHWID(files) {
                 if (pvm) iosVersion = pvm[1];
                 const bvm = raw.match(/<key>(?:ProductBuildVersion|BuildVersion)<\/key>\s*<string>([^<]+)<\/string>/i);
                 if (bvm && !buildVersion) buildVersion = bvm[1];
+                // v4.4.34: ProductName ("iPhone OS") + ProductCopyright
+                const pnm = raw.match(/<key>ProductName<\/key>\s*<string>([^<]+)<\/string>/i);
+                if (pnm) productName = pnm[1];
+                const simv = raw.match(/<key>(?:SystemImageID|ProductBuildVersionString)<\/key>\s*<string>([A-F0-9-]+)<\/string>/i);
+                if (simv && !sysImageId) sysImageId = simv[1];
+            }
+        }
+        // v4.4.34: lockdown.plist e activation_record → build IDs adicionais
+        if (name.endsWith('mobile_activation.log') || name.includes('lockdown') && name.endsWith('.plist')) {
+            const raw = await readSafe(f);
+            if (raw && !sysImageId) {
+                const bim = raw.match(/BuildID[\s:=]+([A-F0-9-]{20,})/i) ||
+                           raw.match(/SystemImageID[\s:=]+([A-F0-9-]{20,})/i);
+                if (bim) sysImageId = bim[1];
             }
         }
         // Globalpreferences.plist → AppleLocale → country
@@ -5408,7 +5439,15 @@ async function extractHWID(files) {
     if (hwidHash) blacklistKeys.push({ label: 'HWID SHA-256', value: hwidHash, recommended: true,  why: 'hash composto (Serial+UDID+ECID) — alternativa universal' });
     if (ecid)     blacklistKeys.push({ label: 'ECID',         value: ecid,     recommended: false, why: 'Exclusive Chip ID — gravado em silício' });
 
-    const info = { serial, udid, ecid, hwidHash, productType, modelName, iosVersion, buildVersion, region, regionCode, appStoreCountry, _platform: 'ios', _blacklistKeys: blacklistKeys };
+    // v4.4.34: _extras com campos extras pra mostrar no Device Card iOS
+    // (mesmo padrão do Android — Build ID, Sys Image, Product Name, etc)
+    const _extrasIOS = {};
+    if (productName)  _extrasIOS.productName = productName;
+    if (productClass) _extrasIOS.productClass = productClass;
+    if (sysImageId)   _extrasIOS.sysImageId = sysImageId;
+    if (buildVersion) _extrasIOS.buildId = buildVersion;
+
+    const info = { serial, udid, ecid, hwidHash, productType, modelName, iosVersion, buildVersion, region, regionCode, appStoreCountry, _platform: 'ios', _blacklistKeys: blacklistKeys, _extras: Object.keys(_extrasIOS).length > 0 ? _extrasIOS : null };
     // v4.4.17: persiste pro renderResults usar
     _deviceInfo = info;
     _blacklistResults = _allBlResults;
@@ -6742,20 +6781,36 @@ async function handleSysdiagnose(filesList, opts) {
     // CADA batch (não a cada 100ms) — Chrome/Safari só pinta na yield, e
     // bloqueios sequenciais >5s disparam "page unresponsive". Yield curto após
     // cada batch garante que a UI repaint pelo menos 1× por batch.
-    const PASS8_BATCH = 8;
+    // v4.4.34: yields mais agressivos pra evitar Page Unresponsive.
+    // Antes: batch 8 + yield apenas entre batches → blocava 200-400ms CPU
+    //        em sysdiagnoses grandes (1500+ arquivos), causando aviso de
+    //        unresponsive em ~10-15s.
+    // Agora: batch 4 + yield obrigatório a cada batch + yield extra se
+    //        algum arquivo demorar > 50ms em CPU (regex grande).
+    const PASS8_BATCH = 4;
+    let batchYield = performance.now();
     for (let i = 0; i < allScanFiles.length; i += PASS8_BATCH) {
         const batch = allScanFiles.slice(i, i + PASS8_BATCH);
-        // 8 file.text() em paralelo (browser usa thread separada por leitura)
+        // 4 file.text() em paralelo (browser usa thread separada por leitura)
         const reads = await Promise.all(batch.map(async (f) => ({ f, raw: await readSafe(f) })));
-        // Process CPU sync (regex passes não bloqueiam por muito tempo cada)
+        // Process CPU sync com yields intermediários
         for (const { f, raw } of reads) {
             scanCount++;
             _pass8ProcessFile(f, raw);
+            // Yield extra se processar > 80ms sem dar respiro
+            if (performance.now() - batchYield > 80) {
+                await new Promise(r => setTimeout(r, 0));
+                batchYield = performance.now();
+            }
         }
-        // UI feedback + yield obrigatório a cada batch (8 arquivos)
+        // UI feedback + yield obrigatório a cada batch
         const pct = Math.round((scanCount / allScanFiles.length) * 100);
-        showLoading(`Pass 8: ${scanCount}/${allScanFiles.length} (${pct}%)…`);
+        if (i % (PASS8_BATCH * 4) === 0) {
+            // Update do showLoading só a cada 16 arquivos (evita layout thrash)
+            showLoading(`Pass 8: ${scanCount}/${allScanFiles.length} (${pct}%)…`);
+        }
         await new Promise(r => setTimeout(r, 0));
+        batchYield = performance.now();
     }
 
     const _pass8Ms = Math.round(performance.now() - _pass8Start);
