@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.11</span>
+        <span id="version">v4.4.12</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1331,16 +1331,6 @@ footer a:hover {
                     <span class="dropdown-option-text">
                         <span class="dropdown-option-title">iOS · App Privacy Report</span>
                         <span class="dropdown-option-desc">Arquivo <code>.ndjson</code> exportado</span>
-                    </span>
-                    <svg class="dropdown-option-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </button>
-                <button class="dropdown-option" data-tab="profile" role="option" type="button">
-                    <span class="dropdown-option-emoji">🔐</span>
-                    <span class="dropdown-option-text">
-                        <span class="dropdown-option-title">iOS · Configuration Profile</span>
-                        <span class="dropdown-option-desc">Arquivo <code>.mobileconfig</code></span>
                     </span>
                     <svg class="dropdown-option-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1426,24 +1416,6 @@ footer a:hover {
                 <li>O scan salva em <code>~/a4ther_reports/scan_*.txt</code></li>
                 <li>Compartilha o TXT pra cá (Telegram/WhatsApp/iCloud)</li>
                 <li>Faz upload aqui</li>
-            </ol>
-        </div>
-    </div>
-
-    <!-- Profile -->
-    <div class="tab-panel" data-panel="profile">
-        <label class="dropzone" id="dz-profile">
-            <span class="dropzone-icon">🔐</span>
-            <div class="dropzone-text">Arraste ou clique para enviar o <code>.mobileconfig</code></div>
-            <div class="dropzone-hint">Configuration Profile baixado ou exportado</div>
-            <input type="file" id="file-profile" accept=".mobileconfig,application/x-apple-aspen-config" />
-        </label>
-        <div class="help-box">
-            <strong>Quando usar:</strong>
-            <ol>
-                <li>Recebeu link de profile (alguém mandou "instala isso")</li>
-                <li>Quer verificar ANTES de instalar — abre a URL no Safari, faz <code>Share → Save to Files</code></li>
-                <li>Envia o arquivo <code>.mobileconfig</code> pra cá pra ver os payloads críticos</li>
             </ol>
         </div>
     </div>
@@ -1556,7 +1528,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.11";
+const VERSION = "4.4.12";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -4735,9 +4707,6 @@ async function handleSysdiagnose(filesList, opts) {
 $('#file-ndjson').addEventListener('change', e => {
     if (e.target.files.length) handleNDJSON(e.target.files[0]);
 });
-$('#file-profile').addEventListener('change', e => {
-    if (e.target.files.length) handleProfile(e.target.files[0]);
-});
 $('#file-targz').addEventListener('change', e => {
     if (e.target.files.length) handleTarGz(e.target.files[0]);
 });
@@ -4764,7 +4733,6 @@ function wireDrop(dzId, handler, isFolder) {
 }
 wireDrop('#dz-targz',   handleTarGz, false);
 wireDrop('#dz-ndjson',  handleNDJSON, false);
-wireDrop('#dz-profile', handleProfile, false);
 wireDrop('#dz-android', handleAndroid, false);
 
 // Actions
