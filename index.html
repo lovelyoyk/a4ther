@@ -1289,7 +1289,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.13</span>
+        <span id="version">v4.4.14</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -1528,7 +1528,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.13";
+const VERSION = "4.4.14";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -4054,11 +4054,59 @@ async function handleSysdiagnose(filesList, opts) {
             }
 
             // ═══════════════ REPORT — todos profile UUIDs com timeline ═══════════════
+            // v4.4.14: AGRUPA por nome do cheat (Zeex/Fatality/Luxe/Dash/XTREMO/
+            // Proxy desconhecido). Antes emitia 1 alert por hash — agora 1 alert
+            // por FAMÍLIA de cheat com contagem total. Profiles sem identificação
+            // continuam emitindo individualmente (cada hash genérico é evento único).
             ok(`  → ${profileOps.size} profile UUIDs únicos detectados (após dedup)`);
             if (profileOps.size > 0) {
                 const sortedIds = Array.from(profileOps.entries())
                     .sort((a, b) => (b[1].lastSeen || 0) - (a[1].lastSeen || 0));
+
+                // Primeira passada: agrupa por cheatId.name → { sev, desc, pids[], events agg }
+                const cheatGroups = new Map();
+                const unidentified = [];
                 for (const [pid, entry] of sortedIds) {
+                    const cheatId = identifyCheatProfile(pid);
+                    if (cheatId) {
+                        if (!cheatGroups.has(cheatId.name)) {
+                            cheatGroups.set(cheatId.name, {
+                                name: cheatId.name, sev: cheatId.sev, desc: cheatId.desc,
+                                pids: [], totalInstalls: 0, totalRemoves: 0, totalUpdates: 0,
+                                processes: new Set(), latestSeen: null, matches: new Set(),
+                            });
+                        }
+                        const g = cheatGroups.get(cheatId.name);
+                        g.pids.push(pid);
+                        g.totalInstalls += entry.installs.length;
+                        g.totalRemoves  += entry.removes.length;
+                        g.totalUpdates  += entry.updates.length;
+                        for (const p of entry.processes) g.processes.add(p);
+                        if (entry.lastSeen && (!g.latestSeen || entry.lastSeen > g.latestSeen)) {
+                            g.latestSeen = entry.lastSeen;
+                        }
+                        g.matches.add(cheatId.match);
+                    } else {
+                        unidentified.push([pid, entry]);
+                    }
+                }
+
+                // Emite 1 alert por família de cheat conhecido
+                for (const g of cheatGroups.values()) {
+                    const procs = Array.from(g.processes).join(', ') || '?';
+                    const lastSeenStr = g.latestSeen ? new Date(g.latestSeen).toISOString() : '(sem ts)';
+                    const ev = `${g.totalInstalls}× install · ${g.totalRemoves}× remove${g.totalUpdates ? ` · ${g.totalUpdates}× update` : ''} · process: ${procs}`;
+                    const matchStr = Array.from(g.matches).join(', ');
+                    const sample = g.pids[0].length > 40 ? g.pids[0].substring(0, 40) + '…' : g.pids[0];
+                    const variantLine = g.pids.length > 1
+                        ? `${g.pids.length} variantes · ex: ${sample}`
+                        : sample;
+                    alertF(`[${g.sev}] CHEAT IDENTIFICADO → ${g.name}: ${variantLine}`,
+                        `${g.desc} · IOC match: ${matchStr} · ${ev} · lastSeen: ${lastSeenStr}`);
+                }
+
+                // Emite individualmente os profiles NÃO-identificados (sem família conhecida)
+                for (const [pid, entry] of unidentified) {
                     const iCount = entry.installs.length;
                     const rCount = entry.removes.length;
                     const uCount = entry.updates.length;
@@ -4067,19 +4115,7 @@ async function handleSysdiagnose(filesList, opts) {
                     const eventsLine = `${iCount}× install · ${rCount}× remove${uCount ? ` · ${uCount}× update` : ''} · process: ${procs}`;
                     const shortPid = pid.length > 60 ? pid.substring(0, 60) + '…' : pid;
 
-                    // v4.4.8: cross-reference com tabela de cheats conhecidos
-                    // (Zeex, Fatality, Luxe, Dash, XTREMO, proxies desconhecidos)
-                    const cheatId = identifyCheatProfile(pid);
-                    const idLabel = cheatId ? ` → ${cheatId.name}` : '';
-                    const idDetail = cheatId ? ` · IOC match: ${cheatId.match}` : '';
-
-                    // Classify severity
-                    if (cheatId) {
-                        // IDENTIFICAÇÃO CONFIRMADA — alert com nome do cheat
-                        alertF(`[${cheatId.sev}] CHEAT IDENTIFICADO${idLabel}: ${shortPid}`,
-                            `${cheatId.desc}${idDetail} · ${eventsLine} · lastSeen: ${lastSeenStr}`);
-                    } else if (iCount > 0 && rCount > 0) {
-                        // Install + remove = profile foi posto E retirado (típico cheat panel temporário)
+                    if (iCount > 0 && rCount > 0) {
                         alertF(`[CRITICAL] Profile UUID opaco INSTALADO+REMOVIDO: ${shortPid}`,
                             `${eventsLine} · lastSeen: ${lastSeenStr} — Cheat panel? (instalado pra jogar, removido pra esconder)`);
                     } else if (iCount >= 2) {
@@ -4587,20 +4623,48 @@ async function handleSysdiagnose(filesList, opts) {
     await extractHWID(files);
 
     // ─── Emite alerts agregados ───
-    // v4.4.11: cross-check com CHEAT_PROFILE_PREFIXES (Zeex/Fatality/Luxe/Dash/
-    // XTREMO/proxies). Antes o identifyCheatProfile só rodava no Pass 2.5
-    // (MCProfileEvents) — profiles capturados via Pass 8 (grep recursivo nos
-    // demais arquivos) passavam sem identificação do cheat conhecido.
+    // v4.4.14: AGRUPA por cheatId.name (Pass 8 final emit). Profiles do mesmo
+    // cheat conhecido (ex: 5 hashes diferentes da família Zeex) viram 1 alert
+    // consolidado com contagem de variantes. Não-identificados continuam
+    // individualmente.
     if (foundProfiles.size > 0) {
         ok(`◆ ${foundProfiles.size} profile identifiers encontrados via grep recursivo`);
+        const cheatGroups = new Map();
+        const others = [];
         for (const [pid, sources] of foundProfiles) {
             const cheatId = identifyCheatProfile(pid);
+            if (cheatId) {
+                if (!cheatGroups.has(cheatId.name)) {
+                    cheatGroups.set(cheatId.name, {
+                        name: cheatId.name, sev: cheatId.sev, desc: cheatId.desc,
+                        pids: [], sources: new Set(), matches: new Set(),
+                    });
+                }
+                const g = cheatGroups.get(cheatId.name);
+                g.pids.push(pid);
+                for (const s of sources) g.sources.add(s);
+                g.matches.add(cheatId.match);
+            } else {
+                others.push([pid, sources]);
+            }
+        }
+        // 1 alert por família de cheat conhecido
+        for (const g of cheatGroups.values()) {
+            const srcArr = Array.from(g.sources);
+            const srcStr = `fontes: ${srcArr.slice(0,3).join(', ')}${srcArr.length>3 ? ` +${srcArr.length-3}` : ''}`;
+            const matchStr = Array.from(g.matches).join(', ');
+            const sample = g.pids[0].length > 40 ? g.pids[0].substring(0, 40) + '…' : g.pids[0];
+            const variantLine = g.pids.length > 1
+                ? `${g.pids.length} variantes · ex: ${sample}`
+                : sample;
+            alertF(`[${g.sev}] CHEAT IDENTIFICADO → ${g.name}: ${variantLine}`,
+                `${g.desc} · IOC match: ${matchStr} · ${srcStr}`);
+        }
+        // Profiles não-identificados: 1 alert por pid (não tem família pra agrupar)
+        for (const [pid, sources] of others) {
             const c = classifyBundle(pid);
             const srcStr = `fontes: ${sources.slice(0,3).join(', ')}${sources.length>3 ? ` +${sources.length-3}` : ''}`;
-            if (cheatId) {
-                alertF(`[${cheatId.sev}] CHEAT IDENTIFICADO → ${cheatId.name}: ${pid}`,
-                    `${cheatId.desc} · IOC match: ${cheatId.match} · ${srcStr}`);
-            } else if (c) {
+            if (c) {
                 alertF(`[${c.sev}] PROFILE: ${pid}`, `${c.desc} · ${srcStr}`);
             } else if (!pid.startsWith('com.apple.')) {
                 warn(`[MEDIUM] Profile não-catalogado: ${pid}`, srcStr);
