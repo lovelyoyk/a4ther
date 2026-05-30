@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.31"
+VERSION="4.4.56"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -72,6 +72,64 @@ gp()     { getprop "$1" 2>/dev/null; }
 exists() { [ -e "$1" ]; }
 pkg_installed() {
     have pm && pm path "$1" 2>/dev/null | grep -q '^package:'
+}
+
+# v4.4.32: SELF_PID + SELF_FILTER pra evitar que o próprio scanner caia no
+# ps -A | grep "scarlet|trollstore|cheat|hack". O bug: o argv do shell rodando
+# o script contém o path "a4ther.sh", então quando o script lista esses tokens
+# em arrays de string, eles aparecem no comando — e a varredura captura como
+# se fossem processos reais. Solução: filtra o PID do script, processo pai e
+# filhos diretos, mais qualquer linha que cite o nome do script.
+SELF_PID=$$
+SELF_PPID=$(cat /proc/$$/stat 2>/dev/null | awk '{print $4}')
+SELF_SCRIPT="a4ther"
+# clean_procs: remove linhas que sejam o próprio script (pid/ppid/nome).
+# Uso: PROCS=$(ps -A 2>/dev/null | clean_procs)
+clean_procs() {
+    awk -v me="$SELF_PID" -v parent="$SELF_PPID" -v name="$SELF_SCRIPT" '
+        {
+            pid=$2;
+            # campo pid varia por ps: BusyBox = $1, Android toybox -A = $2
+            for (i=1;i<=NF;i++) if ($i ~ /^[0-9]+$/ && $i!=0) { pid=$i; break }
+            if (pid==me || pid==parent) next
+            if (index($0, name)>0) next
+            print
+        }'
+}
+
+# v4.4.32: fs_has_nanos PATH — retorna 0 (yes) se filesystem suporta resolução
+# de nanossegundos, 1 (no) caso contrário. Crítico antes de cravar timestomping
+# em FAT32/sdcardfs/exfat — esses fs SEMPRE retornam nanos zerados ou inválidos,
+# e o scanner antigo gerava ALERTA crítico em 100% dos casos.
+#
+# Estratégia:
+#  1. Detecta tipo de fs via stat -f -c '%T' ou findmnt/mount
+#  2. Whitelist de fs com nanos (ext4, f2fs, btrfs, xfs)
+#  3. Blacklist de fs sem nanos (vfat, exfat, msdos)
+#  4. Fallback: cria um arquivo temp e mede a resolução
+fs_has_nanos() {
+    [ -z "$1" ] && return 1
+    _FS=""
+    # método 1: stat -f
+    if have stat; then
+        _FS=$(stat -f -c '%T' "$1" 2>/dev/null)
+    fi
+    # método 2: mount/findmnt
+    if [ -z "$_FS" ]; then
+        _MP=$(df "$1" 2>/dev/null | tail -1 | awk '{print $NF}')
+        [ -n "$_MP" ] && _FS=$(awk -v mp="$_MP" '$2==mp {print $3; exit}' /proc/mounts 2>/dev/null)
+    fi
+    case "$_FS" in
+        # Sem suporte a nanos (resolução 2s ou pior):
+        vfat|fat|msdos|exfat|sdfat|fuseblk|fuse|sdcardfs)
+            return 1 ;;
+        # Suporta nanos:
+        ext4|f2fs|btrfs|xfs|ext3|ext2)
+            return 0 ;;
+        # Desconhecido: assume YES pra não suprimir alertas reais
+        *)
+            return 0 ;;
+    esac
 }
 
 # v4.4.3: settings get com filtro de erro. No Android moderno o `settings`
@@ -139,6 +197,16 @@ detect_platform() {
     if [ -n "$FORCE_PLATFORM" ]; then
         PLATFORM="$FORCE_PLATFORM"
         OS_NAME="(forced=$FORCE_PLATFORM)"
+        # v4.4.32: marca quando o force é em Darwin REAL (não device iOS).
+        # Várias seções usam IS_REAL_IOS=1 pra suprimir paths que existem em
+        # macOS comum (/usr/bin/ssh, /usr/sbin/sshd, sftp-server, lldb).
+        IS_REAL_IOS=0
+        if [ "$FORCE_PLATFORM" = "ios" ]; then
+            if [ -d /var/mobile ] || [ -d /private/var/mobile ] \
+               || [ -d /var/jb ] || [ -d /private/var/jb ]; then
+                IS_REAL_IOS=1
+            fi
+        fi
         return
     fi
     OS_NAME=$(uname -s 2>/dev/null)
@@ -158,17 +226,22 @@ detect_platform() {
                || [ -d /var/jb ] || [ -d /private/var/jb ] \
                || [ -f /usr/libexec/cydia/firmware.sh ]; then
                 PLATFORM="ios"
+                IS_REAL_IOS=1
             elif [ -d /System/Library/CoreServices ] && [ -d /Users ]; then
                 PLATFORM="macos"
+                IS_REAL_IOS=0
             else
                 PLATFORM="darwin"
+                IS_REAL_IOS=0
             fi
             ;;
         *)
             PLATFORM="unknown"
+            IS_REAL_IOS=0
             ;;
     esac
 }
+IS_REAL_IOS=0
 detect_platform
 
 emit "Plataforma detectada: ${CW}$PLATFORM${CN}  (uname=$OS_NAME)"
@@ -188,6 +261,99 @@ esac
 #  ====== A PARTIR DAQUI: BLOCO ANDROID ==========
 # ============================================================
 if [ "$PLATFORM" = "android" ]; then
+
+# ============================================================
+#  0. WIFI DEBUG PROMPT (v4.4.52)
+#  Antes do scan, detecta se já tem ADB conectado. Se não tem, mostra setup
+#  de depuração WiFi pro user parear e dar permissão a dados privilegiados
+#  (bugreport completo, dumpsys, tombstones). Sem isso, Termux pula tudo
+#  que precisa de root/shell uid e o relatório fica fraco.
+#
+#  Skipa o prompt automaticamente quando:
+#    - SKIP_WIFI_PROMPT=1 (env var, pra rodadas headless)
+#    - ADB já está pareado e conectado
+#    - Device claramente é root (UID 0) — não precisa de ADB
+# ============================================================
+header "DEPURAÇÃO WIFI (recomendado antes do scan)"
+
+# Detecta se já é root real
+_CUR_UID=$(id -u 2>/dev/null)
+_IS_ROOT=0
+[ "$_CUR_UID" = "0" ] && _IS_ROOT=1
+# Detecta se ADB tá conectado via WiFi (porta 5555 aberta em listen via /proc/net/tcp)
+_ADB_WIFI=0
+if [ -r /proc/net/tcp ]; then
+    # 5555 = 0x15B3
+    if awk '{print $2}' /proc/net/tcp 2>/dev/null | grep -qE ':15B3$'; then
+        _ADB_WIFI=1
+    fi
+fi
+# Detecta se já tá rodando AS shell ADB (uid 2000)
+_IS_SHELL=0
+[ "$_CUR_UID" = "2000" ] && _IS_SHELL=1
+# Detecta se developer settings já tá habilitado (sinal de quem usa adb)
+_DEV_ENABLED=0
+if have settings; then
+    _DEV_RAW=$(settings get global development_settings_enabled 2>/dev/null)
+    [ "$_DEV_RAW" = "1" ] && _DEV_ENABLED=1
+fi
+
+if [ "$_IS_ROOT" = "1" ]; then
+    ok "Rodando como root (UID 0) — acesso total, depuração WiFi não é necessária"
+elif [ "$_IS_SHELL" = "1" ]; then
+    ok "Rodando como shell/ADB (UID 2000) — acesso elevado disponível"
+elif [ "$_ADB_WIFI" = "1" ]; then
+    ok "ADB WiFi já está em LISTEN (porta 5555) — você pode usar adb connect agora"
+elif [ -n "$SKIP_WIFI_PROMPT" ]; then
+    info "SKIP_WIFI_PROMPT=1 — pulando setup de depuração WiFi"
+else
+    info ""
+    info "  ${CW}⚠  ATENÇÃO ANTES DO SCAN:${CN}"
+    info ""
+    info "  Termux rodando sem ADB pareado NÃO acessa:"
+    info "    • logcat persistent (semanas de log)"
+    info "    • /data/tombstones (crashes nativos com libs cheat)"
+    info "    • /data/system/dropbox (crashes históricos)"
+    info "    • dumpsys completo (window/activity/appops)"
+    info "    • batterystats history (uninstalls de cheats)"
+    info ""
+    info "  ${CG}✅ RECOMENDADO — Parear depuração WiFi ANTES do scan${CN}"
+    info "  (leva ~1 minuto, scan fica MUITO mais completo)"
+    info ""
+    info "  ${CW}📱 NO ANDROID:${CN}"
+    info "    1) Settings → Sistema → ${CW}Opções do desenvolvedor${CN}"
+    [ "$_DEV_ENABLED" = "0" ] && \
+        info "       (se não tem: Settings → Sobre → toque 7x em ${CW}Build Number${CN})"
+    info "    2) Ative ${CW}\"Depuração sem fio\"${CN} (Wireless debugging)"
+    info "    3) Toque em ${CW}\"Parear com código de pareamento\"${CN}"
+    info "       Anote IP:porta + código de 6 dígitos"
+    info ""
+    info "  ${CW}💻 NO PC (Mac/Windows/Linux com adb instalado):${CN}"
+    info "    4) ${CW}adb pair <IP:porta>${CN}     # cola o código de 6 dígitos"
+    info "    5) ${CW}adb connect <IP:porta>${CN}  # IP é OUTRO, vê na tela principal"
+    info "    6) ${CW}adb shell${CN}                # confirma que conectou"
+    info ""
+    info "  ${CW}🔁 DEPOIS:${CN}"
+    info "    7) Rode o scanner via ADB pra ele ter acesso elevado:"
+    info "       ${CW}adb shell sh /sdcard/Download/a4ther.sh${CN}"
+    info "       (ou continue no Termux — funciona, só com menos dados)"
+    info ""
+    info "  ${CY}Pra pular esse aviso: ${CW}SKIP_WIFI_PROMPT=1 sh a4ther.sh${CN}"
+    info ""
+
+    # Pausa interativa SE rodando em TTY (não pausa em pipe/cron)
+    if [ -t 0 ] && [ -t 1 ]; then
+        # 20s pra ler. Enter pula a pausa.
+        printf "  ${CC}›${CN} Aperte ${CW}ENTER${CN} pra continuar o scan agora (auto em 20s)... "
+        # `read -t` é POSIX-ish; em sh/dash funciona, em busybox precisa workaround
+        if read -t 20 _ 2>/dev/null; then
+            info "  Continuando..."
+        else
+            info ""
+            info "  Continuando após timeout..."
+        fi
+    fi
+fi
 
 # ============================================================
 #  1. INFO DO SISTEMA
@@ -587,7 +753,7 @@ if [ -d "$MIUI_BACKUP" ] 2>/dev/null; then
         echo "$SUS_BIN" | while IFS= read -r LN; do alert "  $LN"; done
     }
     # Nomes suspeitos no backup
-    SUS_NAMES=$(find "$MIUI_BACKUP" -type f 2>/dev/null | grep -iE 'cheat|mod|menu|hack|inject|gg|esp|aimbot|ffh4x|panel' | head -5)
+    SUS_NAMES=$(find "$MIUI_BACKUP" -type f 2>/dev/null | grep -iE 'cheat|mod|menu|hack|inject|gg|esp|aimbot|ffh4x|panel|holograma|hologram' | head -5)
     [ -n "$SUS_NAMES" ] && {
         alert "Arquivos com nome suspeito em MIUI Backup:"
         echo "$SUS_NAMES" | while IFS= read -r LN; do alert "  $LN"; done
@@ -781,6 +947,34 @@ if have dumpsys; then
                 # Whitelist apps system + FF
                 com.android.*|com.google.*|com.miui.*|com.samsung.*|com.dts.freefiremax|com.dts.freefireth) ;;
                 *) warn "App com permissão SYSTEM_ALERT_WINDOW (overlay): $PKG" ;;
+            esac
+        done
+    fi
+    # v4.4.55: MANAGE_EXTERNAL_STORAGE granted pra apps non-system — vetor
+    # principal do Holograma e cheats de "patch in-place" do FF (precisam dessa
+    # permissão pra editar arquivos em /sdcard/Android/data/<FF>/ e /obb/).
+    # Android 11+ marcou essa permissão como "sensitive" — usuário tem que ir
+    # em Settings → Special access → All files access pra habilitar. Whitelist
+    # só inclui apps que tem motivo legítimo (file managers, editores).
+    APPOPS_STORAGE=$(dumpsys appops 2>/dev/null | grep -B100 'MANAGE_EXTERNAL_STORAGE: allow' | grep -E '^[a-zA-Z0-9_\.]+\s*:\s*\(uid=' 2>/dev/null | awk '{print $1}' | sort -u | head -20)
+    if [ -n "$APPOPS_STORAGE" ]; then
+        echo "$APPOPS_STORAGE" | while IFS= read -r PKG; do
+            [ -z "$PKG" ] && continue
+            case "$PKG" in
+                # Whitelist: apps system + file managers reais + IDEs
+                com.android.*|com.google.android.*|com.miui.*|com.samsung.android.*|\
+                com.sec.android.*|com.huawei.*|com.oppo.*|com.coloros.*|com.realme.*|\
+                com.mi.android.globalFileexplorer|com.alphainventor.filemanager|\
+                com.amaze.filemanager|com.simplemobiletools.filemanager|com.android.documentsui|\
+                com.termux|org.lsposed.manager|me.zhanghai.android.files|\
+                org.jellyfin.mobile|org.videolan.vlc|com.estrongs.android.pop|\
+                com.lonelycatgames.Xplore|com.solidexplorer2) ;;
+                # Cheat-related KNOWN: alert imediato
+                *holograma*|*hologram*|*ffh4x*|*aimbot*|*cheat*|*injector*|*modbibi*|*xyzapk*|*modcombo*|*panel*)
+                    alert "App SUSPEITO com MANAGE_EXTERNAL_STORAGE (edita /Android/data do FF): $PKG" ;;
+                # Outros 3rd party: warn (pode ser legítimo, mas atípico)
+                *)
+                    warn "App não-system com MANAGE_EXTERNAL_STORAGE: $PKG (verifica se edita pasta do FF)" ;;
             esac
         done
     fi
@@ -989,7 +1183,7 @@ if have dumpsys; then
             done
         fi
         # outros uninstalls suspeitos
-        OTHER_REMOVED=$(echo "$UNINSTALLED" | grep -iE 'cheat|hack|mod|aimbot|esp|ffh4x|menu|injector|frida|magisk|brevent|shizuku|gameguardian|virtualapp|parallel|lulubox|luckypatcher')
+        OTHER_REMOVED=$(echo "$UNINSTALLED" | grep -iE 'cheat|hack|mod|aimbot|esp|ffh4x|menu|injector|frida|magisk|brevent|shizuku|gameguardian|virtualapp|parallel|lulubox|luckypatcher|holograma|hologram')
         if [ -n "$OTHER_REMOVED" ]; then
             alert "Outros apps suspeitos desinstalados recentemente:"
             echo "$OTHER_REMOVED" | while IFS= read -r L; do
@@ -1045,7 +1239,7 @@ if have logcat; then
     PKG_EVENTS=$(logcat -b events -d 2>/dev/null | grep -iE 'pkg_install|pkg_uninstall|package_added|package_removed|installer' | head -n 30)
     if [ -n "$PKG_EVENTS" ]; then
         # filtrar FF e cheats
-        FF_LOGEV=$(echo "$PKG_EVENTS" | grep -iE 'freefire|dts\.freefire|garena|cheat|hack|mod|aimbot|esp|frida|magisk')
+        FF_LOGEV=$(echo "$PKG_EVENTS" | grep -iE 'freefire|dts\.freefire|garena|cheat|hack|mod|aimbot|esp|frida|magisk|holograma|hologram')
         if [ -n "$FF_LOGEV" ]; then
             alert "Eventos de pkg no logcat (FF/cheat relacionados):"
             echo "$FF_LOGEV" | head -n 10 | while IFS= read -r L; do
@@ -1081,7 +1275,9 @@ for PKG in $FF_PKGS; do
         ls "$PREFS" 2>/dev/null | while IFS= read -r F; do
             [ -z "$F" ] && continue
             case "$F" in
-                *cheat*|*mod*|*hack*|*menu*|*esp*|*aim*)
+                # v4.4.54: + *holograma* / *hologram* / *holo* — cheat 'Holograma'
+                # solta arquivos com esse prefix dentro da pasta do FF (data/obb).
+                *cheat*|*mod*|*hack*|*menu*|*esp*|*aim*|*holograma*|*hologram*|*holo*)
                     emit "${CR}[ALERTA]${CN}  prefs suspeito: $PREFS/$F" ;;
                 *) info "  $PREFS/$F" ;;
             esac
@@ -1091,7 +1287,9 @@ for PKG in $FF_PKGS; do
         ODD=$(find "$FILES" 2>/dev/null -maxdepth 3 -type f \( \
             -name '.modded' -o -name '*.modff' -o -name 'cheat.cfg' \
             -o -name 'aim.cfg' -o -name 'esp.cfg' -o -name 'mod.cfg' \
-            -o -name 'menu.cfg' -o -name '*.lua' -o -name '*.hack' \) 2>/dev/null)
+            -o -name 'menu.cfg' -o -name '*.lua' -o -name '*.hack' \
+            -o -iname '*holograma*' -o -iname '*hologram*' -o -iname '.holo*' \
+            -o -iname 'holo.*' -o -iname '*.holo' \) 2>/dev/null)
         [ -n "$ODD" ] && echo "$ODD" | while IFS= read -r L; do
             [ -n "$L" ] && alert "Mod file em files/: $L"
         done
@@ -1101,9 +1299,151 @@ for PKG in $FF_PKGS; do
         [ -n "$ODDC" ] && echo "$ODDC" | while IFS= read -r L; do
             [ -n "$L" ] && alert "Lib/dex em cache do FF: $L"
         done
+        # v4.4.54: keyword holograma no cache também
+        HOLO_CACHE=$(find "$CACHE" 2>/dev/null -maxdepth 3 -type f -iname '*holograma*' 2>/dev/null | head -10)
+        [ -n "$HOLO_CACHE" ] && echo "$HOLO_CACHE" | while IFS= read -r L; do
+            [ -n "$L" ] && alert "Cheat 'Holograma' em cache do FF: $L"
+        done
     fi
+    # v4.4.54: scan recursivo TODA pasta /data/data/<FF> por holograma
+    if [ -d "/data/data/$PKG" ] && have find; then
+        HOLO_ALL=$(find "/data/data/$PKG" 2>/dev/null -maxdepth 5 -type f \
+            \( -iname '*holograma*' -o -iname '*hologram*' \) 2>/dev/null | head -20)
+        [ -n "$HOLO_ALL" ] && echo "$HOLO_ALL" | while IFS= read -r L; do
+            [ -n "$L" ] && alert "Cheat 'Holograma' em /data/data/$PKG: $L"
+        done
+    fi
+    # v4.4.54: + /sdcard/Android/data/<FF>/ e /sdcard/Android/obb/<FF>/
+    for FFEXT in "/sdcard/Android/data/$PKG" "/sdcard/Android/obb/$PKG" \
+                 "/storage/emulated/0/Android/data/$PKG" "/storage/emulated/0/Android/obb/$PKG"; do
+        [ -d "$FFEXT" ] || continue
+        if have find; then
+            HOLO_EXT=$(find "$FFEXT" 2>/dev/null -maxdepth 6 -type f \
+                \( -iname '*holograma*' -o -iname '*hologram*' -o -iname '.holo*' \
+                   -o -iname 'holo_*' -o -iname '*_holo.*' \) 2>/dev/null | head -20)
+            [ -n "$HOLO_EXT" ] && echo "$HOLO_EXT" | while IFS= read -r L; do
+                [ -n "$L" ] && alert "Cheat 'Holograma' em $FFEXT: $L"
+            done
+        fi
+    done
 done
 [ "$FFDATA_HITS" = "0" ] && ok "Dados internos FF sem indícios"
+
+# ============================================================
+#  9.5 HOLOGRAMA — IOCs do cheat real (v4.4.56)
+#  Threat intel: github.com/Haqowsk92/ffxit (commit Feb/2026). Three.js script
+#  que desenha BoxGeometry(1,2,1) vermelho na posição de cada inimigo.
+#  Detect via:
+#    1) Hash MD5 / SHA-256 do README do repo (qualquer arquivo no device com
+#       esses hashes = cópia direta)
+#    2) Strings únicas das funções (createHologram, updateHolograms, getEnemies)
+#    3) Pattern THREE.BoxGeometry(1, 2, 1) + MeshBasicMaterial 0xff0000
+#    4) Three.js dentro de /Android/data ou /obb do FF (red flag)
+# ============================================================
+header "HOLOGRAMA — Three.js ESP IOCs"
+
+HOLO_HITS=0
+HOLO_MD5="b788a1a60b3ddd8ec35b457321774c54"
+HOLO_SHA="51811a5b6a44f2e37c7af28021ba505f9fe3029ccc2986324475ae35b51aedcf"
+
+# Paths a vasculhar — pastas do FF + /sdcard onde dropam scripts antes de inject
+HOLO_PATHS=""
+for FFPKG in com.dts.freefireth com.dts.freefiremax; do
+    for D in "/data/data/$FFPKG" \
+             "/sdcard/Android/data/$FFPKG" \
+             "/sdcard/Android/obb/$FFPKG" \
+             "/storage/emulated/0/Android/data/$FFPKG" \
+             "/storage/emulated/0/Android/obb/$FFPKG"; do
+        [ -d "$D" ] && HOLO_PATHS="$HOLO_PATHS $D"
+    done
+done
+# Também pastas de drop comuns
+for D in /sdcard/Download /sdcard/Documents /sdcard/Holograma /sdcard/Hologram /sdcard/HOLO /sdcard/.holograma /sdcard/.hologram /data/local/tmp; do
+    [ -d "$D" ] && HOLO_PATHS="$HOLO_PATHS $D"
+done
+
+if [ -n "$HOLO_PATHS" ] && have find; then
+    info "Holograma deep scan em: $(echo "$HOLO_PATHS" | tr ' ' '\n' | wc -l) paths"
+
+    # 1) HASH check — qualquer arquivo .js/.txt/.html/.md ≤ 100KB
+    if have md5sum && have sha256sum; then
+        HOLO_CANDIDATES=$(find $HOLO_PATHS 2>/dev/null -maxdepth 6 -type f \
+            \( -iname '*.js' -o -iname '*.txt' -o -iname '*.html' -o -iname '*.md' \
+               -o -iname '*.json' -o -iname '*.lua' \) -size -100k 2>/dev/null | head -200)
+        if [ -n "$HOLO_CANDIDATES" ]; then
+            echo "$HOLO_CANDIDATES" | while IFS= read -r F; do
+                [ -z "$F" ] || [ ! -r "$F" ] && continue
+                _F_MD5=$(md5sum "$F" 2>/dev/null | awk '{print $1}')
+                _F_SHA=$(sha256sum "$F" 2>/dev/null | awk '{print $1}')
+                if [ "$_F_MD5" = "$HOLO_MD5" ] || [ "$_F_SHA" = "$HOLO_SHA" ]; then
+                    alert "HOLOGRAMA — hash bate com Haqowsk92/ffxit: $F"
+                    alert "  └─ MD5: $_F_MD5"
+                    alert "  └─ SHA-256: $_F_SHA"
+                    HOLO_HITS=$((HOLO_HITS+1))
+                fi
+            done
+        fi
+    fi
+
+    # 2) STRING patterns — funções únicas do script
+    if have grep; then
+        # createHologram + updateHolograms + getEnemies juntos no mesmo arquivo
+        STR_MATCH=$(grep -rlE 'createHologram[[:space:]]*\(' $HOLO_PATHS 2>/dev/null | head -20)
+        if [ -n "$STR_MATCH" ]; then
+            echo "$STR_MATCH" | while IFS= read -r F; do
+                [ -z "$F" ] || [ ! -r "$F" ] && continue
+                # Confirma que tem mais de uma função do script (≥2 = quase certo)
+                COUNT=0
+                for PAT in 'createHologram' 'updateHolograms' 'getEnemies' 'hologram-' 'BoxGeometry'; do
+                    grep -qE "$PAT" "$F" 2>/dev/null && COUNT=$((COUNT+1))
+                done
+                if [ "$COUNT" -ge 2 ] 2>/dev/null; then
+                    alert "HOLOGRAMA — código Three.js ESP em: $F (assinaturas: $COUNT/5)"
+                    HOLO_HITS=$((HOLO_HITS+1))
+                fi
+            done
+        fi
+
+        # Pattern crítico: BoxGeometry(1, 2, 1) + cor 0xff0000 = silhueta humanoide vermelha
+        BOX_MATCH=$(grep -rlE 'BoxGeometry[[:space:]]*\([[:space:]]*1[[:space:]]*,[[:space:]]*2[[:space:]]*,[[:space:]]*1[[:space:]]*\)' $HOLO_PATHS 2>/dev/null | head -10)
+        if [ -n "$BOX_MATCH" ]; then
+            echo "$BOX_MATCH" | while IFS= read -r F; do
+                [ -z "$F" ] && continue
+                # Confirma cor vermelha 0xff0000 também
+                if grep -qE '0xff0000|0xFF0000' "$F" 2>/dev/null; then
+                    alert "HOLOGRAMA — BoxGeometry(1,2,1) + 0xff0000 (silhueta humanoide vermelha): $F"
+                    HOLO_HITS=$((HOLO_HITS+1))
+                fi
+            done
+        fi
+    fi
+
+    # 3) Three.js library dentro de pasta do FF (não tem motivo legítimo)
+    THREE_JS=$(find $HOLO_PATHS 2>/dev/null -maxdepth 5 -type f \
+        \( -iname 'three.min.js' -o -iname 'three.js' -o -iname 'three.module.js' \) 2>/dev/null | head -5)
+    if [ -n "$THREE_JS" ]; then
+        echo "$THREE_JS" | while IFS= read -r F; do
+            [ -n "$F" ] && alert "Three.js dentro de pasta do FF (dependência do Holograma): $F"
+        done
+        HOLO_HITS=$((HOLO_HITS+1))
+    fi
+
+    # 4) WebView cache / IndexedDB com strings de holograma
+    for FFPKG in com.dts.freefireth com.dts.freefiremax; do
+        for WV in "/data/data/$FFPKG/app_webview" "/data/data/$FFPKG/app_chromium" \
+                  "/data/data/$FFPKG/cache/WebView"; do
+            [ -d "$WV" ] || continue
+            WV_HIT=$(grep -rliE 'createHologram|updateHolograms|hologram-.{1,5}enemy' "$WV" 2>/dev/null | head -3)
+            if [ -n "$WV_HIT" ]; then
+                echo "$WV_HIT" | while IFS= read -r F; do
+                    [ -n "$F" ] && alert "WebView do FF contém script Holograma: $F"
+                done
+                HOLO_HITS=$((HOLO_HITS+1))
+            fi
+        done
+    done
+fi
+[ "$HOLO_HITS" = "0" ] && ok "Sem IOC do Holograma (hash/strings/Three.js/WebView)"
 
 # ============================================================
 #  10. FREE FIRE - SHADERS (UnityFS signature - wallhack)
@@ -1161,23 +1501,33 @@ for PKG in $FF_PKGS; do
             if [ "$SH_UID" = "2000" ]; then
                 alert "Shader UID=2000 (shell/ADB) — transferido via ADB push, não criado in-game"
             fi
-            # Modify != Change = alteração manual posterior
+            # v4.4.32: Modify != Change só conta como suspeito se delta > 24h.
+            # Diff de minutos/horas pode ser chmod do sistema, package update
+            # tocando AOT profile, ou /sdcard remontado. Threshold antigo (60s)
+            # gerava FP em quase toda execução.
             SH_MOD=$(stat -c '%Y' "$LATEST_SHADER" 2>/dev/null)
             SH_CHG=$(stat -c '%Z' "$LATEST_SHADER" 2>/dev/null)
             if [ -n "$SH_MOD" ] && [ -n "$SH_CHG" ] && [ "$SH_MOD" != "$SH_CHG" ]; then
-                # Diff pequeno (alguns segundos) é normal por atime; diff > 60s = alteração
                 DIFF=$((SH_CHG - SH_MOD))
                 [ "$DIFF" -lt 0 ] && DIFF=$((-DIFF))
-                if [ "$DIFF" -gt 60 ] 2>/dev/null; then
-                    alert "Shader Modify != Change (delta ${DIFF}s) — alteração manual"
+                if [ "$DIFF" -gt 86400 ] 2>/dev/null; then
+                    alert "Shader Modify != Change (delta ${DIFF}s, >24h) — alteração manual"
+                elif [ "$DIFF" -gt 60 ] 2>/dev/null; then
+                    info "Shader Modify != Change (delta ${DIFF}s, <24h) — provavelmente chmod do sistema"
                 fi
             fi
-            # Nanos com pattern 999 ou zeroed = bypass timestamp
-            SH_ANANO=$(stat "$LATEST_SHADER" 2>/dev/null | grep 'Access:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
-            case "$SH_ANANO" in
-                000000000) alert "Shader nanos ZERADOS — bypass de timestamp" ;;
-            esac
-            echo "$SH_ANANO" | grep -qE '[0-9]999[0-9]' && alert "Shader nanos pattern '999' (manipulação): $SH_ANANO"
+            # v4.4.32: Nanos zerados só viram alerta se o FS suporta nanos.
+            # Em vfat/sdcardfs (várias ROMs antigas mantêm /sdcard em FAT mode),
+            # 000000000 é o ESPERADO — gerava ALERTA crítico injusto.
+            if fs_has_nanos "$LATEST_SHADER"; then
+                SH_ANANO=$(stat "$LATEST_SHADER" 2>/dev/null | grep 'Access:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
+                case "$SH_ANANO" in
+                    000000000) alert "Shader nanos ZERADOS em FS com suporte a nanos — bypass de timestamp" ;;
+                esac
+                echo "$SH_ANANO" | grep -qE '[0-9]999[0-9]' && alert "Shader nanos pattern '999' (manipulação): $SH_ANANO"
+            else
+                info "Shader em FS sem nanos (vfat/sdcardfs) — checks de nanossegundo skipados"
+            fi
             # Múltiplos shaders detectados (legítimo cria UM por sessão; vários = limpou só algum)
             SH_COUNT=$(ls "$GAB_DIR"/shaders* 2>/dev/null | wc -l)
             if [ -n "$SH_COUNT" ] && [ "$SH_COUNT" -gt 1 ] 2>/dev/null; then
@@ -1213,18 +1563,26 @@ for PKG in $FF_PKGS; do
             CHG=$(stat -c '%Z' "$B" 2>/dev/null)
             MTHUMAN=$(stat -c '%y' "$B" 2>/dev/null)
             info "  $B ($SZ b, mod=$MTHUMAN)"
-            # 1) Access > Modify (acessou depois de modificar - bypass)
+            # v4.4.32: Access > Modify NÃO é mais alert. Isso acontece NORMAL
+            # quando o usuário assiste o replay (atime atualiza, mtime fica).
+            # Só vira aviso se o delta é > 7 dias (suspeito de touch -d antigo).
             if [ -n "$ACC" ] && [ -n "$MOD" ] && [ "$ACC" -gt "$MOD" ] 2>/dev/null; then
-                alert "  Access > Modify: replay modificado/touched (bypass)"
+                ACC_DELTA=$((ACC - MOD))
+                if [ "$ACC_DELTA" -gt 604800 ] 2>/dev/null; then
+                    warn "  Access > Modify (delta ${ACC_DELTA}s, >7d) — possível touch bypass"
+                fi
             fi
-            # 2) Modify == Change (Change deveria ser >= Modify; igual = stripado)
+            # Modify == Change (Change deveria ser >= Modify; igual em fs com ns = OK)
             if [ -n "$MOD" ] && [ -n "$CHG" ] && [ "$MOD" -eq "$CHG" ] 2>/dev/null && [ "$ACC" -eq "$MOD" ] 2>/dev/null; then
-                warn "  Access=Modify=Change (timestamps idênticos = touch bypass)"
+                # Só warn em fs com nanos (em FAT isso é trivial)
+                fs_has_nanos "$B" && warn "  Access=Modify=Change (timestamps idênticos = touch bypass)"
             fi
-            # 3) Nanossegundos zerados (bypass via touch -d sem ns)
-            case "$MTHUMAN" in
-                *\.000000000*) alert "  Nanossegundos zerados em mtime ($MTHUMAN)" ;;
-            esac
+            # v4.4.32: nanos zerados só conta se o fs suporta nanos.
+            if fs_has_nanos "$B"; then
+                case "$MTHUMAN" in
+                    *\.000000000*) alert "  Nanossegundos zerados em mtime ($MTHUMAN)" ;;
+                esac
+            fi
             # 4) JSON companion vs BIN
             JSON="${B%.bin}.json"
             if [ -f "$JSON" ]; then
@@ -1271,10 +1629,11 @@ for PKG in $FF_PKGS; do
             fi
         fi
 
-        # === OlhosDoCapeta2: NANOSECOND FORENSICS ===
-        # Bypass de timestamp deixa nanos zerados (000000000) ou pattern 999
-        # Replay legítimo: A=M=C (Access/Modify/Change identicos) + nanos BIN ~ JSON
-        if [ -n "$LATEST_BIN" ] && [ -n "$LATEST_JSON" ]; then
+        # === NANOSECOND FORENSICS ===
+        # v4.4.32: TODO o bloco roda só se o fs do replay suporta nanos.
+        # /sdcard em modo vfat/sdcardfs legacy NUNCA tem nanos — gerava ALERTA
+        # crítico em 100% dos replays. Agora checa antes.
+        if [ -n "$LATEST_BIN" ] && [ -n "$LATEST_JSON" ] && fs_has_nanos "$LATEST_BIN"; then
             ABIN=$(stat "$LATEST_BIN"  2>/dev/null | grep 'Access:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
             MBIN=$(stat "$LATEST_BIN"  2>/dev/null | grep 'Modify:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
             CBIN=$(stat "$LATEST_BIN"  2>/dev/null | grep 'Change:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
@@ -1282,29 +1641,34 @@ for PKG in $FF_PKGS; do
             MJSON=$(stat "$LATEST_JSON" 2>/dev/null | grep 'Modify:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
             CJSON=$(stat "$LATEST_JSON" 2>/dev/null | grep 'Change:' | tail -1 | awk '{print $3}' | cut -d'.' -f2 | cut -c1-9)
 
-            # Nanos zerados em qualquer = bypass
+            # Nanos zerados em TODOS os campos = bypass forte (em fs com nanos).
+            # Antes: qualquer um zerado disparava. Agora: tem que ser TODOS,
+            # senão é só uma syscall que perdeu precisão.
+            ZERO_COUNT=0
             for N in "$ABIN" "$MBIN" "$CBIN" "$AJSON" "$MJSON" "$CJSON"; do
-                case "$N" in
-                    000000000) alert "Replay nanos ZERADOS — bypass de timestamp" ;;
-                esac
+                [ "$N" = "000000000" ] && ZERO_COUNT=$((ZERO_COUNT+1))
             done
-            # Pattern 999 em qualquer nano = manipulação
+            if [ "$ZERO_COUNT" -ge 4 ] 2>/dev/null; then
+                alert "Replay nanos ZERADOS em $ZERO_COUNT/6 timestamps — bypass via touch"
+            elif [ "$ZERO_COUNT" -gt 0 ] 2>/dev/null; then
+                info "Replay nanos: $ZERO_COUNT/6 zerados (provável fs limitation)"
+            fi
+            # Pattern 999 em qualquer nano = manipulação (sinal forte)
             for N in "$ABIN" "$MBIN" "$CBIN" "$AJSON" "$MJSON" "$CJSON"; do
                 echo "$N" | grep -qE '[0-9]999[0-9]' && alert "Replay nanos com pattern '999' (manipulação): $N"
             done
-            # BIN: Modify != Change = alteração manual após criação
+            # BIN: Modify != Change só conta se o delta de nanos é grande
             if [ -n "$MBIN" ] && [ -n "$CBIN" ] && [ "$MBIN" != "$CBIN" ]; then
-                alert "Replay BIN: Modify != Change (nanos) — alteração manual"
+                warn "Replay BIN: Modify != Change (nanos) — possível alteração"
             fi
-            # JSON: Modify != Change
             if [ -n "$MJSON" ] && [ -n "$CJSON" ] && [ "$MJSON" != "$CJSON" ]; then
-                alert "Replay JSON: Modify != Change (nanos) — alteração manual"
+                warn "Replay JSON: Modify != Change (nanos) — possível alteração"
             fi
-            # BIN/JSON primeiro dígito: replay legítimo gera os 2 ao mesmo tempo → 1o digito do nano BATE
+            # BIN/JSON primeiro dígito divergente
             BF=$(echo "$ABIN"  | cut -c1)
             JF=$(echo "$AJSON" | cut -c1)
             if [ -n "$BF" ] && [ -n "$JF" ] && [ "$BF" != "$JF" ]; then
-                alert "Replay BIN+JSON nanos divergentes — NÃO foram gerados juntos"
+                warn "Replay BIN+JSON primeiro dígito divergente — gerados separadamente?"
             fi
             # Timezone consistency (offset do stat)
             TZ_BIN=$(stat "$LATEST_BIN" 2>/dev/null | grep 'Modify:' | tail -1 | sed 's/.*\([-+][0-9][0-9][0-9][0-9]\)$/\1/')
@@ -1312,6 +1676,8 @@ for PKG in $FF_PKGS; do
             if [ -n "$TZ_BIN" ] && [ -n "$TZ_DEV" ] && [ "$TZ_BIN" != "$TZ_DEV" ]; then
                 alert "Timezone do REPLAY ($TZ_BIN) ≠ device atual ($TZ_DEV) — replay de outro fuso (transferido?)"
             fi
+        elif [ -n "$LATEST_BIN" ]; then
+            info "Replay em FS sem suporte a nanos — análise temporal limitada a segundos"
         fi
     fi
 done
@@ -1401,7 +1767,8 @@ if have find; then
                 *[Ee][Ss][Pp]*|*[Mm]enu*|*[Ii]njector*|*Frida*|*frida*|\
                 *[Ww]all[Hh]ack*|*[Aa]imkill*|*VIP*FF*|*FF*VIP*|*BLOODY*|\
                 *REGEDIT*|*[Hh]eadshot*|*[Bb]ypass*|*[Mm]agisk*|*KSU*|*KernelSU*|\
-                *LSPatch*|*LSPosed*|*Lulubox*|*[Ll]ucky[Pp]atcher*)
+                *LSPatch*|*LSPosed*|*Lulubox*|*[Ll]ucky[Pp]atcher*|\
+                *[Hh]olograma*|*[Hh]ologram*|*HOLO_*|*_HOLO*)
                     emit "${CR}[ALERTA]${CN}  APK suspeito: $APK" ;;
                 *) info "  $APK" ;;
             esac
@@ -1424,7 +1791,7 @@ fi
 # Lista de keywords expandida (silent_aim, neck_aim, drip, luxe, hgmods, etc.)
 if have find; then
     SMART_IGNORE='Android/data|Android/obb|DCIM|Pictures|Movies|Music|WhatsApp|Telegram|\.thumbnails|FreeFire|com\.dts\.'
-    SMART_KEYS='aim(bot|lock|assist)|silent.?aim|neck.?aim|no.?recoil|recoil.?off|wall.?(view|hack)|visionhack|overlayhack|injector|memoryhack|memhack|speedhack|bypass|mod.?menu|cheat.?panel|vip.?tool|ff.?tool|macro.?fire|script.?aim|passador|replay.?(tool|edit)|drip.?mod|luxe.?mod|hgmods|shizuku.?ff|mt.?manager.?ff|ffh4x|fatality|polar.?bear|teambot|op999|panelff|nova.?esp|huyjit|esp.?ff|gameguardian|gg.?script|lua.?ff'
+    SMART_KEYS='aim(bot|lock|assist)|silent.?aim|neck.?aim|no.?recoil|recoil.?off|wall.?(view|hack)|visionhack|overlayhack|injector|memoryhack|memhack|speedhack|bypass|mod.?menu|cheat.?panel|vip.?tool|ff.?tool|macro.?fire|script.?aim|passador|replay.?(tool|edit)|drip.?mod|luxe.?mod|hgmods|shizuku.?ff|mt.?manager.?ff|ffh4x|fatality|polar.?bear|teambot|op999|panelff|nova.?esp|huyjit|esp.?ff|gameguardian|gg.?script|lua.?ff|holograma|hologram(?:_|ff|mod|cheat)?|holo.?(ff|mod|cheat|hack|panel)'
     SMART_RES=$(find /storage/emulated/0 -type f -newermt "2026-01-01" 2>/dev/null \
         | grep -viE "$SMART_IGNORE" \
         | grep -iE "$SMART_KEYS" \
@@ -1481,6 +1848,15 @@ fi
 header "PACOTES DE CHEAT / VIRTUALIZADORES"
 
 CHEAT_PKGS="
+com.holograma.ff
+com.hologramff.app
+com.hologram.ff
+com.holograma.app
+com.holo.ff
+br.com.holograma.ff
+com.modbibi.holograma
+xyzapk.hologram
+com.xyzapk.hologram
 com.aurel.gg.ff
 com.aurelpvp.ff
 com.coc.modff
@@ -2127,6 +2503,7 @@ if have find; then
         -o -iname '*ffh4x*' -o -iname '*aimbot*' -o -iname '*wallhack*' \
         -o -iname '*injector*' -o -iname '*esp.menu*' -o -iname '*headshot*' \
         -o -iname '*menuffx*' -o -iname '*bypass*' -o -iname '*ffmod*' \
+        -o -iname '*holograma*' -o -iname '*hologram*' -o -iname 'holo_*' -o -iname '*_holo.*' \
         \) 2>/dev/null | head -n 30)
     [ -n "$NAMED" ] && echo "$NAMED" | while IFS= read -r L; do
         [ -n "$L" ] && alert "Nome de cheat: $L"
@@ -2155,7 +2532,7 @@ if have find; then
             # extrair nome original (.trashed-<epoch>-<nome>)
             ORIG=$(echo "$BN" | sed -E 's/^\.trashed-[0-9]+-//')
             case "$ORIG" in
-                *[Hh]ack*|*[Mm]od*|*[Cc]heat*|*[Aa]imbot*|*[Ee][Ss][Pp]*|*[Mm]enu*|*FFH4X*|*ffh4x*|*[Ii]njector*|*[Ww]all[Hh]ack*|*[Bb]ypass*|*[Mm]agisk*|*frida*)
+                *[Hh]ack*|*[Mm]od*|*[Cc]heat*|*[Aa]imbot*|*[Ee][Ss][Pp]*|*[Mm]enu*|*FFH4X*|*ffh4x*|*[Ii]njector*|*[Ww]all[Hh]ack*|*[Bb]ypass*|*[Mm]agisk*|*frida*|*[Hh]olograma*|*[Hh]ologram*|*HOLO_*|*_HOLO*)
                     alert "  $F  →  '$ORIG' ($SZ b, apagado em $MT) - NOME SUSPEITO" ;;
                 *) info "  $F  →  '$ORIG' ($SZ b, apagado em $MT)" ;;
             esac
@@ -2203,7 +2580,7 @@ for D in $TRASH_DIRS; do
             SZ=$(stat -c '%s' "$F" 2>/dev/null)
             BN=$(basename "$F")
             case "$BN" in
-                *[Hh]ack*|*[Mm]od*|*[Cc]heat*|*[Aa]imbot*|*[Ee][Ss][Pp]*|*[Mm]enu*|*FFH4X*|*ffh4x*|*[Ii]njector*|*[Ww]all[Hh]ack*|*[Bb]ypass*|*[Mm]agisk*|*frida*|*\.apk|*\.lua|*\.so)
+                *[Hh]ack*|*[Mm]od*|*[Cc]heat*|*[Aa]imbot*|*[Ee][Ss][Pp]*|*[Mm]enu*|*FFH4X*|*ffh4x*|*[Ii]njector*|*[Ww]all[Hh]ack*|*[Bb]ypass*|*[Mm]agisk*|*frida*|*[Hh]olograma*|*[Hh]ologram*|*HOLO_*|*_HOLO*|*\.apk|*\.lua|*\.so)
                     alert "  $F ($SZ b, $MT) - SUSPEITO" ;;
                 *) info "  $F ($SZ b, $MT)" ;;
             esac
@@ -2395,7 +2772,7 @@ if have pidof; then
 fi
 
 # 2) Domínios de cheat conhecidos (multi-plataforma, vivos em 2025/26)
-CHEAT_DOMAINS="fatalitycheats.xyz anubisw.online api.baontq.xyz purplevioleto.com ggwhitehawk.com ggpolarbear.com ggblueshark.com version.ffmax.purplevioleto.com version.ggwhitehawk.com loginbp.ggpolarbear.com sacnetwork.ggblueshark.com sacevent.ggblueshark.com ipasign.cc ipa.aspy.dev"
+CHEAT_DOMAINS="fatalitycheats.xyz anubisw.online api.baontq.xyz purplevioleto.com ggwhitehawk.com ggpolarbear.com ggblueshark.com version.ffmax.purplevioleto.com version.ggwhitehawk.com loginbp.ggpolarbear.com sacnetwork.ggblueshark.com sacevent.ggblueshark.com ipasign.cc ipa.aspy.dev hologram-ff.xyzapk.com xyzapk.io xyzapk.com apkphat.io apkmodjoy.com modbibi.com holograma.es.apkhihe.org apkhihe.org holograma-apk.tumblr.com red-x-panel.modcombo.com modcombo.com modfyp.com modyolo.com apktodo.io ffh4xreg.com linkjust.com derod.org"
 
 # FF_PROXY_LOGIN_DOMAINS - domínios oficiais do FF que NÃO devem ser acessados por outros apps
 FF_PROXY_LOGIN_DOMAINS="version.ffmax.purplevioleto.com version.ggwhitehawk.com loginbp.ggpolarbear.com gin.freefiremobile.com 100067.connect.garena.com 100067.msdk.garena.com client.us.freefiremobile.com client.sea.freefiremobile.com sacnetwork.ggblueshark.com sacevent.ggblueshark.com"
@@ -2472,12 +2849,17 @@ header "PROCESSOS"
 
 PROC_HITS=0
 if have ps; then
-    PROCS=$(ps -A 2>/dev/null)
-    [ -z "$PROCS" ] && PROCS=$(ps 2>/dev/null)
-    for PAT in frida gameguardian gg.intersec xposed lsposed substrate cydia \
-               injector cheatengine virtualapp parallel.space dualspace \
-               luckypatcher cih gamekiller autoclicker macro brevent shizuku; do
-        HIT=$(echo "$PROCS" | grep -i "$PAT" | grep -v grep)
+    # v4.4.32: usa clean_procs pra remover o próprio scanner do output. Antes
+    # o ps capturava a string "scarlet" do argv do script e reportava como
+    # "Processo (scarlet)" — FP em 100% das execuções.
+    PROCS=$(ps -A 2>/dev/null | clean_procs)
+    [ -z "$PROCS" ] && PROCS=$(ps 2>/dev/null | clean_procs)
+    for PAT in frida-server frida-agent gameguardian gg.intersec xposed lsposed \
+               substrated cydia.substrate \
+               cheatengine virtualapp parallel.space dualspace \
+               luckypatcher gamekiller autoclicker.click macro.tap \
+               brevent.guard shizuku.server hunter.shizuku; do
+        HIT=$(echo "$PROCS" | grep -iE "[^a-zA-Z0-9_]${PAT}|^${PAT}" | grep -v grep)
         [ -n "$HIT" ] && echo "$HIT" | head -n 2 | while IFS= read -r L; do
             [ -n "$L" ] && alert "Processo ($PAT): $L"
         done
@@ -2614,16 +2996,397 @@ for KMSG in /proc/last_kmsg /sys/fs/pstore/console-ramoops-0 \
     done
 done
 
-# Bugreports / dumps persistentes
-for BR in /data/user_de/0/com.android.shell/files/bugreports \
-          /data/data/com.android.shell/files/bugreports \
-          /sdcard/bugreports; do
+# v4.4.33: parser FULL de bugreport — extrai TUDO que dá pra extrair.
+# Antes só pegava tombstones/package/crashes (5 categorias). Agora extrai 22
+# categorias: dumpsys snapshots embedded, todos os logcat buffers, procstats,
+# OOM kills, accessibility services, batterystats history, dropbox, WiFi, etc.
+#
+# Suporta também BUGREPORT_FILE=/sdcard/Download/bugreport.zip sh a4ther.sh
+# pra analisar bugreport puxado via adb por depuração WiFi (modo offline).
+BR_HITS=0
+BR_PATHS="/data/user_de/0/com.android.shell/files/bugreports /data/data/com.android.shell/files/bugreports /sdcard/bugreports /storage/emulated/0/bugreports /sdcard/Download /storage/emulated/0/Download"
+
+# Helper: parseia 1 bugreport (zip ou txt) e roda TODAS as extrações
+br_parse() {
+    _BRFILE="$1"
+    _BRBASE=$(basename "$_BRFILE")
+    [ -r "$_BRFILE" ] || return 0
+    _BRMT=$(stat -c '%y' "$_BRFILE" 2>/dev/null)
+    info "Parsing: $_BRFILE ($_BRMT)"
+
+    # 1) Extrai conteúdo — bugreport zip moderno tem múltiplos arquivos.
+    #    Estratégia: extrai tudo num tmpdir se unzip estiver disponível.
+    _BRWORK=""
+    _BRMAIN=""
+    case "$_BRFILE" in
+        *.zip)
+            if have unzip; then
+                _BRWORK="${TMPDIR:-/data/local/tmp}/a4ther_br_$$"
+                mkdir -p "$_BRWORK" 2>/dev/null
+                unzip -q -o "$_BRFILE" -d "$_BRWORK" 2>/dev/null
+                # bugreport principal: bugreport-<device>-<date>.txt
+                _BRMAIN=$(find "$_BRWORK" -maxdepth 2 -name 'bugreport-*.txt' 2>/dev/null | head -1)
+                [ -z "$_BRMAIN" ] && _BRMAIN=$(find "$_BRWORK" -maxdepth 2 -name '*.txt' 2>/dev/null | head -1)
+            fi
+            ;;
+        *.txt|*.log)
+            _BRMAIN="$_BRFILE"
+            ;;
+    esac
+    [ -z "$_BRMAIN" ] || [ ! -r "$_BRMAIN" ] && {
+        warn "  Não consegui extrair conteúdo (unzip ausente?)"
+        [ -n "$_BRWORK" ] && rm -rf "$_BRWORK" 2>/dev/null
+        return 0
+    }
+    _BRSIZE=$(stat -c '%s' "$_BRMAIN" 2>/dev/null)
+    info "  Conteúdo principal: $_BRMAIN ($_BRSIZE bytes)"
+
+    # ── 1. Build/version info ─────────────────────────────────────────
+    _BUILD=$(grep -m1 -E '^Build: |Build fingerprint:' "$_BRMAIN" 2>/dev/null | head -c 200)
+    [ -n "$_BUILD" ] && info "  $_BUILD"
+    _UPTIME=$(grep -m1 -E '^Uptime:' "$_BRMAIN" 2>/dev/null | head -c 200)
+    [ -n "$_UPTIME" ] && info "  $_UPTIME"
+    _BOOT=$(grep -m1 -E '^Bootloader:|^Boot info:' "$_BRMAIN" 2>/dev/null | head -c 200)
+    [ -n "$_BOOT" ] && info "  $_BOOT"
+
+    # ── 2. SELinux mode ──────────────────────────────────────────────
+    _SE=$(grep -m1 -E 'getenforce|SELinux:.*(Enforcing|Permissive|Disabled)' "$_BRMAIN" 2>/dev/null | head -c 100)
+    case "$_SE" in
+        *Permissive*) alert "  SELinux=Permissive no bugreport ($_SE)" ;;
+        *Disabled*)   alert "  SELinux=Disabled no bugreport ($_SE)" ;;
+        *) [ -n "$_SE" ] && info "  $_SE" ;;
+    esac
+
+    # ── 3. Tombstones + native libs cheat ─────────────────────────────
+    _TS=$(grep -iE 'libfrida|libsubstrate|libxhook|libgum|libdobby|libsandhook|libwhale|libsubstitute|libepic|libellekit|libhooker|frida-server|frida-gadget|FridaGadget|MobileSubstrate' "$_BRMAIN" 2>/dev/null | head -10)
+    if [ -n "$_TS" ]; then
+        alert "  Libs cheat no bugreport:"
+        echo "$_TS" | while IFS= read -r L; do
+            [ -n "$L" ] && alert "    $(echo "$L" | head -c 160)"
+        done
+        BR_HITS=$((BR_HITS+1))
+    fi
+
+    # ── 4. Crashes (FATAL EXCEPTION + signal) por app ─────────────────
+    _CRASH=$(grep -iE 'FATAL EXCEPTION.*(freefire|com\.dts\.|camera|gallery|photos|miui\.gallery)|signal [0-9]+.*com\.dts\.freefire' "$_BRMAIN" 2>/dev/null | head -10)
+    if [ -n "$_CRASH" ]; then
+        alert "  Crashes (FF/Câmera/Galeria) no bugreport:"
+        echo "$_CRASH" | while IFS= read -r L; do
+            [ -n "$L" ] && alert "    $(echo "$L" | head -c 180)"
+        done
+        BR_HITS=$((BR_HITS+1))
+    fi
+
+    # ── 5. ANRs (Application Not Responding) ──────────────────────────
+    _ANR=$(grep -iE 'ANR in |Reason: .*hang|Subject: Executing service' "$_BRMAIN" 2>/dev/null | head -10)
+    if [ -n "$_ANR" ]; then
+        info "  ANRs no bugreport:"
+        echo "$_ANR" | while IFS= read -r L; do
+            [ -n "$L" ] && info "    $(echo "$L" | head -c 180)"
+            case "$L" in
+                *freefire*|*dts\.freefire*) alert "    ANR de FREE FIRE: $(echo "$L" | head -c 140)" ;;
+            esac
+        done
+    fi
+
+    # ── 6. LMK / OOM kills ───────────────────────────────────────────
+    _LMK=$(grep -iE 'lowmemorykiller|LMK.*killed|Out of memory:.*Kill|killing.*adj|to-be-killed adj' "$_BRMAIN" 2>/dev/null | head -10)
+    if [ -n "$_LMK" ]; then
+        _LMK_FF=$(echo "$_LMK" | grep -iE 'freefire|com\.dts\.freefire' | head -3)
+        if [ -n "$_LMK_FF" ]; then
+            alert "  Free Fire foi killed por LMK/OOM:"
+            echo "$_LMK_FF" | while IFS= read -r L; do
+                [ -n "$L" ] && alert "    $(echo "$L" | head -c 160)"
+            done
+            BR_HITS=$((BR_HITS+1))
+        else
+            _LMK_COUNT=$(echo "$_LMK" | wc -l)
+            info "  LMK/OOM kills: $_LMK_COUNT eventos (sem FF)"
+        fi
+    fi
+
+    # ── 7. Package events (install/uninstall/replace) ────────────────
+    _PKG=$(grep -iE 'PackageManager:.*(installPackage|uninstallPackage|replaced|deleted)|am_(install|uninstall)|pkg_(install|uninstall)|installer_uid' "$_BRMAIN" 2>/dev/null | head -15)
+    if [ -n "$_PKG" ]; then
+        _PKG_SUS=$(echo "$_PKG" | grep -iE 'freefire|cheat|hack|mod|aimbot|esp|frida|magisk|brevent|shizuku|gameguardian|virtualapp|parallel|lulubox|luckypatcher|mantispro|fakerunlocker|holograma|hologram')
+        if [ -n "$_PKG_SUS" ]; then
+            alert "  Eventos de pkg suspeitos no bugreport:"
+            echo "$_PKG_SUS" | while IFS= read -r L; do
+                [ -n "$L" ] && alert "    $(echo "$L" | head -c 180)"
+            done
+            BR_HITS=$((BR_HITS+1))
+        fi
+        info "  Total de eventos pkg: $(echo "$_PKG" | wc -l)"
+    fi
+
+    # ── 8. installerPackageName por app ──────────────────────────────
+    _INST=$(grep -iE 'installerPackageName=|initiatingPackageName=' "$_BRMAIN" 2>/dev/null | grep -iE 'freefire|dts\.freefire' | head -5)
+    if [ -n "$_INST" ]; then
+        info "  Installer do FF no bugreport:"
+        echo "$_INST" | while IFS= read -r L; do
+            [ -n "$L" ] && info "    $(echo "$L" | head -c 200)"
+            case "$L" in
+                *com.android.vending*|*com.google.market*) ;;
+                *) alert "    Origem NÃO Play Store: $(echo "$L" | head -c 160)" ;;
+            esac
+        done
+    fi
+
+    # ── 9. Frida ports + abstract sockets ────────────────────────────
+    _FRIDA_NET=$(grep -iE '@(frida|gum-js|linjector)|:27042|:27043|:27044|:27045|frida-server.*LISTEN' "$_BRMAIN" 2>/dev/null | head -5)
+    if [ -n "$_FRIDA_NET" ]; then
+        alert "  Frida network signature no bugreport:"
+        echo "$_FRIDA_NET" | while IFS= read -r L; do
+            [ -n "$L" ] && alert "    $(echo "$L" | head -c 160)"
+        done
+        BR_HITS=$((BR_HITS+1))
+    fi
+
+    # ── 10. Accessibility services suspeitos ─────────────────────────
+    _ACC=$(grep -iE 'enabled_accessibility_services.*[a-z]' "$_BRMAIN" 2>/dev/null | head -3)
+    if [ -n "$_ACC" ]; then
+        info "  Accessibility services:"
+        echo "$_ACC" | while IFS= read -r L; do
+            [ -n "$L" ] && info "    $(echo "$L" | head -c 180)"
+            case "$L" in
+                *esp*|*aimbot*|*menu*|*hack*|*cheat*|*ffh*|*macro*|*injector*)
+                    alert "    Accessibility SUSPEITO: $(echo "$L" | head -c 160)" ;;
+            esac
+        done
+    fi
+
+    # ── 11. Overlays ativos (TYPE_APPLICATION_OVERLAY) ───────────────
+    _OVL=$(grep -iE 'TYPE_APPLICATION_OVERLAY|TYPE_PHONE|SYSTEM_ALERT_WINDOW: allow' "$_BRMAIN" 2>/dev/null | head -20)
+    if [ -n "$_OVL" ]; then
+        _OVL_SUS=$(echo "$_OVL" | grep -iE 'panel|injector|ffh4x|mod|cheat|esp|gameguardian|teambot|vipkill|fatality|aimbot')
+        if [ -n "$_OVL_SUS" ]; then
+            alert "  Overlays suspeitos no bugreport:"
+            echo "$_OVL_SUS" | head -5 | while IFS= read -r L; do
+                [ -n "$L" ] && alert "    $(echo "$L" | head -c 180)"
+            done
+            BR_HITS=$((BR_HITS+1))
+        fi
+    fi
+
+    # ── 12. Processos suspeitos no ps snapshot ───────────────────────
+    _PS=$(grep -iE '^\s*(u0_a[0-9]+|root|shell|system).*\b(frida|cheatengine|gameguardian|substrate|brevent|shizuku|virtualapp|parallel|lulubox)\b' "$_BRMAIN" 2>/dev/null | head -10)
+    if [ -n "$_PS" ]; then
+        alert "  Processos suspeitos no ps do bugreport:"
+        echo "$_PS" | while IFS= read -r L; do
+            [ -n "$L" ] && alert "    $(echo "$L" | head -c 180)"
+        done
+        BR_HITS=$((BR_HITS+1))
+    fi
+
+    # ── 13. Procstats — apps com runtime suspeito ────────────────────
+    _PROCSTATS=$(grep -iE '\* (com\.dts\.freefire|com\.topjohnwu\.magisk|.*frida.*|.*cheat.*|.*brevent.*|.*shizuku.*).*:.*%.*hour' "$_BRMAIN" 2>/dev/null | head -10)
+    if [ -n "$_PROCSTATS" ]; then
+        info "  Procstats (runtime):"
+        echo "$_PROCSTATS" | while IFS= read -r L; do
+            [ -n "$L" ] && info "    $(echo "$L" | head -c 200)"
+        done
+    fi
+
+    # ── 14. Wake locks suspeitos (cheats que mantêm device acordado) ─
+    _WAKE=$(grep -iE 'WakeLock.*com\.(dts\.freefire|.*cheat.*|.*injector.*|.*hack.*)' "$_BRMAIN" 2>/dev/null | head -5)
+    if [ -n "$_WAKE" ]; then
+        warn "  WakeLocks de apps suspeitos:"
+        echo "$_WAKE" | while IFS= read -r L; do
+            [ -n "$L" ] && warn "    $(echo "$L" | head -c 180)"
+        done
+    fi
+
+    # ── 15. Boot completed + reboot history ──────────────────────────
+    _BOOT_HIST=$(grep -iE 'boot_complete|sys_boot_completed|BOOT_COMPLETED|Shutdown reason|sys.shutdown' "$_BRMAIN" 2>/dev/null | head -5)
+    if [ -n "$_BOOT_HIST" ]; then
+        info "  Boot history:"
+        echo "$_BOOT_HIST" | while IFS= read -r L; do
+            [ -n "$L" ] && info "    $(echo "$L" | head -c 180)"
+        done
+    fi
+
+    # ── 16. ADB connections (wireless debug usado) ───────────────────
+    _ADB=$(grep -iE 'adb_(enabled|wifi)|persist\.adb\.tcp\.port|adb_keys|adbd: connected' "$_BRMAIN" 2>/dev/null | head -5)
+    if [ -n "$_ADB" ]; then
+        warn "  ADB activity:"
+        echo "$_ADB" | while IFS= read -r L; do
+            [ -n "$L" ] && warn "    $(echo "$L" | head -c 180)"
+        done
+    fi
+
+    # ── 17. Mock location / Developer settings ─────────────────────
+    _DEV=$(grep -iE 'mock_location|allow_mock_location|development_settings_enabled|stay_on_while_plugged_in' "$_BRMAIN" 2>/dev/null | head -3)
+    if [ -n "$_DEV" ]; then
+        warn "  Developer settings:"
+        echo "$_DEV" | while IFS= read -r L; do
+            [ -n "$L" ] && warn "    $(echo "$L" | head -c 160)"
+        done
+    fi
+
+    # ── 18. Private DNS / Proxy ─────────────────────────────────────
+    _NET=$(grep -iE 'private_dns_mode|private_dns_specifier|global_http_proxy_host|http_proxy=' "$_BRMAIN" 2>/dev/null | head -5)
+    if [ -n "$_NET" ]; then
+        info "  Network config:"
+        echo "$_NET" | while IFS= read -r L; do
+            [ -n "$L" ] && info "    $(echo "$L" | head -c 180)"
+            case "$L" in
+                *http_proxy=h*|*global_http_proxy_host=h*)
+                    alert "    Proxy ATIVO no bugreport: $(echo "$L" | head -c 160)" ;;
+            esac
+        done
+    fi
+
+    # ── 19. Dropbox events list ─────────────────────────────────────
+    _DROP=$(grep -iE 'DropBox.*entry|dropbox.*crash|system_app_(crash|anr)|data_app_crash' "$_BRMAIN" 2>/dev/null | head -15)
+    if [ -n "$_DROP" ]; then
+        _DROP_SUS=$(echo "$_DROP" | grep -iE 'freefire|cheat|hack|mod|injector|frida')
+        if [ -n "$_DROP_SUS" ]; then
+            alert "  Dropbox events suspeitos:"
+            echo "$_DROP_SUS" | head -5 | while IFS= read -r L; do
+                [ -n "$L" ] && alert "    $(echo "$L" | head -c 180)"
+            done
+            BR_HITS=$((BR_HITS+1))
+        fi
+    fi
+
+    # ── 20. WiFi history (SSIDs conectados) ──────────────────────────
+    _WIFI=$(grep -iE 'SSID:|configured_network|saved_network|last_connected_ssid' "$_BRMAIN" 2>/dev/null | head -10)
+    if [ -n "$_WIFI" ]; then
+        info "  WiFi history (primeiras 10):"
+        echo "$_WIFI" | while IFS= read -r L; do
+            [ -n "$L" ] && info "    $(echo "$L" | head -c 180)"
+        done
+    fi
+
+    # ── 21. App firstInstallTime + lastUpdateTime de FF ─────────────
+    _FF_TIME=$(grep -A5 -E 'Package \[com\.dts\.freefire(th|max)\]' "$_BRMAIN" 2>/dev/null | grep -iE 'firstInstallTime|lastUpdateTime|installerPackageName' | head -10)
+    if [ -n "$_FF_TIME" ]; then
+        info "  Free Fire install timeline:"
+        echo "$_FF_TIME" | while IFS= read -r L; do
+            [ -n "$L" ] && info "    $(echo "$L" | head -c 200)"
+        done
+    fi
+
+    # ── 22. Batterystats — uninstalls registrados ───────────────────
+    _BSTATS_UNI=$(grep -oE 'pkgunin=[0-9]+:"[^"]+"' "$_BRMAIN" 2>/dev/null | sort -u | head -20)
+    if [ -n "$_BSTATS_UNI" ]; then
+        _BSTATS_SUS=$(echo "$_BSTATS_UNI" | grep -iE 'freefire|cheat|hack|mod|aimbot|injector|frida|magisk|brevent|shizuku|gameguardian|virtualapp|lulubox|luckypatcher')
+        if [ -n "$_BSTATS_SUS" ]; then
+            alert "  Uninstalls suspeitos (batterystats):"
+            echo "$_BSTATS_SUS" | while IFS= read -r L; do
+                [ -n "$L" ] && alert "    $L"
+            done
+            BR_HITS=$((BR_HITS+1))
+        fi
+    fi
+
+    # Limpa o tmpdir
+    [ -n "$_BRWORK" ] && rm -rf "$_BRWORK" 2>/dev/null
+}
+
+# Modo offline: BUGREPORT_FILE=/path/to/bugreport.zip sh a4ther.sh
+if [ -n "$BUGREPORT_FILE" ] && [ -r "$BUGREPORT_FILE" ]; then
+    info "Modo offline: analisando $BUGREPORT_FILE"
+    br_parse "$BUGREPORT_FILE"
+fi
+
+# Modo normal: vasculha paths conhecidos de bugreport
+BR_FOUND=0
+for BR in $BR_PATHS; do
     [ -d "$BR" ] || continue
-    COUNT=$(ls "$BR" 2>/dev/null | wc -l)
-    [ "$COUNT" -gt 0 ] 2>/dev/null && warn "$COUNT bug reports em $BR (rastros forenses)"
+    COUNT=$(ls "$BR" 2>/dev/null | grep -E '\.(zip|txt|log)$' | wc -l)
+    [ "$COUNT" = "0" ] && continue
+    BR_FOUND=1
+    info "Bugreports em $BR: $COUNT arquivo(s)"
+    for BRF in $(ls -t "$BR" 2>/dev/null | grep -E 'bugreport.*\.(zip|txt)$' | head -3); do
+        br_parse "$BR/$BRF"
+    done
 done
 
+if [ "$BR_FOUND" = "0" ] && [ -z "$BUGREPORT_FILE" ]; then
+    info "Nenhum bugreport encontrado nos paths conhecidos."
+    info "Pra gerar um bugreport completo (ver instruções no final do scan):"
+    info "  Settings → System → Developer options → Take bug report (Full)"
+    info "  OU via depuração WiFi (instruções pós-scan)"
+fi
+
 [ "$PLOG_HITS" = "0" ] && ok "Logs persistentes sem rastros de cheat"
+
+# ============================================================
+#  29c. CRASHES POR APP (v4.4.32)
+#  Crashes do FF, app de Câmera e Galeria. Cheats que tocam memória crashem
+#  o jogo; cheats de foto crashem a câmera/galeria. Filtra tombstones/ANRs/
+#  dropbox por bundle dessas categorias.
+# ============================================================
+header "CRASHES POR APP (Free Fire + Câmera + Galeria)"
+
+CRASH_HITS=0
+
+# Apps de interesse por categoria
+FF_BUNDLES_LOCAL="com.dts.freefireth com.dts.freefiremax"
+CAM_BUNDLES="com.android.camera com.android.camera2 com.miui.camera com.sec.android.app.camera com.huawei.camera com.oppo.camera com.coloros.camera com.realme.camera org.codeaurora.snapcam"
+GAL_BUNDLES="com.miui.gallery com.sec.android.gallery3d com.google.android.apps.photos com.android.gallery3d com.coloros.gallery3d com.huawei.gallery com.android.documentsui"
+
+for CATEGORY in "FF:$FF_BUNDLES_LOCAL" "CAMERA:$CAM_BUNDLES" "GALERIA:$GAL_BUNDLES"; do
+    CAT_NAME="${CATEGORY%%:*}"
+    CAT_PKGS="${CATEGORY#*:}"
+    for PKG in $CAT_PKGS; do
+        # 1) Dropbox crashes (persistentes)
+        if [ -d /data/system/dropbox ]; then
+            DROP_HITS=$(grep -l "$PKG" /data/system/dropbox/*crash* /data/system/dropbox/*anr* 2>/dev/null | head -3)
+            [ -n "$DROP_HITS" ] && echo "$DROP_HITS" | while IFS= read -r DF; do
+                [ -z "$DF" ] && continue
+                DMT=$(stat -c '%y' "$DF" 2>/dev/null)
+                alert "[$CAT_NAME] Crash de $PKG: $DF ($DMT)"
+            done
+            [ -n "$DROP_HITS" ] && CRASH_HITS=$((CRASH_HITS+1))
+        fi
+        # 2) ANRs com o PKG mencionado
+        if [ -d /data/anr ]; then
+            for ANR in $(ls -t /data/anr 2>/dev/null | head -10); do
+                [ -r "/data/anr/$ANR" ] || continue
+                if grep -lq "$PKG" "/data/anr/$ANR" 2>/dev/null; then
+                    AMT=$(stat -c '%y' "/data/anr/$ANR" 2>/dev/null)
+                    warn "[$CAT_NAME] ANR de $PKG: /data/anr/$ANR ($AMT)"
+                fi
+            done
+        fi
+        # 3) Logcat crash buffer
+        if have logcat; then
+            LC_HIT=$(logcat -d -b crash 2>/dev/null | grep -iE "FATAL.*$PKG|tombstone.*$PKG" | head -3)
+            if [ -n "$LC_HIT" ]; then
+                echo "$LC_HIT" | while IFS= read -r L; do
+                    [ -n "$L" ] && alert "[$CAT_NAME] logcat crash de $PKG: $(echo "$L" | head -c 150)"
+                done
+                CRASH_HITS=$((CRASH_HITS+1))
+            fi
+        fi
+    done
+done
+
+# Tombstones recentes que mencionem libs cheat (qualquer app)
+if [ -d /data/tombstones ]; then
+    for TS in $(ls -t /data/tombstones 2>/dev/null | head -10); do
+        [ -r "/data/tombstones/$TS" ] || continue
+        SUS=$(grep -iE 'libfrida|libsubstrate|libxhook|libgum|libdobby|libsandhook|libwhale' "/data/tombstones/$TS" 2>/dev/null | head -2)
+        if [ -n "$SUS" ]; then
+            TMT=$(stat -c '%y' "/data/tombstones/$TS" 2>/dev/null)
+            alert "Tombstone com lib de cheat: /data/tombstones/$TS ($TMT)"
+            echo "$SUS" | while IFS= read -r L; do
+                [ -n "$L" ] && alert "  $(echo "$L" | head -c 140)"
+            done
+            CRASH_HITS=$((CRASH_HITS+1))
+        fi
+    done
+fi
+
+if [ "$CRASH_HITS" = "0" ]; then
+    ok "Sem crashes recentes de FF/câmera/galeria com libs cheat"
+    info "Pra análise mais profunda (sem root no Termux): depuração WiFi + adb bugreport"
+    info "  1) Settings → Developer → Wireless debugging → Pair device"
+    info "  2) No PC: adb pair <ip:port> + código; adb connect <ip:port>"
+    info "  3) adb bugreport bugreport.zip → analisar offline"
+fi
 
 # ============================================================
 #  30. SYSTEM TAMPERING
@@ -2663,7 +3426,9 @@ fi
 # ============================================================
 header "HWID"
 
-# ─── SERIAL ─── tenta 7 fontes em ordem de prioridade
+# ─── SERIAL ─── v4.4.32: 13 fontes em ordem de prioridade
+# A maioria falha em Android 10+ pra UID não-privilegiado (Termux), mas alguns
+# devices vendor expõem em paths /sys que não estão bloqueados.
 SERIAL=$(gp ro.serialno)
 [ -z "$SERIAL" ] && SERIAL=$(gp ro.boot.serialno)
 [ -z "$SERIAL" ] && SERIAL=$(gp ro.boot.em.serial)
@@ -2673,6 +3438,22 @@ SERIAL=$(gp ro.serialno)
 # vendor-specific (alguns kernels expõem em /sys/class)
 [ -z "$SERIAL" ] && SERIAL=$(cat /sys/class/android_usb/android0/iSerial 2>/dev/null)
 [ -z "$SERIAL" ] && SERIAL=$(cat /sys/class/android_usb/f_mass_storage/lun/file 2>/dev/null | head -c 64)
+# v4.4.32: fontes adicionais (vendor-specific)
+# Qualcomm SoC serial (sempre disponível em Snapdragon, raramente bloqueado)
+[ -z "$SERIAL" ] && SERIAL=$(cat /sys/devices/soc0/serial_number 2>/dev/null)
+[ -z "$SERIAL" ] && SERIAL=$(cat /sys/devices/system/soc/soc0/serial_number 2>/dev/null)
+# MediaTek SoC
+[ -z "$SERIAL" ] && SERIAL=$(cat /proc/mt_efuse 2>/dev/null | grep -oE '[A-F0-9]{16,}' | head -1)
+# Samsung-specific
+[ -z "$SERIAL" ] && SERIAL=$(gp ro.serialno.fact)
+[ -z "$SERIAL" ] && SERIAL=$(gp ril.product_code)
+# Xiaomi/MIUI
+[ -z "$SERIAL" ] && SERIAL=$(gp ro.ril.miui.imei0)
+# OPPO/realme
+[ -z "$SERIAL" ] && SERIAL=$(gp ril.serial)
+# service call iphonesubinfo — funciona em uid 2000 (shell), raramente em Termux
+[ -z "$SERIAL" ] && have service && \
+    SERIAL=$(service call iphonesubinfo 1 2>/dev/null | grep -oE "'[A-Z0-9]+'" | tr -d "'" | head -1)
 
 # ─── BOOT SERIAL ─── 4 fontes
 BOOT_SERIAL=$(gp ro.boot.serialno)
@@ -2708,9 +3489,31 @@ FINGERPRINT=$(gp ro.build.fingerprint)
 PRODUCT_MODEL=$(gp ro.product.model)
 PRODUCT_BRAND=$(gp ro.product.brand)
 
-# HWID composto — usa todos os campos disponíveis (não vazios)
-RAW="${SERIAL}|${BOOT_SERIAL}|${MAC}|${BT_MAC}|${ANDROID_ID}|${FINGERPRINT}|${PRODUCT_BRAND}|${PRODUCT_MODEL}"
-HWID_ALT_RAW="${ANDROID_ID}:${SERIAL}:${BOOT_SERIAL}"
+# ─── v4.4.32: identificadores que sobrevivem ao privacy lock do Android 10+ ───
+# WIDEVINE_ID — DRM L1/L3 ID, único POR DEVICE, sempre legível por qualquer app
+# (incluindo Termux) via dumpsys. Estável após factory reset (L1 não muda).
+WIDEVINE_ID=""
+if have dumpsys; then
+    WIDEVINE_ID=$(dumpsys media.drm 2>/dev/null | grep -m1 -oE 'PluginUniqueId.*[0-9A-Fa-f-]{20,}' | grep -oE '[0-9A-Fa-f-]{20,}')
+    [ -z "$WIDEVINE_ID" ] && \
+        WIDEVINE_ID=$(dumpsys drm 2>/dev/null | grep -m1 -oE 'deviceUniqueId.*[0-9A-Fa-f]{16,}' | grep -oE '[0-9A-Fa-f]{16,}' | head -1)
+fi
+# BOOT_ID — UUID do kernel gerado em cada boot. Não é único por device, mas
+# permite correlacionar logs/sessões. Sempre disponível.
+BOOT_ID=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)
+# GSF_ID — Google Services Framework ID (precisa root pra ler, mas tenta)
+GSF_ID=$(sqlite3 /data/data/com.google.android.gsf/databases/gservices.db \
+    "select value from main where name='android_id'" 2>/dev/null)
+# Bootloader version (parte do device fingerprint)
+BOOTLOADER=$(gp ro.bootloader)
+[ -z "$BOOTLOADER" ] && BOOTLOADER=$(gp ro.boot.bootloader)
+# Build description (mais único que fingerprint em alguns devices)
+BUILD_DESC=$(gp ro.build.description)
+
+# HWID composto — usa TODOS os campos disponíveis (não vazios).
+# Widevine + Boot ID + Fingerprint são os pillars quando serial/MAC estão bloqueados.
+RAW="${SERIAL}|${BOOT_SERIAL}|${MAC}|${BT_MAC}|${ANDROID_ID}|${WIDEVINE_ID}|${FINGERPRINT}|${PRODUCT_BRAND}|${PRODUCT_MODEL}|${BOOTLOADER}"
+HWID_ALT_RAW="${ANDROID_ID}:${SERIAL}:${BOOT_SERIAL}:${WIDEVINE_ID}"
 
 HASH=""
 HASH_HWID_ALT=""
@@ -2728,15 +3531,84 @@ info "Boot serial:   ${BOOT_SERIAL:-?}"
 info "MAC wlan0:     ${MAC:-?}"
 info "Bluetooth MAC: ${BT_MAC:-?}"
 info "Android ID:    ${ANDROID_ID:-?}"
+info "Widevine ID:   ${WIDEVINE_ID:-?}"
+info "Boot ID:       ${BOOT_ID:-?}"
+[ -n "$GSF_ID" ]     && info "GSF ID:        $GSF_ID"
+[ -n "$BOOTLOADER" ] && info "Bootloader:    $BOOTLOADER"
 info "Brand/Model:   ${PRODUCT_BRAND:-?} / ${PRODUCT_MODEL:-?}"
 info "Fingerprint:   ${FINGERPRINT:-?}"
 info "HWID SHA-256:  ${HASH:-(indisponível)}"
 info "HWID MD5:      ${HASH_HWID_ALT:-(indisponível)}"
 
-# Diagnóstico: se TUDO tá vazio, é privacy lock do Android 10+
-if [ -z "$SERIAL" ] && [ -z "$MAC" ] && [ -z "$ANDROID_ID" ]; then
-    warn "Serial/MAC/AndroidID todos vazios — Android 10+ bloqueia esses dados pra apps não-privilegiados (Termux). Fingerprint+model ainda dão identificador único parcial."
+# v4.4.32: diagnóstico granular — quais fontes vieram e quais bloquearam
+if [ -z "$SERIAL" ] && [ -z "$MAC" ] && [ -z "$ANDROID_ID" ] && [ -z "$WIDEVINE_ID" ]; then
+    warn "Todas fontes de HWID vazias — Android 10+ + privacy lock + sem dumpsys media.drm. HWID fica baseado só em fingerprint/model (NÃO único)."
+elif [ -z "$SERIAL" ] && [ -z "$MAC" ] && [ -z "$ANDROID_ID" ]; then
+    info "Serial/MAC/AndroidID bloqueados (Termux sem permissão), mas Widevine ID/Boot ID/Fingerprint OK — HWID composto é único."
 fi
+
+# ============================================================
+#  31b. PLAY STORE / REGIÃO (v4.4.32)
+#  Cheaters em FF usam conta de outra região pra pegar item antes ou usar
+#  cheats regionais. Compara COUNTRY/LOCALE/SIM/PlayStore — se algum diverge,
+#  flag pra revisão. Esperado pra BR: locale pt-BR + SIM 724/BR + Play BR.
+# ============================================================
+header "PLAY STORE / REGIÃO"
+
+REGION_HITS=0
+EXPECTED_COUNTRY="${EXPECTED_COUNTRY:-BR}"
+
+# Re-coleta (variáveis podem ter sumido depois de várias seções)
+LOCALE_NOW=$(gp ro.product.locale)
+[ -z "$LOCALE_NOW" ] && LOCALE_NOW=$(gp persist.sys.locale)
+COUNTRY_NOW=$(gp persist.sys.country)
+[ -z "$COUNTRY_NOW" ] && COUNTRY_NOW=$(gp ro.csc.countryiso_code)
+[ -z "$COUNTRY_NOW" ] && COUNTRY_NOW=$(gp ro.product.locale.region)
+[ -z "$COUNTRY_NOW" ] && [ -n "$LOCALE_NOW" ] && COUNTRY_NOW=$(echo "$LOCALE_NOW" | sed -nE 's/.*[-_]([A-Z]{2}).*/\1/p')
+
+SIM_COUNTRY=$(gp gsm.sim.operator.iso-country | tr '[:lower:]' '[:upper:]')
+[ -z "$SIM_COUNTRY" ] && SIM_COUNTRY=$(gp gsm.operator.iso-country | tr '[:lower:]' '[:upper:]')
+SIM_OPERATOR=$(gp gsm.sim.operator.alpha)
+SIM_MCC=$(gp gsm.sim.operator.numeric | head -c 3)
+
+# Play Store: prioriza shared_prefs (precisa root). Fallback: gmsversion regex.
+PLAY_COUNTRY_NOW=""
+for VPATH in /data/data/com.android.vending/shared_prefs/finsky.xml \
+             /data/data/com.android.vending/shared_prefs/finsky-user-prefs.xml; do
+    [ -r "$VPATH" ] && {
+        PLAY_COUNTRY_NOW=$(grep -oE 'BillingCountry[^>]*>[A-Z]{2}<' "$VPATH" 2>/dev/null | grep -oE '>[A-Z]{2}<' | tr -d '><')
+        [ -z "$PLAY_COUNTRY_NOW" ] && \
+            PLAY_COUNTRY_NOW=$(grep -oE '"[A-Z]{2}"' "$VPATH" 2>/dev/null | head -1 | tr -d '"')
+        [ -n "$PLAY_COUNTRY_NOW" ] && break
+    }
+done
+[ -z "$PLAY_COUNTRY_NOW" ] && PLAY_COUNTRY_NOW=$(gp ro.com.google.gmsversion 2>/dev/null | sed -nE 's/.*_([A-Z]{2}).*/\1/p')
+
+info "Locale device:    ${LOCALE_NOW:-?}"
+info "Country device:   ${COUNTRY_NOW:-?}"
+info "SIM country:      ${SIM_COUNTRY:-?} (operadora: ${SIM_OPERATOR:-?}, MCC: ${SIM_MCC:-?})"
+info "Play Store:       ${PLAY_COUNTRY_NOW:-?}"
+info "Expected:         $EXPECTED_COUNTRY (override via EXPECTED_COUNTRY=XX)"
+
+# Divergências
+if [ -n "$COUNTRY_NOW" ] && [ "$COUNTRY_NOW" != "$EXPECTED_COUNTRY" ]; then
+    warn "Country device ($COUNTRY_NOW) ≠ esperado ($EXPECTED_COUNTRY)"
+    REGION_HITS=$((REGION_HITS+1))
+fi
+if [ -n "$SIM_COUNTRY" ] && [ "$SIM_COUNTRY" != "$EXPECTED_COUNTRY" ]; then
+    warn "SIM country ($SIM_COUNTRY) ≠ esperado ($EXPECTED_COUNTRY) — chip de outro país"
+    REGION_HITS=$((REGION_HITS+1))
+fi
+if [ -n "$PLAY_COUNTRY_NOW" ] && [ "$PLAY_COUNTRY_NOW" != "$EXPECTED_COUNTRY" ]; then
+    alert "Play Store country ($PLAY_COUNTRY_NOW) ≠ esperado ($EXPECTED_COUNTRY) — conta Play de outro país"
+    REGION_HITS=$((REGION_HITS+1))
+fi
+# SIM vs Play divergem = cheater usando proxy/VPN+conta de outra região
+if [ -n "$SIM_COUNTRY" ] && [ -n "$PLAY_COUNTRY_NOW" ] && [ "$SIM_COUNTRY" != "$PLAY_COUNTRY_NOW" ]; then
+    alert "SIM ($SIM_COUNTRY) ≠ Play Store ($PLAY_COUNTRY_NOW) — combinação típica de cheater regional"
+    REGION_HITS=$((REGION_HITS+1))
+fi
+[ "$REGION_HITS" = "0" ] && ok "Locale/SIM/Play Store consistentes com $EXPECTED_COUNTRY"
 
 fi  # ===== fim do bloco ANDROID =====
 
@@ -2769,7 +3641,123 @@ info "Machine:      ${IOS_MODEL:-?}"
 info "Kernel:       $(uname -r 2>/dev/null)"
 
 # Já estar conseguindo rodar bash via SSH = device jailbroken
-warn "Você está rodando bash em iOS - device JÁ está jailbroken (SSH habilitado)"
+# v4.4.32: gate em IS_REAL_IOS pra não disparar em macOS com FORCE_PLATFORM=ios.
+if [ "$IS_REAL_IOS" = "1" ]; then
+    warn "Você está rodando bash em iOS - device JÁ está jailbroken (SSH habilitado)"
+else
+    info "Modo iOS forçado em macOS (FORCE_PLATFORM=ios) — checks limitados"
+fi
+
+# ============================================================
+#  iOS-1b. REGIÃO / APP STORE COUNTRY (v4.4.32)
+#  Cheaters usam Apple ID de outra região pra puxar IPA sem assinatura, comprar
+#  cheats ou pegar release antecipado. Lê AppleLocale + StorefrontIdentifier.
+# ============================================================
+header "iOS - REGIÃO / APP STORE COUNTRY"
+
+REGION_IOS_HITS=0
+EXPECTED_COUNTRY_IOS="${EXPECTED_COUNTRY:-BR}"
+
+APPLE_LOCALE=""
+APPLE_COUNTRY=""
+STOREFRONT_ID=""
+STOREFRONT_COUNTRY=""
+
+# 1) AppleLocale + AppleCountry de .GlobalPreferences.plist
+for GP in /var/mobile/Library/Preferences/.GlobalPreferences.plist \
+          /private/var/mobile/Library/Preferences/.GlobalPreferences.plist \
+          "$HOME/Library/Preferences/.GlobalPreferences.plist"; do
+    [ -r "$GP" ] || continue
+    if have plutil; then
+        APPLE_LOCALE=$(plutil -p "$GP" 2>/dev/null | grep -m1 'AppleLocale' | sed -E 's/.*=> "([^"]+)".*/\1/')
+        APPLE_COUNTRY=$(plutil -p "$GP" 2>/dev/null | grep -m1 'AppleCountry' | sed -E 's/.*=> "([^"]+)".*/\1/')
+    fi
+    if [ -z "$APPLE_LOCALE" ] && have defaults; then
+        APPLE_LOCALE=$(defaults read NSGlobalDomain AppleLocale 2>/dev/null)
+        APPLE_COUNTRY=$(defaults read NSGlobalDomain AppleICUForce24HourTime 2>/dev/null; defaults read NSGlobalDomain AppleCountry 2>/dev/null)
+    fi
+    [ -n "$APPLE_LOCALE" ] && break
+done
+
+# 2) Storefront ID — código numérico da App Store (143441=US, 143503=BR, 143465=KR, etc.)
+for SS in /var/mobile/Library/Preferences/com.apple.storeservices.plist \
+          /private/var/mobile/Library/Preferences/com.apple.storeservices.plist \
+          /var/mobile/Library/Preferences/com.apple.itunesstored.plist \
+          "$HOME/Library/Preferences/com.apple.storeservices.plist"; do
+    [ -r "$SS" ] || continue
+    if have plutil; then
+        STOREFRONT_ID=$(plutil -p "$SS" 2>/dev/null | grep -m1 -iE 'storefront|frontid' | grep -oE '[0-9]{6,}' | head -1)
+    fi
+    [ -z "$STOREFRONT_ID" ] && have strings && \
+        STOREFRONT_ID=$(strings "$SS" 2>/dev/null | grep -m1 -E '^[0-9]{6}-[0-9]+,[0-9]+' | cut -d- -f1)
+    [ -n "$STOREFRONT_ID" ] && break
+done
+
+# Mapa de storefront ID → ISO country (subset mais comum)
+case "$STOREFRONT_ID" in
+    143441) STOREFRONT_COUNTRY="US" ;;
+    143503) STOREFRONT_COUNTRY="BR" ;;
+    143442) STOREFRONT_COUNTRY="FR" ;;
+    143443) STOREFRONT_COUNTRY="DE" ;;
+    143444) STOREFRONT_COUNTRY="GB" ;;
+    143445) STOREFRONT_COUNTRY="AT" ;;
+    143446) STOREFRONT_COUNTRY="BE" ;;
+    143447) STOREFRONT_COUNTRY="FI" ;;
+    143452) STOREFRONT_COUNTRY="JP" ;;
+    143460) STOREFRONT_COUNTRY="AU" ;;
+    143462) STOREFRONT_COUNTRY="CA" ;;
+    143465) STOREFRONT_COUNTRY="KR" ;;
+    143467) STOREFRONT_COUNTRY="IN" ;;
+    143470) STOREFRONT_COUNTRY="MX" ;;
+    143476) STOREFRONT_COUNTRY="RU" ;;
+    143480) STOREFRONT_COUNTRY="TR" ;;
+    143489) STOREFRONT_COUNTRY="ID" ;;
+    143505) STOREFRONT_COUNTRY="AR" ;;
+    143508) STOREFRONT_COUNTRY="CO" ;;
+    143464) STOREFRONT_COUNTRY="HK" ;;
+    143470) STOREFRONT_COUNTRY="MY" ;;
+    143474) STOREFRONT_COUNTRY="PH" ;;
+    143479) STOREFRONT_COUNTRY="TH" ;;
+    143481) STOREFRONT_COUNTRY="VN" ;;
+    143542) STOREFRONT_COUNTRY="EG" ;;
+    "") STOREFRONT_COUNTRY="" ;;
+    *) STOREFRONT_COUNTRY="?($STOREFRONT_ID)" ;;
+esac
+
+# 3) ICU locale via defaults (timezone também ajuda)
+SYS_LOCALE=""
+if have defaults; then
+    SYS_LOCALE=$(defaults read -g AppleLocale 2>/dev/null)
+fi
+TIMEZONE=$(systemsetup -gettimezone 2>/dev/null | sed 's/Time Zone: //')
+[ -z "$TIMEZONE" ] && TIMEZONE=$(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')
+[ -z "$TIMEZONE" ] && have date && TIMEZONE=$(date +%Z 2>/dev/null)
+
+info "AppleLocale:     ${APPLE_LOCALE:-?}"
+info "AppleCountry:    ${APPLE_COUNTRY:-?}"
+info "Storefront ID:   ${STOREFRONT_ID:-?}  →  country: ${STOREFRONT_COUNTRY:-?}"
+info "System locale:   ${SYS_LOCALE:-?}"
+info "Timezone:        ${TIMEZONE:-?}"
+info "Expected:        $EXPECTED_COUNTRY_IOS"
+
+if [ -n "$APPLE_COUNTRY" ] && [ "$APPLE_COUNTRY" != "$EXPECTED_COUNTRY_IOS" ]; then
+    warn "AppleCountry ($APPLE_COUNTRY) ≠ esperado ($EXPECTED_COUNTRY_IOS)"
+    REGION_IOS_HITS=$((REGION_IOS_HITS+1))
+fi
+if [ -n "$STOREFRONT_COUNTRY" ] && [ "$STOREFRONT_COUNTRY" != "$EXPECTED_COUNTRY_IOS" ]; then
+    case "$STOREFRONT_COUNTRY" in
+        \?*) warn "Storefront ID desconhecido: $STOREFRONT_ID — country não mapeado" ;;
+        *)
+            alert "App Store country ($STOREFRONT_COUNTRY) ≠ esperado ($EXPECTED_COUNTRY_IOS) — Apple ID de outra região"
+            REGION_IOS_HITS=$((REGION_IOS_HITS+1)) ;;
+    esac
+fi
+if [ -n "$APPLE_COUNTRY" ] && [ -n "$STOREFRONT_COUNTRY" ] \
+   && [ "$APPLE_COUNTRY" != "$STOREFRONT_COUNTRY" ] && [ "${STOREFRONT_COUNTRY:0:1}" != "?" ]; then
+    alert "AppleCountry ($APPLE_COUNTRY) ≠ Storefront ($STOREFRONT_COUNTRY) — device em região X, Apple ID em região Y"
+    REGION_IOS_HITS=$((REGION_IOS_HITS+1))
+fi
+[ "$REGION_IOS_HITS" = "0" ] && ok "Locale + Apple ID + Storefront consistentes com $EXPECTED_COUNTRY_IOS"
 
 # ============================================================
 #  iOS-2. JAILBREAK (Cydia / Sileo / Zebra / rootless)
@@ -2801,16 +3789,28 @@ for P in /var/jb /private/var/jb /var/binpack /jb \
     exists "$P" && { alert "Rootless JB artifact: $P"; JB_HITS=$((JB_HITS+1)); }
 done
 
-# Paths clássicos de jailbreak (rootful)
+# Paths clássicos de jailbreak (rootful) — separados em 2 grupos:
+#  HARD: paths que SÓ existem em iOS jailbroken
+#  SOFT: paths que TAMBÉM existem em macOS comum (skip se IS_REAL_IOS=0)
 for P in /private/var/lib/cydia /private/var/cache/apt \
          /private/var/lib/apt /etc/apt \
-         /usr/libexec/cydia/firmware.sh /usr/sbin/sshd \
-         /usr/libexec/sftp-server /private/var/tmp/cydia.log \
+         /usr/libexec/cydia/firmware.sh \
+         /private/var/tmp/cydia.log \
          /var/lib/apt /var/lib/cydia /var/cache/apt \
-         /usr/bin/ssh /private/etc/apt /Library/MobileSubstrate \
+         /private/etc/apt /Library/MobileSubstrate \
          /usr/share/jailbreak /private/var/stash; do
     exists "$P" && { alert "JB path: $P"; JB_HITS=$((JB_HITS+1)); }
 done
+
+# v4.4.32: paths que existem em macOS comum (ssh/sshd/sftp-server vêm com
+# Remote Login). Só conta como JB se a gente confirmou device iOS real.
+if [ "$IS_REAL_IOS" = "1" ]; then
+    for P in /usr/sbin/sshd /usr/libexec/sftp-server /usr/bin/ssh; do
+        exists "$P" && { alert "JB path (iOS real): $P"; JB_HITS=$((JB_HITS+1)); }
+    done
+else
+    info "(skip ssh/sshd path checks — não confirmado como device iOS real)"
+fi
 
 # Pacotes APT que indicam jailbreak ativo
 if have dpkg; then
@@ -2886,6 +3886,30 @@ for PDIR in $PROFILE_DIRS; do
                 [ -n "$PT_WCF" ]      && { alert "  Profile com WebContentFilter (proxy): $FULL"; CFG_HITS=$((CFG_HITS+1)); }
                 [ -n "$PT_DNS" ]      && { alert "  Profile com DNS/Relay custom: $FULL"; CFG_HITS=$((CFG_HITS+1)); }
                 [ -n "$PT_MDM" ]      && { warn  "  Profile com MDM (controle remoto): $FULL"; }
+
+                # v4.4.52: detect específico de famílias de cheat DNS conhecidas via
+                # PayloadIdentifier (não só PayloadType genérico). Atribui NOME do cheat.
+                KHOIN_HIT=$(echo "$CONTENT" | grep -iE 'khoindvn|khoind\.app|com\.khoindvn\.apple-dns' | head -n 1)
+                if [ -n "$KHOIN_HIT" ]; then
+                    alert "  Profile KHOINDVN (DNS proxy FF iOS) em $FULL"
+                    alert "    └─ Identifier: $(echo "$KHOIN_HIT" | head -c 200)"
+                    CFG_HITS=$((CFG_HITS+1))
+                fi
+                # Pattern <vendor>.apple-dns.<UUID> — vetor genérico de DNS sequester
+                APPLE_DNS_PROFILE=$(echo "$CONTENT" | grep -iE '[a-z0-9_-]+\.apple-dns\.[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}' | head -n 1)
+                if [ -n "$APPLE_DNS_PROFILE" ] && [ -z "$KHOIN_HIT" ]; then
+                    alert "  Profile com identifier '<vendor>.apple-dns.<UUID>' (DNS sequester) em $FULL"
+                    alert "    └─ $(echo "$APPLE_DNS_PROFILE" | head -c 200)"
+                    CFG_HITS=$((CFG_HITS+1))
+                fi
+                # Hashes específicos do threat intel da print (4-char prefixes)
+                for HASH_PREFIX in "0af71eab" "60a5560f" "90eb5f87" "bd32d3a8"; do
+                    if echo "$CONTENT" | grep -qiE "$HASH_PREFIX[a-f0-9]{56}"; then
+                        alert "  Profile com hash conhecido de THREAT INTEL ($HASH_PREFIX...): $FULL"
+                        CFG_HITS=$((CFG_HITS+1))
+                        break
+                    fi
+                done
                 [ -n "$PT_RESTR" ]    && { alert "  Profile com RESTRICTIONS (applicationaccess/ScreenTime): $FULL"; CFG_HITS=$((CFG_HITS+1)); }
                 [ -n "$PT_AIRPLAY" ]  && { warn  "  Profile com AirPlay policy: $FULL"; }
                 [ -n "$PT_WIFI" ]     && { warn  "  Profile com Wi-Fi managed: $FULL"; }
@@ -3059,10 +4083,16 @@ fi
 header "iOS - FRIDA / DEBUGGERS"
 
 FIOS_HITS=0
+# v4.4.32: removido /System/Library/PrivateFrameworks/DebugSymbols.framework — é
+# framework PADRÃO do iOS/macOS pra symbolication de crashes, gerava FP em 100%
+# dos devices. Frida real nunca instala em /System/Library/PrivateFrameworks.
 for P in /usr/sbin/frida-server /var/jb/usr/sbin/frida-server \
          /var/jb/usr/bin/frida /usr/bin/frida \
          /usr/lib/frida /var/jb/usr/lib/frida \
-         /System/Library/PrivateFrameworks/DebugSymbols.framework; do
+         /var/jb/usr/sbin/frida-server-* \
+         /var/mobile/frida-server /var/root/frida-server \
+         /Library/Frameworks/FridaGadget.framework \
+         /usr/lib/FridaGadget.dylib /var/jb/usr/lib/FridaGadget.dylib; do
     exists "$P" && { alert "Frida iOS: $P"; FIOS_HITS=$((FIOS_HITS+1)); }
 done
 
@@ -3081,10 +4111,15 @@ if have netstat; then
 fi
 
 # LLDB / debugserver
+# v4.4.32: /usr/bin/lldb vem com Xcode em macOS. Só conta como suspeito em iOS
+# real (Xcode-paired debugger persistente, indicador de análise dinâmica).
 for P in /Developer/usr/bin/debugserver /var/jb/usr/bin/debugserver \
-         /var/jb/usr/bin/lldb /usr/bin/lldb; do
+         /var/jb/usr/bin/lldb; do
     exists "$P" && { warn "Debugger: $P"; FIOS_HITS=$((FIOS_HITS+1)); }
 done
+if [ "$IS_REAL_IOS" = "1" ]; then
+    exists /usr/bin/lldb && { warn "Debugger (iOS real): /usr/bin/lldb"; FIOS_HITS=$((FIOS_HITS+1)); }
+fi
 
 [ "$FIOS_HITS" = "0" ] && ok "Sem Frida/debugger iOS"
 
@@ -3118,7 +4153,7 @@ if [ -d /var/containers/Bundle/Application ]; then
             [ -z "$APD" ] && continue
             BN=$(basename "$APD" .app)
             case "$BN" in
-                *[Hh]ack*|*[Mm]od*|*[Cc]heat*|*FF*MOD*|*FFH4X*|*[Aa]imbot*|\
+                *[Hh]ack*|*[Mm]od*|*[Cc]heat*|*FF*MOD*|*FFH4X*|*[Aa]imbot*|*[Hh]olograma*|*[Hh]ologram*|\
                 *[Ee][Ss][Pp]*|*[Mm]enu*|*[Ii]njector*|*FreeFire*VIP*|\
                 *FF*VIP*|*BLOODY*)
                     emit "${CR}[ALERTA]${CN}  App suspeito: $APD" ;;
@@ -3225,6 +4260,12 @@ fi
 header "iOS - CHEAT BUNDLES CONHECIDOS"
 
 CHEAT_BUNDLES_IOS="
+com.khoindvn
+com.khoindvn.apple-dns
+com.khoindvn.dns
+com.khoindvn.vpn
+com.khoindvn.proxy
+com.khoind.app
 com.34306.espff
 com.dts.freefireth.externalesp
 com.quyhoang.fxy
@@ -3490,11 +4531,13 @@ fi
 header "iOS - PROCESSOS"
 
 if have ps; then
-    PROCS=$(ps -A 2>/dev/null)
-    for PAT in frida sshd substrated cycript lldb gdb debugserver \
-               igamegod gamegem trollstore altstore scarlet \
-               cheat hack injector; do
-        HIT=$(echo "$PROCS" | grep -i "$PAT" | grep -v grep)
+    # v4.4.32: clean_procs + patterns mais específicos. Antes o `grep -i hack`
+    # pegava qualquer linha do argv do scanner que tivesse "hack" como string.
+    PROCS=$(ps -A 2>/dev/null | clean_procs)
+    for PAT in frida-server frida-agent substrated cycript debugserver \
+               igamegod gamegem trollstored scarletd \
+               cheatengine ffcheat ffmod aimbot.daemon; do
+        HIT=$(echo "$PROCS" | grep -iE "[^a-zA-Z0-9_]${PAT}|^${PAT}" | grep -v grep)
         [ -n "$HIT" ] && echo "$HIT" | head -n 2 | while IFS= read -r L; do
             [ -n "$L" ] && alert "Processo ($PAT): $L"
         done
@@ -3524,6 +4567,90 @@ fi
 info "UDID:    ${UDID:-?}"
 info "Serial:  ${SERIAL:-?}"
 info "HWID:    ${HASH:-(indisponível)}"
+
+# ============================================================
+#  iOS-9. CRASHES (Free Fire + Câmera + Fotos)  v4.4.32
+#  ~/Library/Logs/CrashReporter/ + DiagnosticReports/ — analisar tombstone-like
+#  reports do iOS. Crash do FF com lib não-oficial = cheat instável.
+# ============================================================
+header "iOS - CRASHES (Free Fire + Câmera + Fotos)"
+
+IOS_CRASH_HITS=0
+FF_IOS_BUNDLES_LOCAL="$FF_IOS_BUNDLES"
+CAM_IOS_BUNDLES="com.apple.camera com.apple.CameraKit"
+GAL_IOS_BUNDLES="com.apple.mobileslideshow com.apple.Photos"
+
+CRASH_DIRS="
+/var/mobile/Library/Logs/CrashReporter
+/var/mobile/Library/Logs/CrashReporter/MobileDevice
+/private/var/mobile/Library/Logs/CrashReporter
+/private/var/mobile/Library/Logs/CrashReporter/MobileDevice
+/Library/Logs/CrashReporter
+/var/mobile/Library/Logs/DiagnosticReports
+/private/var/mobile/Library/Logs/DiagnosticReports
+"
+
+for CDIR in $CRASH_DIRS; do
+    [ -d "$CDIR" ] || continue
+    info "Crash dir: $CDIR"
+    # Lista até 30 mais recentes (.ips ou .crash ou .panic)
+    RECENT=$(ls -t "$CDIR" 2>/dev/null | head -30)
+    [ -z "$RECENT" ] && continue
+    echo "$RECENT" | while IFS= read -r F; do
+        [ -z "$F" ] && continue
+        FULL="$CDIR/$F"
+        # FF crashes
+        for BID in $FF_IOS_BUNDLES_LOCAL; do
+            case "$F" in
+                *${BID}*|*FreeFire*|*Garena*)
+                    FMT=$(stat -c '%y' "$FULL" 2>/dev/null || stat -f '%Sm' "$FULL" 2>/dev/null)
+                    alert "[FF] Crash: $FULL ($FMT)"
+                    # extrai bug class + termination + libs envolvidas
+                    if [ -r "$FULL" ]; then
+                        BUG=$(grep -m1 -iE 'Bug ?Type|Exception Type|Termination' "$FULL" 2>/dev/null | head -c 200)
+                        [ -n "$BUG" ] && info "    $BUG"
+                        LIBS=$(grep -iE 'libsubstrate|libsubstitute|libellekit|libhooker|libfrida|FridaGadget|MobileSubstrate' "$FULL" 2>/dev/null | head -3)
+                        [ -n "$LIBS" ] && echo "$LIBS" | while IFS= read -r L; do
+                            [ -n "$L" ] && alert "    lib cheat: $(echo "$L" | head -c 140)"
+                        done
+                    fi
+                    ;;
+            esac
+        done
+        # Câmera
+        for BID in $CAM_IOS_BUNDLES; do
+            case "$F" in
+                *${BID}*|*Camera*|*camera*)
+                    FMT=$(stat -c '%y' "$FULL" 2>/dev/null || stat -f '%Sm' "$FULL" 2>/dev/null)
+                    warn "[CAMERA] Crash: $FULL ($FMT)"
+                    ;;
+            esac
+        done
+        # Fotos
+        for BID in $GAL_IOS_BUNDLES; do
+            case "$F" in
+                *${BID}*|*MobileSlideShow*|*Photos*)
+                    FMT=$(stat -c '%y' "$FULL" 2>/dev/null || stat -f '%Sm' "$FULL" 2>/dev/null)
+                    warn "[FOTOS] Crash: $FULL ($FMT)"
+                    ;;
+            esac
+        done
+        # Panics do kernel (sinaliza tweak ruim ou kext custom)
+        case "$F" in
+            *panic*|*kernel*)
+                FMT=$(stat -c '%y' "$FULL" 2>/dev/null || stat -f '%Sm' "$FULL" 2>/dev/null)
+                alert "Kernel panic: $FULL ($FMT) — possível tweak instável"
+                ;;
+        esac
+    done
+done
+
+if [ "$IOS_CRASH_HITS" = "0" ]; then
+    ok "Sem crashes de FF/Câmera/Fotos encontrados nos paths analisáveis"
+    info "Pra extrair logs sem JB use bugreport sysdiagnose:"
+    info "  iPhone: pressionar Vol+ Vol- Side ~1s. Diagnóstico vai pra Privacidade → Analytics"
+    info "  Coletar via Mac com Apple Configurator 2 ou: idevicesyslog (via USB)"
+fi
 
 fi  # ===== fim do bloco iOS =====
 
@@ -3717,6 +4844,70 @@ EOF
             emit "  ${CY}›${CN} Dump tar.gz falhou (sem espaço/permissão?), pasta: $DUMP_DIR"
         fi
     fi
+fi
+
+# ============================================================
+#  v4.4.33: DEPURAÇÃO WIFI — INSTRUÇÕES PRA PUXAR BUGREPORT COMPLETO
+#  Termux não tem acesso a logcat persistent buffer, dumpsys completo, nem
+#  /data/system/dropbox sem root. Bugreport via adb (depuração WiFi) puxa
+#  TUDO isso de uma vez. Mostra instruções passo-a-passo após o dump.
+# ============================================================
+if [ "$PLATFORM" = "android" ]; then
+emit ""
+emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+emit "${CW}${CC}  ◆  PRÓXIMO PASSO — BUGREPORT COMPLETO via DEPURAÇÃO WIFI${CN}"
+emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+emit ""
+emit "${CY}  O scan do Termux pegou tudo que dava SEM root.${CN}"
+emit "${CY}  Pra puxar logcat persistent, tombstones, dropbox crashes e${CN}"
+emit "${CY}  dumpsys completo (que precisam de ADB), siga:${CN}"
+emit ""
+emit "${CW}${CC}  📱 NO ANDROID (device sendo escaneado):${CN}"
+emit "  ${CG}1)${CN} Ativar ${CW}Depuração WiFi${CN}:"
+emit "       Settings → System → ${CW}Opções do desenvolvedor${CN}"
+emit "       → ${CW}Depuração sem fio${CN} (Wireless debugging) → ${CW}ON${CN}"
+emit ""
+emit "  ${CG}2)${CN} Tocar em ${CW}\"Parear com código de pareamento\"${CN}"
+emit "       Anote o ${CW}IP:porta${CN} e o ${CW}código de 6 dígitos${CN}"
+emit "       (a tela mostra algo como: ${CC}192.168.1.42:37291${CN} + ${CC}123456${CN})"
+emit ""
+emit "${CW}${CC}  💻 NO PC (analista — Windows/Mac/Linux com adb):${CN}"
+emit "  ${CG}3)${CN} Parear (só primeira vez por device):"
+emit "       ${CW}adb pair 192.168.1.42:37291${CN}"
+emit "       (cola o código de 6 dígitos quando pedir)"
+emit ""
+emit "  ${CG}4)${CN} Conectar (o IP é OUTRO, vê na tela Wireless Debugging):"
+emit "       ${CW}adb connect 192.168.1.42:5555${CN}  (ou a porta que aparecer)"
+emit "       Deve responder: ${CG}connected to 192.168.1.42:5555${CN}"
+emit ""
+emit "  ${CG}5)${CN} Gerar bugreport completo (~30-60s, pode ser 50-150MB):"
+emit "       ${CW}adb bugreport bugreport_${TS}.zip${CN}"
+emit ""
+emit "  ${CG}6)${CN} Mandar de volta pro device pra o scanner re-analisar:"
+emit "       ${CW}adb push bugreport_${TS}.zip /sdcard/Download/${CN}"
+emit ""
+emit "${CW}${CC}  🔁 DEPOIS — re-rodar o scanner sobre o bugreport:${CN}"
+emit "  ${CG}7)${CN} No Termux (modo offline, analisa o zip):"
+emit "       ${CW}BUGREPORT_FILE=/sdcard/Download/bugreport_${TS}.zip sh a4ther.sh${CN}"
+emit ""
+emit "${CY}  ⚠  Se não tem PC com ADB:${CN}"
+emit "       Settings → Opções desenvolvedor → ${CW}\"Take bug report\"${CN}"
+emit "       → ${CW}Bug report completo${CN} (espera 1-2 min)"
+emit "       Vai aparecer notificação ${CW}\"Bug report captured\"${CN} → tocar pra compartilhar"
+emit "       Salva como zip em /sdcard/bugreports/ — re-rodar com:"
+emit "       ${CW}BUGREPORT_FILE=/sdcard/bugreports/bugreport-XXX.zip sh a4ther.sh${CN}"
+emit ""
+emit "${CC}  📋 O que o bugreport adiciona ao scan (22 categorias extras):${CN}"
+emit "       • Logcat persistent (semanas de log, não só últimas 2000 linhas)"
+emit "       • Tombstones nativos com stack completo (libs cheat embedded)"
+emit "       • Dropbox crash history (sobrevive reboot)"
+emit "       • Procstats (runtime % de cada processo, semanas)"
+emit "       • Batterystats history (uninstalls de cheats)"
+emit "       • dumpsys completo (window/activity/package/appops)"
+emit "       • WakeLocks suspeitos + ADB activity"
+emit "       • SSIDs WiFi conectados + Network config"
+emit "       • installerPackageName real (revela sideload mesmo após renomear)"
+emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
 fi
 
 # ─── v4.4.2: FINAL — onde achar o .txt + auto-copy pra Downloads ─────────────

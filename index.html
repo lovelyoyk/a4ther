@@ -2412,6 +2412,19 @@ footer a:hover {
                         <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </button>
+                <!-- v4.4.51: modo pasta — pra iPhone com sysdiagnose >150MB que dá OOM no Safari.
+                     User descompacta no app Arquivos do iOS (nativo, sem RAM web) e seleciona a
+                     pasta sysdiagnose_* aqui. Parser principal é o mesmo, só pula o inflate. -->
+                <button class="dropdown-option" data-tab="folder" role="option" type="button">
+                    <span class="dropdown-option-emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg></span>
+                    <span class="dropdown-option-text">
+                        <span class="dropdown-option-title">iOS · sysdiagnose (pasta extraída)</span>
+                        <span class="dropdown-option-desc">Pra iPhone com arquivo &gt;150MB que trava no Safari</span>
+                    </span>
+                    <svg class="dropdown-option-check" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
                 <button class="dropdown-option" data-tab="ndjson" role="option" type="button">
                     <span class="dropdown-option-emoji"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg></span>
                     <span class="dropdown-option-text">
@@ -2464,6 +2477,40 @@ footer a:hover {
                 <li>Toque no arquivo → ícone de <strong>Compartilhar</strong> → envie via AirDrop, Mensagens, WhatsApp, Telegram ou Arquivos/iCloud</li>
                 <li>Faça upload do <code>.tar.gz</code> aqui — <strong>não precisa descompactar</strong>, o scanner extrai direto no navegador</li>
             </ol>
+            <p style="margin-top:0.8rem;font-size:0.85rem;opacity:0.8;">
+                ⚠ <strong>Arquivo grande (&gt;150MB) no iPhone?</strong>
+                Use o modo <strong>"iOS · sysdiagnose (pasta extraída)"</strong> no menu acima — evita
+                "Um problema ocorreu repetidamente" causado por falta de RAM no Safari.
+            </p>
+        </div>
+    </div>
+
+    <!-- SYSDIAGNOSE PASTA (v4.4.51) — pra iPhone com arquivo >150MB -->
+    <div class="tab-panel" data-panel="folder">
+        <label class="dropzone" id="dz-folder">
+            <span class="dropzone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="32" height="32"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg></span>
+            <div class="dropzone-text">Selecione a pasta <code>sysdiagnose_*</code> extraída</div>
+            <div class="dropzone-hint">Sem limite de RAM · funciona pra qualquer tamanho</div>
+            <input type="file" id="file-folder" webkitdirectory directory multiple />
+        </label>
+        <div class="help-box">
+            <strong>Quando usar este modo:</strong> quando o <code>.tar.gz</code> trava no iPhone
+            com a mensagem "Um problema ocorreu repetidamente" (acontece com arquivos &gt;150MB
+            por causa do limite de RAM do Safari iOS).
+            <br><br>
+            <strong>Passo a passo no iPhone (sem PC):</strong>
+            <ol>
+                <li>Abra o app <strong>Arquivos</strong> (Files) — vem instalado com o iOS</li>
+                <li>Navegue até onde está o <code>sysdiagnose_*.tar.gz</code> (Downloads/iCloud)</li>
+                <li><strong>Toque e segure</strong> o arquivo → menu aparece → <strong>"Descompactar"</strong></li>
+                <li>O iOS cria uma pasta <code>sysdiagnose_DATA_DEVICE/</code> ao lado</li>
+                <li>Volte aqui, clique no botão acima e selecione essa <strong>pasta</strong></li>
+            </ol>
+            <p style="margin-top:0.8rem;font-size:0.85rem;opacity:0.8;">
+                Como funciona: a descompactação é feita pelo iOS com privilégios nativos (sem
+                limite de RAM). O Safari só faz parsing dos arquivos individuais — cada um tem
+                no máximo alguns MB, então não estoura memória.
+            </p>
         </div>
     </div>
 
@@ -2744,7 +2791,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.50";
+const VERSION = "4.4.56";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -2931,6 +2978,17 @@ const CHEAT_APPS = {
     // === Dev 34306 (Huy Nguyen) — autor de N cheats FF iOS ===
     "com.34306.huyjit":                 { sev: "CRITICAL", name: "HuyJIT ModMenu",         cat: "CHEAT",     desc: "Template JIT mod menu IMGUI (não-JB + Dopamine)" },
     "com.34306.filzajailedds":          { sev: "CRITICAL", name: "FilzaJailedDS",          cat: "CLEANER",   desc: "Filza jailed iOS 17-26 (DarkSword inject)" },
+
+    // === v4.4.52: KhoinDVN (Khoi Nguyen, dev VN) — DNS proxy cheats FF iOS ===
+    // O bundle com.khoindvn.apple-dns.<UUID> aparece na print do user como CHEAT.
+    // Instala configuration profile com PayloadType com.apple.dnsSettings.managed
+    // ou com.apple.dnsProxy.managed → sequester de domínios FF pra MITM.
+    "com.khoindvn":                     { sev: "CRITICAL", name: "KhoinDVN DNS Proxy",     cat: "CHEAT",     desc: "Bundle khoindvn — DNS proxy profile pra MITM Free Fire iOS" },
+    "com.khoindvn.apple-dns":           { sev: "CRITICAL", name: "KhoinDVN DNS Profile",   cat: "CHEAT",     desc: "Profile DNS custom KhoinDVN (sequester FF endpoints)" },
+    "com.khoindvn.dns":                 { sev: "CRITICAL", name: "KhoinDVN DNS",           cat: "CHEAT",     desc: "Variante DNS proxy KhoinDVN" },
+    "com.khoindvn.vpn":                 { sev: "CRITICAL", name: "KhoinDVN VPN Proxy",     cat: "CHEAT",     desc: "Variante VPN profile KhoinDVN" },
+    "com.khoindvn.proxy":               { sev: "CRITICAL", name: "KhoinDVN Proxy",         cat: "CHEAT",     desc: "Profile proxy generic KhoinDVN" },
+    "com.khoind.app":                   { sev: "CRITICAL", name: "KhoinD App",             cat: "CHEAT",     desc: "App parent KhoinDVN" },
 
     // === Cheat marketplaces 2026 (Fluorite, Cheto, iOSGods) — bundle re-signed mas marca distinta ===
     "com.fluorite.app":                 { sev: "CRITICAL", name: "Fluorite IPA modded",    cat: "CHEAT",     desc: "Cheat pago Fluorite (fluorite.store/cheto.shop)" },
@@ -3439,6 +3497,12 @@ const CHEAT_PROFILE_PREFIXES = {
     "bd32": { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída · família bd32)" },
     "90eb": { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída · família 90eb)" },
     "d03":  { name: "Proxy desconhecido",   sev: "CRITICAL", desc: "Proxy de cheat (origem não atribuída)" },
+    // v4.4.52: hashes específicos da threat intel da comunidade FF (4-char prefixes
+    // — 1/65536 = 0.0015% FP rate). Atribui nome melhor que "Proxy desconhecido"
+    // quando há confiança alta. Mantém os 3-char prefixes acima como fallback.
+    "0af7": { name: "KhoinDVN DNS Proxy",   sev: "CRITICAL", desc: "Profile DNS cheat KhoinDVN (hash 0af71eab... confirmado threat intel)" },
+    "bd32d3": { name: "KhoinDVN DNS Proxy", sev: "CRITICAL", desc: "Profile DNS cheat KhoinDVN (hash bd32d3a8... confirmado threat intel)" },
+    "90eb5f": { name: "KhoinDVN DNS Proxy", sev: "CRITICAL", desc: "Profile DNS cheat KhoinDVN (hash 90eb5f87... confirmado threat intel)" },
 };
 
 // Strings/markers que aparecem em profile identifiers ou bundles de cheat
@@ -3447,6 +3511,14 @@ const CHEAT_PROFILE_STRINGS = [
     { needle: "proxyady",          name: "Proxy desconhecido (proxyady)", sev: "CRITICAL", desc: "Marker string de proxy/cheat" },
     { needle: "dash.proxy",        name: "Dash",                          sev: "CRITICAL", desc: "Cheat Dash — proxy" },
     { needle: "com.xtremo.mobile", name: "XTREMO",                        sev: "CRITICAL", desc: "Cheat XTREMO — bundle confirmado" },
+    // v4.4.52: KhoinDVN family — bate em qualquer PayloadIdentifier ou bundle
+    // que contém "khoindvn" ou "khoind" (família de DNS proxy profiles VN).
+    { needle: "khoindvn",          name: "KhoinDVN DNS Proxy",            sev: "CRITICAL", desc: "Profile DNS cheat KhoinDVN — sequester de endpoints FF iOS" },
+    { needle: "khoind.app",        name: "KhoinDVN App",                  sev: "CRITICAL", desc: "App parent KhoinDVN — instala DNS proxy profile" },
+    { needle: "apple-dns.",        name: "DNS Proxy Profile (apple-dns)", sev: "HIGH",     desc: "PayloadIdentifier no formato <vendor>.apple-dns.<UUID> — vetor DNS sequester" },
+    // v4.4.54: Holograma family — cheat BR conhecido (arquivo solto em pasta do FF)
+    { needle: "holograma",         name: "Cheat Holograma",               sev: "CRITICAL", desc: "Cheat 'Holograma' (BR) — arquivo modificado em /Android/data ou /obb do Free Fire" },
+    { needle: "hologramff",        name: "Cheat Holograma FF",            sev: "CRITICAL", desc: "Variante Holograma específica pra Free Fire" },
 ];
 
 // Pre-ordena prefixes do MAIS LONGO pro mais curto (greedy match = mais preciso)
@@ -3516,6 +3588,8 @@ const PROFILE_ORG_KEYWORDS = [
     "iosgods", "iosrocket", "iloader", "digiidna", "imazing",
     "3utools", "cheat", "hack", "aimbot", "wallhack",
     "xleal", "xdark", "appcake", "appvalley", "tutuapp",
+    // v4.4.54: Holograma cheat (BR)
+    "holograma", "hologram",
 ];
 
 const APP_STORE_OFFICIAL = new Set([
@@ -3578,6 +3652,8 @@ const SUSPECT_KEYWORDS = [
     "trojan", "bypass", "inject", "libhooker",
     "sideload", "appdb", "tutuapp", "appvalley", "ignition",
     "appcake", "buildstore", "ifunbox",
+    // v4.4.54: Holograma cheat (BR) — arquivo modificado em pasta do FF
+    "holograma", "hologram", "holohack", "holomod", "holoff",
 ];
 
 const PROFILE_PAYLOADS = {
@@ -4983,6 +5059,98 @@ async function readSafe(file, maxBytes) {
     return p;
 }
 
+/* ============================================================
+   v4.4.52: HASH HELPERS — MD5 puro + SHA-256 nativo
+   Pra cross-check de profile assets (cert, MCSettings, ProfileTruth, etc).
+   Antes: scanner extraía só o UUID/identifier do MCProfileEvents (mcprofile)
+   e renderizava como "hash". Agora computa MD5 + SHA-256 reais do conteúdo
+   binário de cada profile asset — permite cross-check com blacklists
+   externas e detect tampering.
+   ============================================================ */
+
+// SHA-256 nativo via Web Crypto. Aceita Uint8Array ou ArrayBuffer.
+async function hashSHA256(bytes) {
+    try {
+        const buf = bytes instanceof ArrayBuffer ? bytes : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        const digest = await crypto.subtle.digest('SHA-256', buf);
+        const arr = new Uint8Array(digest);
+        let hex = '';
+        for (let i = 0; i < arr.length; i++) hex += arr[i].toString(16).padStart(2, '0');
+        return hex;
+    } catch { return null; }
+}
+
+// MD5 puro (RFC 1321) — compacto, ~50 linhas. Aceita Uint8Array.
+// Necessário porque Web Crypto NÃO suporta MD5 (legado). Usado pra
+// cross-check com tools externas que reportam só MD5 (clamav, virustotal
+// classic, ferramentas legadas Mac/iOS).
+function hashMD5(bytes) {
+    if (!bytes) return null;
+    if (bytes instanceof ArrayBuffer) bytes = new Uint8Array(bytes);
+    // padding: append 0x80 + zeros until length ≡ 56 (mod 64) + 8-byte length
+    const msgLen = bytes.length;
+    const bitLen = msgLen * 8;
+    const padLen = (msgLen % 64 < 56) ? (56 - msgLen % 64) : (120 - msgLen % 64);
+    const buf = new Uint8Array(msgLen + padLen + 8);
+    buf.set(bytes);
+    buf[msgLen] = 0x80;
+    // Length as 64-bit little-endian
+    const dv = new DataView(buf.buffer);
+    dv.setUint32(buf.length - 8, bitLen >>> 0, true);
+    dv.setUint32(buf.length - 4, Math.floor(bitLen / 0x100000000) >>> 0, true);
+
+    // MD5 constants
+    const K = new Int32Array([
+        -680876936, -389564586,  606105819, -1044525330, -176418897,  1200080426, -1473231341, -45705983,
+         1770035416, -1958414417, -42063,    -1990404162,  1804603682, -40341101,  -1502002290,  1236535329,
+        -165796510, -1069501632,  643717713, -373897302,  -701558691,   38016083,  -660478335, -405537848,
+          568446438, -1019803690, -187363961,  1163531501, -1444681467, -51403784,  1735328473, -1926607734,
+            -378558, -2022574463,  1839030562, -35309556,  -1530992060,  1272893353, -155497632, -1094730640,
+          681279174, -358537222,  -722521979,  76029189,  -640364487,  -421815835,  530742520, -995338651,
+         -198630844,  1126891415, -1416354905, -57434055,   1700485571, -1894986606, -1051523, -2054922799,
+         1873313359, -30611744, -1560198380,  1309151649, -145523070, -1120210379,  718787259, -343485551
+    ]);
+    const S = [7,12,17,22,5,9,14,20,4,11,16,23,6,10,15,21];
+
+    let a0 = 1732584193, b0 = -271733879, c0 = -1732584194, d0 = 271733878;
+
+    const W = new Int32Array(16);
+    for (let off = 0; off < buf.length; off += 64) {
+        for (let i = 0; i < 16; i++) W[i] = dv.getInt32(off + i * 4, true);
+        let a = a0, b = b0, c = c0, d = d0, f, g;
+        for (let i = 0; i < 64; i++) {
+            if (i < 16)      { f = (b & c) | (~b & d);         g = i; }
+            else if (i < 32) { f = (d & b) | (~d & c);         g = (5 * i + 1) % 16; }
+            else if (i < 48) { f = b ^ c ^ d;                  g = (3 * i + 5) % 16; }
+            else             { f = c ^ (b | ~d);               g = (7 * i) % 16; }
+            const tmp = d;
+            d = c; c = b;
+            const sum = (a + f + K[i] + W[g]) | 0;
+            const sh = S[(i >>> 4) * 4 + (i & 3)];
+            b = (b + ((sum << sh) | (sum >>> (32 - sh)))) | 0;
+            a = tmp;
+        }
+        a0 = (a0 + a) | 0; b0 = (b0 + b) | 0; c0 = (c0 + c) | 0; d0 = (d0 + d) | 0;
+    }
+    // Output: a0|b0|c0|d0 little-endian → hex
+    const out = new ArrayBuffer(16);
+    const od = new DataView(out);
+    od.setInt32(0, a0, true); od.setInt32(4, b0, true); od.setInt32(8, c0, true); od.setInt32(12, d0, true);
+    const arr = new Uint8Array(out);
+    let hex = '';
+    for (let i = 0; i < arr.length; i++) hex += arr[i].toString(16).padStart(2, '0');
+    return hex;
+}
+
+// Hash conjunto: MD5 + SHA-256 de um ArrayBuffer ou Uint8Array
+async function hashBoth(bytes) {
+    return {
+        md5:    hashMD5(bytes),
+        sha256: await hashSHA256(bytes),
+        size:   bytes.length || bytes.byteLength
+    };
+}
+
 
 // Indicadores de cada categoria pra grep global
 const SCAN_PATTERNS = {
@@ -4990,7 +5158,7 @@ const SCAN_PATTERNS = {
     uuidOpaqueRegex:   /([a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})/g,
     uuidStandaloneRegex: /\b([0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\b/g,
     dnsResellerRegex:  /\b(nextdns|controld|control-d|cloudflare\.warp|adguard\.dns|opendns|quad9|cleanbrowsing|mullvad\.dns)\b/gi,
-    cheatKeywordRegex: /\b(esign|feather|ksign|gbox|scarlet|sideload|trollstore|sileo|cydia|zebra|altstore|appdb|tutuapp|appcake|ignition|buildstore|iosgods|filza|ifunbox|geranium|dopamine|palera1n|unc0ver|checkra1n|frida|cycript|substrate|substitute|libhooker|tweakloader|cheat|aimbot|wallhack|injector|ffh4x|hack\.menu|mod\.menu|mitmproxy|shadowrocket|surge|potatso|quantumult|hiddify|shadowsocks|proxyff|cracked)\b/gi,
+    cheatKeywordRegex: /\b(esign|feather|ksign|gbox|scarlet|sideload|trollstore|sileo|cydia|zebra|altstore|appdb|tutuapp|appcake|ignition|buildstore|iosgods|filza|ifunbox|geranium|dopamine|palera1n|unc0ver|checkra1n|frida|cycript|substrate|substitute|libhooker|tweakloader|cheat|aimbot|wallhack|injector|ffh4x|hack\.menu|mod\.menu|mitmproxy|shadowrocket|surge|potatso|quantumult|hiddify|shadowsocks|proxyff|cracked|holograma|hologram)\b/gi,
     ffCheatDomainRegex:/\b(fatalitycheats\.xyz|anubisw\.online|api\.baontq\.xyz|ggwhitehawk\.com|ggpolarbear\.com|ggblueshark\.com|purplevioleto\.com|ipasign\.cc|ipa\.aspy\.dev)\b/gi,
     installerRegex:    /\b(Install (succeeded|failed|started) for [a-zA-Z][a-zA-Z0-9._-]+)/gi,
     uninstallerRegex:  /\b(Uninstall (succeeded|failed|started) for [a-zA-Z][a-zA-Z0-9._-]+)/gi,
@@ -5028,6 +5196,24 @@ function fileType(file) {
     if (name.endsWith('/swcutil_show.txt')) return 'swcutil';
     if (name.includes('crashes_and_spins/') && name.endsWith('.ips')) return 'crashIPS';
     if (name.endsWith('.mobileconfig') || name.endsWith('.stub')) return 'profile';
+
+    /* === v4.4.52: profile assets adicionais pra hash forense ===
+       O scanner antigo só puxava hash do MCProfileEvents (mcprofile). Agora
+       pega também certificados, MCSettings, ProfileTruth e provisioning
+       profiles — todos contém dados que cheaters tampering podem alterar. */
+    if (name.endsWith('.cer') || name.endsWith('.crt') || name.endsWith('.pem') ||
+        name.endsWith('.p12') || name.endsWith('.pfx') || name.endsWith('.der')) return 'profileCert';
+    if (name.endsWith('/profiletruth.plist') || name.endsWith('\\profiletruth.plist') ||
+        name.endsWith('/payloadmanifest.plist') || name.endsWith('\\payloadmanifest.plist')) return 'profileTruth';
+    if (name.endsWith('/mcsettings.plist') || name.endsWith('\\mcsettings.plist') ||
+        name.endsWith('/effectiveusersettings.plist') || name.endsWith('\\effectiveusersettings.plist') ||
+        name.includes('mcstate/shared/mcsettings.plist')) return 'mcSettings';
+    if (name.endsWith('/restrictions.plist') || name.endsWith('\\restrictions.plist') ||
+        name.includes('configurationprofiles/restrictions.plist')) return 'restrictions';
+    if (name.endsWith('.mobileprovision')) return 'provisioning';
+    if (name.includes('truststore/private/truststore.sqlite3') ||
+        name.endsWith('/truststore.sqlite3') ||
+        name.includes('keychains/caissuercache.sqlite3')) return 'trustStore';
 
     /* === v4.3.0 DFIR deep iOS — paridade com Android === */
     if (name.includes('knowledge/knowledgec.db')) return 'knowledgeC'; /* app/inFocus events */
@@ -5121,7 +5307,7 @@ function classifyProfile(identifier, payloadTypes, organization, displayName) {
     if (CHEAT_APPS[identifier]) {
         return { class: 'cheat', label: 'CHEAT', color: 'red' };
     }
-    if (/esign|feather|ksign|gbox|scarlet|trollstore|sideload|cheat|hack|aimbot|wallhack|ffh4x|cracked/i.test(all)) {
+    if (/esign|feather|ksign|gbox|scarlet|trollstore|sideload|cheat|hack|aimbot|wallhack|ffh4x|cracked|holograma|hologram/i.test(all)) {
         return { class: 'cheat', label: 'CERT CHEAT', color: 'red' };
     }
 
@@ -5384,33 +5570,48 @@ async function handleTarGz(file) {
     const fileMb = file.size / (1024 * 1024);
 
     // === GUARD iOS: tar.gz grande mata o tab por OOM ===
-    // v4.4.9: threshold elevado de 150 → 250MB pra hard-block. Sysdiagnose
-    // de 322MB é comum em devices com muito uso; bloquear era frustrante.
-    // Entre 80-250MB: aviso + tenta processar; ≥250MB: bloqueia com instrução clara.
+    // v4.4.51: threshold reduzido de 250 → 150MB pra hard-block. Reporte real
+    // de "Um problema ocorreu repetidamente" em arquivos 150-300MB. iOS Safari
+    // tem ~1-1.5GB de RAM por tab, e sysdiagnose comprimido infla 5-10x (200MB
+    // → 1-2GB descomprimido) — WebKit kill o tab antes de terminar o inflate.
+    //
+    // Política nova:
+    //   ≤50MB:    processa sem aviso
+    //   50-80MB:  processa com aviso de tempo
+    //   80-150MB: processa MAS deixa MUITO claro o caminho alternativo (pasta)
+    //   >150MB:   HARD-BLOCK com 5 passos pra resolver no próprio iPhone
     if (isIOSMobile() && fileMb > 80) {
-        warn(`Arquivo de ${fileMb.toFixed(0)} MB no Safari iOS pode travar (RAM limitada).`);
-        if (fileMb > 250) {
+        warn(`Arquivo de ${fileMb.toFixed(0)} MB no Safari iOS — risco alto de OOM (RAM limitada).`);
+        if (fileMb > 150) {
             warn(`────────────────────────────────────────────`);
-            warn(`${fileMb.toFixed(0)} MB é GRANDE DEMAIS pro Safari iOS.`);
-            warn(`Solução no PRÓPRIO iPhone (sem PC):`);
-            warn(`   1. Abra o app "Arquivos" (Files)`);
-            warn(`   2. Localize o .tar.gz`);
-            warn(`   3. Toque longo → "Descompactar"`);
-            warn(`   4. Volte aqui e use modo "iOS · sysdiagnose (pasta)"`);
-            warn(`   5. Selecione a pasta sysdiagnose_* extraída`);
-            warn(`OU envie pelo desktop (Chrome/Safari Mac/PC) — sem limite de RAM`);
+            warn(`${fileMb.toFixed(0)} MB é GRANDE DEMAIS pro Safari iOS — vai dar`);
+            warn(`"Um problema ocorreu repetidamente" (WebKit OOM kill).`);
+            warn(``);
+            warn(`✅ SOLUÇÃO no PRÓPRIO iPhone (sem PC, 1 min):`);
+            warn(`   1. Abra o app ${'"'}Arquivos${'"'} (Files) — vem com o iOS`);
+            warn(`   2. Localize o .tar.gz (Downloads ou onde salvou)`);
+            warn(`   3. Toque LONGO no arquivo → ${'"'}Descompactar${'"'}`);
+            warn(`      (vai criar uma pasta sysdiagnose_DATA_DEVICE/)`);
+            warn(`   4. Volte aqui e clique em ${'"'}iOS · sysdiagnose (pasta)${'"'}`);
+            warn(`   5. Selecione a pasta sysdiagnose_* descompactada`);
+            warn(``);
+            warn(`Por que funciona: o iOS descompacta com privilégios nativos,`);
+            warn(`o Safari só faz parsing dos arquivos individuais (RAM baixa).`);
+            warn(``);
+            warn(`OU: enviar do desktop (Mac/PC com Chrome) — sem limite de RAM`);
             warn(`────────────────────────────────────────────`);
             renderResults({});
             return;
         }
-        // Entre 80-250MB: continua mas avisa o caminho alternativo
-        warn(`Se travar: Files iPhone → toque longo no .tar.gz → "Descompactar" → modo "Sysdiagnose (pasta)"`);
+        // Entre 80-150MB: continua mas instrução clara de plano B
+        warn(`⚠ Se aparecer ${'"'}Um problema ocorreu repetidamente${'"'}: extraia o`);
+        warn(`  .tar.gz no app Arquivos do iPhone → use modo ${'"'}Sysdiagnose (pasta)${'"'}`);
     }
 
     // Aviso de tempo conforme tamanho do arquivo
     let warnText = '';
     if (isIOSMobile() && fileMb > 80) {
-        warnText = `iOS · ${fileMb.toFixed(0)} MB. Se travar, extraia e use modo "Sysdiagnose pasta".`;
+        warnText = `iOS · ${fileMb.toFixed(0)} MB. Se travar: Files → descompactar → modo ${'"'}Sysdiagnose pasta${'"'}`;
     } else if (fileMb > 150) {
         warnText = `⏱ Arquivo grande (${fileMb.toFixed(0)} MB) — 1-3 min. Não feche a aba.`;
     } else if (fileMb > 50) {
@@ -5419,7 +5620,30 @@ async function handleTarGz(file) {
     startProgress(file.size, warnText);
 
     showLoading(`Lendo ${file.name}…`);
-    const buf = await file.arrayBuffer();
+    // v4.4.51: try/catch específico em arrayBuffer() — iOS Safari falha aqui
+    // pra arquivos >100MB em iPhones com pouca RAM (8/8 Plus/XR). Antes a
+    // exceção era pega pelo try/catch global mas o usuário via só "Erro durante
+    // scan: ..." sem entender. Agora mostra mensagem específica de OOM.
+    let buf;
+    try {
+        buf = await file.arrayBuffer();
+    } catch (e) {
+        warn(`────────────────────────────────────────────`);
+        warn(`❌ Falha ao LER o arquivo (${fileMb.toFixed(0)} MB)`);
+        warn(`   ${String(e?.message || e).slice(0, 150)}`);
+        warn(``);
+        if (isIOSMobile()) {
+            warn(`Provável causa: iOS Safari sem RAM suficiente pra alocar`);
+            warn(`${fileMb.toFixed(0)}MB de uma vez. Solução:`);
+            warn(`   1. Files → toque longo no .tar.gz → ${'"'}Descompactar${'"'}`);
+            warn(`   2. Use modo ${'"'}Sysdiagnose (pasta)${'"'} aqui`);
+        } else {
+            warn(`Tente fechar outras abas e recarregar.`);
+        }
+        warn(`────────────────────────────────────────────`);
+        renderResults({});
+        return;
+    }
     updateProgress(file.size * 0.10);
 
     // ─── chkH: extrai gzip mtime do header (bytes 4-7, little-endian) ───
@@ -7132,6 +7356,104 @@ async function _doHandleSysdiagnose(filesList, opts) {
             }
     }
 
+    // ─── SCAN PASS 2.6: HASH FORENSE DE PROFILE ASSETS (v4.4.52) ───
+    // Computa MD5 + SHA-256 de cada arquivo de perfil/cert/settings.
+    // Antes: só puxava hash do MCProfileEvents.plist (mcprofile).
+    // Agora: 5 categorias — certs, mcsettings, profiletruth, restrictions,
+    // provisioning. Permite cross-check com blacklists externas + detect
+    // tampering (file alterado tem hash novo).
+    {
+        const PROFILE_ASSET_GROUPS = [
+            { key: 'profileCert',  label: 'Certificados',         icon: '🔐', sev: 'HIGH'     },
+            { key: 'mcSettings',   label: 'MCSettings',           icon: '⚙️',  sev: 'MEDIUM'   },
+            { key: 'profileTruth', label: 'ProfileTruth',         icon: '📋', sev: 'MEDIUM'   },
+            { key: 'restrictions', label: 'Restrictions (RegEdit)', icon: '🚫', sev: 'HIGH'   },
+            { key: 'provisioning', label: 'Provisioning Profiles',icon: '📜', sev: 'MEDIUM'   },
+            { key: 'profile',      label: 'Configuration Profiles',icon: '📦', sev: 'CRITICAL' },
+            { key: 'profileStub',  label: 'Profile Stubs',        icon: '🔖', sev: 'MEDIUM'   },
+            { key: 'trustStore',   label: 'TrustStore (CA roots)',icon: '🛡️',  sev: 'HIGH'    },
+        ];
+        // Lista de hashes conhecidos de threat intel (4-char prefix do PayloadIdentifier hash).
+        // Já temos no CHEAT_PROFILE_PREFIXES, replicado aqui em formato SHA-256 prefix
+        // pra checar diretamente contra os hashes computados dos assets.
+        const KNOWN_BAD_HASH_PREFIXES = {
+            '0af71eab': 'KhoinDVN DNS Proxy',
+            'bd32d3a8': 'KhoinDVN DNS Proxy',
+            '90eb5f87': 'KhoinDVN DNS Proxy',
+            '60a5560f': 'Dash Proxy',
+            '78f':      'Zeex (free/vip)',
+            'd14':      'Zeex (free/vip)',
+            '1ea':      'Fatality (bypass)',
+            // v4.4.56: Holograma — hash FULL do código real (github.com/Haqowsk92/ffxit)
+            // README.md de 1833 bytes contendo o Three.js ESP script.
+            '51811a5b6a44f2e37c7af28021ba505f9fe3029ccc2986324475ae35b51aedcf': 'Holograma (Haqowsk92/ffxit) Three.js ESP',
+        };
+        const KNOWN_BAD_MD5 = {
+            'b788a1a60b3ddd8ec35b457321774c54': 'Holograma (Haqowsk92/ffxit) Three.js ESP',
+        };
+
+        let totalAssets = 0;
+        const assetReport = []; // { type, path, name, size, md5, sha256, match? }
+
+        for (const grp of PROFILE_ASSET_GROUPS) {
+            const files = byType[grp.key];
+            if (!files || files.length === 0) continue;
+            ok(`${grp.icon} ${grp.label}: ${files.length} arquivo(s) — computando MD5+SHA-256…`);
+            for (const f of files) {
+                // skip arquivos enormes pra não travar (cert/profile típico < 100KB)
+                if (f.size > 5 * 1024 * 1024) {
+                    warn(`  skip ${f.name} (${(f.size/1024/1024).toFixed(1)}MB > 5MB)`);
+                    continue;
+                }
+                let bytes;
+                try { bytes = new Uint8Array(await f.arrayBuffer()); }
+                catch (e) { warn(`  read fail ${f.name}: ${e.message}`); continue; }
+                const md5 = hashMD5(bytes);
+                const sha256 = await hashSHA256(bytes);
+                const path = f.webkitRelativePath || f.name;
+
+                // Match contra blacklist — prefix SHA-256 (3+ chars) OU MD5 completo
+                let match = null;
+                if (sha256) {
+                    for (const [prefix, name] of Object.entries(KNOWN_BAD_HASH_PREFIXES)) {
+                        if (sha256.startsWith(prefix.toLowerCase())) {
+                            match = { prefix, name };
+                            break;
+                        }
+                    }
+                }
+                // v4.4.56: MD5 full match (Holograma / ferramentas legadas)
+                if (!match && md5 && KNOWN_BAD_MD5[md5]) {
+                    match = { prefix: md5, name: KNOWN_BAD_MD5[md5] };
+                }
+
+                assetReport.push({
+                    type: grp.key, label: grp.label, icon: grp.icon, sev: grp.sev,
+                    path, name: f.name, size: f.size, md5, sha256, match
+                });
+                totalAssets++;
+
+                // Render no log: 1 linha por asset
+                const shortPath = path.length > 60 ? '…' + path.slice(-58) : path;
+                const sizeKb = (f.size / 1024).toFixed(1);
+                if (match) {
+                    alertF(`[CRITICAL] ${grp.icon} ${grp.label} HASH BATE THREAT INTEL: ${match.name}`,
+                           `  path: ${shortPath}\n  MD5: ${md5}\n  SHA-256: ${sha256}\n  size: ${sizeKb}KB`);
+                } else {
+                    ok(`  ${grp.icon} ${f.name} (${sizeKb}KB)\n     MD5:    ${md5}\n     SHA-256: ${sha256}`);
+                }
+            }
+        }
+
+        if (totalAssets > 0) {
+            ok(`📊 Hash forense: ${totalAssets} profile assets processados (MD5+SHA-256)`);
+            // Expõe pro renderResults agregando por tipo
+            window.__a4ther_profile_assets = assetReport;
+        } else {
+            ok(`Sem profile assets (certs/settings/restrictions/provisioning) no sysdiagnose`);
+        }
+    }
+
     // ─── SCAN PASS 2.7: knowledgeC.db — bundles em /app/inFocus durante session FF ───
     // (binário SQLite; sem decoder JS, mas strings ASCII revelam bundle IDs)
     if (byType.knowledgeC) {
@@ -7423,7 +7745,7 @@ async function _doHandleSysdiagnose(filesList, opts) {
     // Regex reutilizadas fora do loop (declarar 1× evita re-parse por arquivo)
     const opaqueRe = /[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/g;
     const dnsRe = /(?:com|io)\.[a-zA-Z0-9._-]+\.(?:nextdns|controld|adguard|cloudflare|warp|opendns|quad9)[a-zA-Z0-9._-]*/gi;
-    const ckRe = /\b(esign|feather|ksign|gbox|scarlet|trollstore|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|iosgods|filza|ifunbox|geranium|frida|cycript|substrate|libhooker|ffh4x|aimbot|wallhack|cheat\.menu|mod\.menu|injector)\b/gi;
+    const ckRe = /\b(esign|feather|ksign|gbox|scarlet|trollstore|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|iosgods|filza|ifunbox|geranium|frida|cycript|substrate|libhooker|ffh4x|aimbot|wallhack|cheat\.menu|mod\.menu|injector|holograma|hologram)\b/gi;
     // v4.4.11: hash sweep — captura hashes SHA256 puros (60-68 hex) com OU sem
     // UUID suffix em QUALQUER arquivo da sysdiagnose. Necessário pra cruzar com
     // CHEAT_PROFILE_PREFIXES (Zeex/Fatality/Luxe/Dash/XTREMO/proxies) cujos IDs
@@ -7842,6 +8164,14 @@ $('#file-targz').addEventListener('change', e => {
 $('#file-android').addEventListener('change', e => {
     if (e.target.files.length) handleAndroid(e.target.files[0]);
 });
+// v4.4.51: file-folder — input webkitdirectory passa FileList com a pasta
+// inteira. handleSysdiagnose já aceita FileList (vinha do tar.gz path tbm).
+const _ffFolder = $('#file-folder');
+if (_ffFolder) {
+    _ffFolder.addEventListener('change', e => {
+        if (e.target.files.length) handleSysdiagnose(e.target.files);
+    });
+}
 
 // Drag & drop on each dropzone
 function wireDrop(dzId, handler, isFolder) {
@@ -7863,6 +8193,8 @@ function wireDrop(dzId, handler, isFolder) {
 wireDrop('#dz-targz',   handleTarGz, false);
 wireDrop('#dz-ndjson',  handleNDJSON, false);
 wireDrop('#dz-android', handleAndroid, false);
+// v4.4.51: dz-folder aceita drop de pasta. true = handler recebe FileList.
+wireDrop('#dz-folder',  handleSysdiagnose, true);
 
 // Actions
 $('#btn-back').addEventListener('click', () => {

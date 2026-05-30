@@ -21,6 +21,14 @@ const VERSION = "3.3.0";
 
 // CHEAT_APPS — bundle ID → descrição (categorizado)
 const CHEAT_APPS = {
+    // v4.4.52: KhoinDVN family — DNS proxy profiles VN (sequester FF iOS)
+    "com.khoindvn":                           "KhoinDVN DNS Proxy — perfil MDM com DNS sequester FF",
+    "com.khoindvn.apple-dns":                 "KhoinDVN DNS Profile — payload com.apple.dnsSettings.managed",
+    "com.khoindvn.dns":                       "KhoinDVN DNS — variante DNS proxy",
+    "com.khoindvn.vpn":                       "KhoinDVN VPN — variante VPN profile",
+    "com.khoindvn.proxy":                     "KhoinDVN Proxy — profile proxy generic",
+    "com.khoind.app":                         "KhoinD App — parent KhoinDVN",
+
     // === FF cheats específicos iOS (Substrate tweaks + IPAs modded) ===
     "com.34306.espff":                        "ESP Free Fire — tweak iOS (filtra com.dts.freefireth)",
     "com.dts.freefireth.externalesp":         "External ESP Free Fire — tweak iOS",
@@ -389,6 +397,8 @@ const SUSPECT_KEYWORDS = [
     "shadowrocket", "surge", "quantumult", "hiddify", "shadowsocks",
     "trojan", "karing", "proxyff", "bypass", "inject", "libhooker",
     "sideload", "appdb", "tutuapp", "appvalley", "ignition",
+    // v4.4.54: Holograma cheat (BR) — arquivos modificados em pasta do FF
+    "holograma", "hologram", "holohack", "holomod", "holoff",
     "appcake", "buildstore", "ifunbox", "panda.tool",
 ];
 
@@ -1064,7 +1074,7 @@ function analyzeProfile(raw, opts) {
     }
 
     // 7) Heurística de cheat strings em Organization/DisplayName
-    const cheatRegex = /(esign|feather|ksign|gbox|scarlet|sideload|trollstore|cheat|hack|aimbot|wallhack|ffh4x|mod\.menu|injector|cracked|mitmproxy)/i;
+    const cheatRegex = /(esign|feather|ksign|gbox|scarlet|sideload|trollstore|cheat|hack|aimbot|wallhack|ffh4x|mod\.menu|injector|cracked|mitmproxy|holograma|hologram)/i;
     if (organization && cheatRegex.test(organization)) {
         alerts.push(`Organization contém keyword de cheat: ${organization}`);
     }
