@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.56"
+VERSION="4.4.57"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -276,81 +276,100 @@ if [ "$PLATFORM" = "android" ]; then
 # ============================================================
 header "DEPURAÇÃO WIFI (recomendado antes do scan)"
 
-# Detecta se já é root real
+# v4.4.57: o que importa pra ter ACESSO ELEVADO não é a porta 5555 estar
+# aberta — é o UID em que o SCRIPT roda. Parear a depuração WiFi só abre a
+# porta; se o usuário continua rodando no Termux (uid 10xxx), o scan continua
+# sem acesso a serial/dumpsys/tombstones. SÓ destrava rodando VIA adb shell
+# (uid 2000) ou root (uid 0).
 _CUR_UID=$(id -u 2>/dev/null)
-_IS_ROOT=0
-[ "$_CUR_UID" = "0" ] && _IS_ROOT=1
-# Detecta se ADB tá conectado via WiFi (porta 5555 aberta em listen via /proc/net/tcp)
+[ -z "$_CUR_UID" ] && _CUR_UID=99999
+_IS_ROOT=0;  [ "$_CUR_UID" = "0" ] && _IS_ROOT=1
+_IS_SHELL=0; [ "$_CUR_UID" = "2000" ] && _IS_SHELL=1
+
+# Detecta Termux (app não-privilegiado — uid >= 10000 + namespace com.termux)
+_IS_TERMUX=0
+case "$PREFIX" in
+    *com.termux*) _IS_TERMUX=1 ;;
+esac
+[ -d /data/data/com.termux ] && [ "$_CUR_UID" -ge 10000 ] 2>/dev/null && _IS_TERMUX=1
+case "$HOME" in
+    *com.termux*) _IS_TERMUX=1 ;;
+esac
+
+# Porta 5555 (ADB WiFi) em LISTEN — sinal de que JÁ pareou, mas NÃO garante
+# que o scan está rodando com uid elevado.
 _ADB_WIFI=0
 if [ -r /proc/net/tcp ]; then
-    # 5555 = 0x15B3
-    if awk '{print $2}' /proc/net/tcp 2>/dev/null | grep -qE ':15B3$'; then
-        _ADB_WIFI=1
-    fi
+    awk '{print $2}' /proc/net/tcp 2>/dev/null | grep -qE ':15B3$' && _ADB_WIFI=1
 fi
-# Detecta se já tá rodando AS shell ADB (uid 2000)
-_IS_SHELL=0
-[ "$_CUR_UID" = "2000" ] && _IS_SHELL=1
-# Detecta se developer settings já tá habilitado (sinal de quem usa adb)
+[ "$_ADB_WIFI" = "0" ] && [ -r /proc/net/tcp6 ] && \
+    awk '{print $2}' /proc/net/tcp6 2>/dev/null | grep -qE ':15B3$' && _ADB_WIFI=1
+
 _DEV_ENABLED=0
 if have settings; then
-    _DEV_RAW=$(settings get global development_settings_enabled 2>/dev/null)
-    [ "$_DEV_RAW" = "1" ] && _DEV_ENABLED=1
+    [ "$(settings get global development_settings_enabled 2>/dev/null)" = "1" ] && _DEV_ENABLED=1
 fi
 
+# === Decisão baseada em UID, não em porta ===
 if [ "$_IS_ROOT" = "1" ]; then
-    ok "Rodando como root (UID 0) — acesso total, depuração WiFi não é necessária"
+    ok "Rodando como ROOT (UID 0) — acesso total. HWID/dumpsys/tombstones disponíveis."
 elif [ "$_IS_SHELL" = "1" ]; then
-    ok "Rodando como shell/ADB (UID 2000) — acesso elevado disponível"
-elif [ "$_ADB_WIFI" = "1" ]; then
-    ok "ADB WiFi já está em LISTEN (porta 5555) — você pode usar adb connect agora"
+    ok "Rodando via ADB SHELL (UID 2000) — acesso elevado ✓"
+    ok "dumpsys (Widevine ID), getprop serial e tombstones acessíveis."
 elif [ -n "$SKIP_WIFI_PROMPT" ]; then
     info "SKIP_WIFI_PROMPT=1 — pulando setup de depuração WiFi"
 else
-    info ""
-    info "  ${CW}⚠  ATENÇÃO ANTES DO SCAN:${CN}"
-    info ""
-    info "  Termux rodando sem ADB pareado NÃO acessa:"
-    info "    • logcat persistent (semanas de log)"
-    info "    • /data/tombstones (crashes nativos com libs cheat)"
-    info "    • /data/system/dropbox (crashes históricos)"
-    info "    • dumpsys completo (window/activity/appops)"
-    info "    • batterystats history (uninstalls de cheats)"
-    info ""
-    info "  ${CG}✅ RECOMENDADO — Parear depuração WiFi ANTES do scan${CN}"
-    info "  (leva ~1 minuto, scan fica MUITO mais completo)"
-    info ""
-    info "  ${CW}📱 NO ANDROID:${CN}"
-    info "    1) Settings → Sistema → ${CW}Opções do desenvolvedor${CN}"
+    # Aqui = uid não-privilegiado (Termux ou outro app). PAREAR NÃO BASTA.
+    emit ""
+    if [ "$_ADB_WIFI" = "1" ]; then
+        emit "  ${CR}${CW}⚠  VOCÊ PAREOU A DEPURAÇÃO, MAS NÃO ADIANTOU — veja por quê:${CN}"
+        emit ""
+        emit "  A porta ADB WiFi (5555) está aberta ✓, MAS o scanner está rodando"
+        emit "  ${CR}DENTRO DO TERMUX${CN} (UID $_CUR_UID = app sem privilégio)."
+        emit "  Parear a depuração ${CW}NÃO${CN} dá acesso ao Termux — só abre a porta."
+    else
+        emit "  ${CR}${CW}⚠  SERIAL/HWID VAZIO? É ISSO QUE FALTA:${CN}"
+        emit ""
+        emit "  O scanner está rodando ${CR}DENTRO DO TERMUX${CN} (UID $_CUR_UID),"
+        emit "  que é um app SEM privilégio. No Android 10+ o Termux NUNCA"
+        emit "  consegue ler serial, MAC, Android ID nem dumpsys media.drm."
+    fi
+    emit ""
+    emit "  ${CG}${CW}✅ SOLUÇÃO — rodar o scanner VIA ADB SHELL (não dentro do Termux):${CN}"
+    emit ""
+    emit "  ${CW}📱 NO ANDROID (1x):${CN}"
+    emit "    1) Settings → Sistema → ${CW}Opções do desenvolvedor${CN}"
     [ "$_DEV_ENABLED" = "0" ] && \
-        info "       (se não tem: Settings → Sobre → toque 7x em ${CW}Build Number${CN})"
-    info "    2) Ative ${CW}\"Depuração sem fio\"${CN} (Wireless debugging)"
-    info "    3) Toque em ${CW}\"Parear com código de pareamento\"${CN}"
-    info "       Anote IP:porta + código de 6 dígitos"
-    info ""
-    info "  ${CW}💻 NO PC (Mac/Windows/Linux com adb instalado):${CN}"
-    info "    4) ${CW}adb pair <IP:porta>${CN}     # cola o código de 6 dígitos"
-    info "    5) ${CW}adb connect <IP:porta>${CN}  # IP é OUTRO, vê na tela principal"
-    info "    6) ${CW}adb shell${CN}                # confirma que conectou"
-    info ""
-    info "  ${CW}🔁 DEPOIS:${CN}"
-    info "    7) Rode o scanner via ADB pra ele ter acesso elevado:"
-    info "       ${CW}adb shell sh /sdcard/Download/a4ther.sh${CN}"
-    info "       (ou continue no Termux — funciona, só com menos dados)"
-    info ""
-    info "  ${CY}Pra pular esse aviso: ${CW}SKIP_WIFI_PROMPT=1 sh a4ther.sh${CN}"
-    info ""
+        emit "       (não tem? Settings → Sobre → toca 7x em ${CW}Número da versão${CN})"
+    emit "    2) Liga ${CW}\"Depuração sem fio\"${CN} (Wireless debugging)"
+    emit "    3) ${CW}\"Parear com código\"${CN} → anota ${CW}IP:porta${CN} + código 6 dígitos"
+    emit ""
+    emit "  ${CW}💻 NO PC (com adb):${CN}"
+    emit "    4) ${CW}adb pair <IP:PORTA_DO_PAREAMENTO>${CN}   (cola o código)"
+    emit "    5) ${CW}adb connect <IP:PORTA_PRINCIPAL>${CN}    (a outra porta da tela)"
+    emit ""
+    emit "  ${CR}${CW}6) O PULO DO GATO — rode o scanner ASSIM (não abra o Termux):${CN}"
+    emit "     ${CW}adb shell sh /sdcard/Download/a4ther.sh${CN}"
+    emit ""
+    emit "  Aí o scanner roda como UID 2000 (shell) e destrava:"
+    emit "    • Serial real (getprop ro.serialno)"
+    emit "    • Widevine ID (dumpsys media.drm)"
+    emit "    • tombstones / dropbox / logcat persistent"
+    emit "    • dumpsys completo (overlays, appops, batterystats)"
+    emit ""
+    emit "  ${CY}Continuar no Termux mesmo assim? O scan roda, mas HWID fica${CN}"
+    emit "  ${CY}baseado só em fingerprint/modelo (não-único). Pra pular este aviso:${CN}"
+    emit "  ${CW}SKIP_WIFI_PROMPT=1 sh a4ther.sh${CN}"
+    emit ""
 
     # Pausa interativa SE rodando em TTY (não pausa em pipe/cron)
     if [ -t 0 ] && [ -t 1 ]; then
-        # 20s pra ler. Enter pula a pausa.
-        printf "  ${CC}›${CN} Aperte ${CW}ENTER${CN} pra continuar o scan agora (auto em 20s)... "
-        # `read -t` é POSIX-ish; em sh/dash funciona, em busybox precisa workaround
-        if read -t 20 _ 2>/dev/null; then
-            info "  Continuando..."
+        printf "  ${CC}›${CN} ENTER pra continuar no Termux mesmo assim (auto em 25s)... "
+        if read -t 25 _ 2>/dev/null; then
+            emit "  Continuando no Termux (dados limitados)..."
         else
-            info ""
-            info "  Continuando após timeout..."
+            emit ""
+            emit "  Continuando após timeout..."
         fi
     fi
 fi
@@ -3447,13 +3466,23 @@ SERIAL=$(gp ro.serialno)
 # Samsung-specific
 [ -z "$SERIAL" ] && SERIAL=$(gp ro.serialno.fact)
 [ -z "$SERIAL" ] && SERIAL=$(gp ril.product_code)
-# Xiaomi/MIUI
+# Xiaomi/MIUI/HyperOS (v4.4.57: + props específicas do HyperOS / Redmi)
 [ -z "$SERIAL" ] && SERIAL=$(gp ro.ril.miui.imei0)
+[ -z "$SERIAL" ] && SERIAL=$(gp ro.boot.cpuid)
+[ -z "$SERIAL" ] && SERIAL=$(gp persist.radio.serialno)
+[ -z "$SERIAL" ] && SERIAL=$(gp ro.boot.hardware.revision)
+[ -z "$SERIAL" ] && SERIAL=$(cat /sys/devices/platform/soc/soc0/serial_number 2>/dev/null)
+[ -z "$SERIAL" ] && SERIAL=$(cat /proc/serial_number 2>/dev/null | head -c 64)
+# HyperOS guarda em /sys/devices/platform/.../serial às vezes
+[ -z "$SERIAL" ] && SERIAL=$(find /sys/devices -maxdepth 4 -name 'serial_number' 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -c 64)
 # OPPO/realme
 [ -z "$SERIAL" ] && SERIAL=$(gp ril.serial)
 # service call iphonesubinfo — funciona em uid 2000 (shell), raramente em Termux
 [ -z "$SERIAL" ] && have service && \
     SERIAL=$(service call iphonesubinfo 1 2>/dev/null | grep -oE "'[A-Z0-9]+'" | tr -d "'" | head -1)
+# v4.4.57: getprop direto via service call (uid 2000 destrava muitos)
+[ -z "$SERIAL" ] && have service && [ "$_IS_SHELL" = "1" ] && \
+    SERIAL=$(service call iphonesubinfo 4 2>/dev/null | grep -oE "'[A-Z0-9]+'" | tr -d "'" | head -1)
 
 # ─── BOOT SERIAL ─── 4 fontes
 BOOT_SERIAL=$(gp ro.boot.serialno)
@@ -3541,10 +3570,19 @@ info "HWID SHA-256:  ${HASH:-(indisponível)}"
 info "HWID MD5:      ${HASH_HWID_ALT:-(indisponível)}"
 
 # v4.4.32: diagnóstico granular — quais fontes vieram e quais bloquearam
+# v4.4.57: aponta o CULPADO (Termux) e a SOLUÇÃO (adb shell) inline
 if [ -z "$SERIAL" ] && [ -z "$MAC" ] && [ -z "$ANDROID_ID" ] && [ -z "$WIDEVINE_ID" ]; then
-    warn "Todas fontes de HWID vazias — Android 10+ + privacy lock + sem dumpsys media.drm. HWID fica baseado só em fingerprint/model (NÃO único)."
+    warn "Todas fontes de HWID vazias — HWID fica baseado só em fingerprint/model (NÃO único)."
+    if [ "$_IS_TERMUX" = "1" ] || { [ "$_IS_ROOT" = "0" ] && [ "$_IS_SHELL" = "0" ]; }; then
+        warn "  ↳ CAUSA: scanner rodando no TERMUX (UID $_CUR_UID, sem privilégio)."
+        warn "  ↳ SOLUÇÃO: rode VIA adb shell pra destravar serial + Widevine ID:"
+        warn "       ${CW}adb shell sh /sdcard/Download/a4ther.sh${CN}"
+        warn "  ↳ Parear a depuração SOZINHO não resolve — tem que RODAR pelo adb."
+    fi
 elif [ -z "$SERIAL" ] && [ -z "$MAC" ] && [ -z "$ANDROID_ID" ]; then
-    info "Serial/MAC/AndroidID bloqueados (Termux sem permissão), mas Widevine ID/Boot ID/Fingerprint OK — HWID composto é único."
+    info "Serial/MAC/AndroidID bloqueados (app sem permissão), mas Widevine ID/Boot ID/Fingerprint OK — HWID composto é único."
+    [ "$_IS_TERMUX" = "1" ] && \
+        info "  ↳ Pra também pegar o serial real: rode via ${CW}adb shell sh ...a4ther.sh${CN}"
 fi
 
 # ============================================================
