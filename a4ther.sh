@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.58"
+VERSION="4.4.59"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -3529,6 +3529,21 @@ MAC=$(cat /sys/class/net/wlan0/address 2>/dev/null)
 # ─── ANDROID ID ─── 3 fontes
 ANDROID_ID=""
 ANDROID_ID=$(setting_get secure android_id)
+# v4.4.59: métodos alternativos que furam o bloqueio do MIUI/HyperOS no Termux.
+# No Redmi/HyperOS o comando `settings` falha pra apps não-privilegiados, mas o
+# `content query` (provider direto) e o `cmd settings` muitas vezes funcionam.
+if [ -z "$ANDROID_ID" ] && have content; then
+    ANDROID_ID=$(content query --uri content://settings/secure --where "name=\'android_id\'" 2>/dev/null \
+        | grep -oE 'value=[A-Za-z0-9]+' | head -1 | cut -d= -f2)
+fi
+if [ -z "$ANDROID_ID" ] && have cmd; then
+    _AID=$(cmd settings get secure android_id 2>/dev/null)
+    case "$_AID" in ""|*Failure*|*Exception*|null|cmd:*) ;; *) ANDROID_ID="$_AID" ;; esac
+fi
+# settings via service call (raro, mas funciona em alguns)
+if [ -z "$ANDROID_ID" ] && have service; then
+    ANDROID_ID=$(content query --uri content://settings/secure/android_id 2>/dev/null | grep -oE '[a-f0-9]{16}' | head -1)
+fi
 [ -z "$ANDROID_ID" ] && ANDROID_ID=$(gp ro.serialno)  # fallback comum em alguns devices
 [ -z "$ANDROID_ID" ] && ANDROID_ID=$(cat /data/system/users/0/settings_secure.xml 2>/dev/null | grep -oE 'android_id" value="[^"]*' | cut -d'"' -f3)
 
@@ -4951,6 +4966,12 @@ emit ""
 emit "${CW}${CC}  🔁 DEPOIS — re-rodar o scanner sobre o bugreport:${CN}"
 emit "  ${CG}7)${CN} No Termux (modo offline, analisa o zip):"
 emit "       ${CW}BUGREPORT_FILE=/sdcard/Download/bugreport_${TS}.zip sh a4ther.sh${CN}"
+emit ""
+emit "${CW}${CC}  📲 SÓ NO CELULAR (self-ADB, sem PC) — gera direto no Termux:${CN}"
+emit "       Depois de ${CW}pkg install android-tools${CN} + ${CW}adb pair/connect 127.0.0.1${CN}:"
+emit "       ${CW}adb -s 127.0.0.1:PORTA bugreport /sdcard/Download/bugreport_${TS}.zip${CN}"
+emit "       (PORTA = a porta principal da Depuração sem fio)"
+emit "       Aí roda: ${CW}BUGREPORT_FILE=/sdcard/Download/bugreport_${TS}.zip sh a4ther.sh${CN}"
 emit ""
 emit "${CY}  ⚠  Se não tem PC com ADB:${CN}"
 emit "       Settings → Opções desenvolvedor → ${CW}\"Take bug report\"${CN}"
