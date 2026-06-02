@@ -2791,7 +2791,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.60";
+const VERSION = "4.4.61";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5912,6 +5912,7 @@ const IPAD_MODELS = {
 async function extractHWID(files) {
     // ─── Extrai TUDO em uma passada otimizada ───
     let serial = null, udid = null, ecid = null;
+    let serialStrong = false; // v4.4.61: true se serial veio de IOPlatformSerialNumber (device garantido)
     let productType = null;   // iPhone10,2
     let modelName   = null;   // iPhone 8 Plus
     let iosVersion  = null;   // 16.7.16
@@ -5957,15 +5958,8 @@ async function extractHWID(files) {
         if (/^[0-9A-F]+$/.test(t) && t.length < 12) return false;
         return true;
     };
-    // Pega o PRIMEIRO SerialNumber que é um serial de DEVICE válido — varre TODOS
-    // os matches do arquivo (g flag) e ignora os de componente (8-hex, etc).
-    const _pullSerial = (raw, current) => {
-        if (current) return current;
-        const patterns = [
-            /<key>\s*SerialNumber\s*<\/key>\s*<string>\s*([A-Z0-9]{8,16})\s*<\/string>/ig,
-            /"SerialNumber"\s*:\s*"([A-Z0-9]{8,16})"/ig,
-            /\b(?:Hardware\s+)?Serial(?:\s*Number)?\s*[:=]\s*([A-Z0-9]{8,16})\b/ig,
-        ];
+    // v4.4.61: helper — varre patterns e retorna o 1º serial Apple de DEVICE válido.
+    const _scanSerial = (raw, patterns) => {
         for (const re of patterns) {
             re.lastIndex = 0;
             let m;
@@ -5973,7 +5967,37 @@ async function extractHWID(files) {
                 if (_isAppleSerial(m[1])) return m[1].toUpperCase();
             }
         }
-        return current;
+        return null;
+    };
+    // TIER 1 (FORTE): IOPlatformSerialNumber é SEMPRE o serial do DEVICE (IORegistry),
+    // nunca de componente. Cobre XML plist e texto livre do ioreg -l
+    // ("IOPlatformSerialNumber" = "HH1FD0430DXQ").
+    const _strongSerialPatterns = [
+        /<key>\s*IOPlatformSerialNumber\s*<\/key>\s*<string>\s*([A-Z0-9]{10,12})\s*<\/string>/ig,
+        /\bIOPlatformSerialNumber\b[\s"=:<>()]+?"?([A-Z0-9]{10,12})"?/ig,
+    ];
+    // TIER 2 (FRACO): SerialNumber genérico — pode ser de componente (8-hex). O
+    // _isAppleSerial filtra esses. Suporta separadores XML/JSON/":"/"="/"=>"
+    // (remotectl_dumpstate usa "SerialNumber => X") e aspas opcionais.
+    const _weakSerialPatterns = [
+        /<key>\s*SerialNumber\s*<\/key>\s*<string>\s*([A-Z0-9]{8,16})\s*<\/string>/ig,
+        /"SerialNumber"\s*:\s*"([A-Z0-9]{8,16})"/ig,
+        /\b(?:Hardware\s+)?Serial(?:\s*Number)?\s*(?:=>|[:=])\s*"?([A-Z0-9]{8,16})"?/ig,
+    ];
+    // Pega o serial do DEVICE: prioriza IOPlatformSerialNumber (sobrescreve um serial
+    // fraco anterior); senão mantém o atual; senão tenta SerialNumber genérico.
+    // Retorna { value, strong }.
+    const _pullSerial = (raw, current, currentStrong) => {
+        const strong = _scanSerial(raw, _strongSerialPatterns);
+        if (strong) return { value: strong, strong: true };
+        if (current) return { value: current, strong: !!currentStrong };
+        const weak = _scanSerial(raw, _weakSerialPatterns);
+        return { value: weak, strong: false };
+    };
+    // Aplica no estado serial/serialStrong (closure). Usado nos call sites.
+    const _applySerial = (raw) => {
+        const r = _pullSerial(raw, serial, serialStrong);
+        serial = r.value; serialStrong = r.strong;
     };
     // Paths conhecidos por terem Serial/UDID/ECID em sysdiagnoses iOS
     // (não sweep TODOS os plists — só os que provavelmente carregam IDs)
@@ -6044,7 +6068,7 @@ async function extractHWID(files) {
         if (name.endsWith('remotectl_dumpstate.txt')) {
             const raw = await readSafe(f);
             if (raw) {
-                serial      = _pullSerial(raw, serial);  // v4.4.60: valida 10-12 chars (ignora serial de componente)
+                _applySerial(raw);  // v4.4.61: prioriza IOPlatformSerialNumber (device); ignora componentes
                 udid        = _pull(raw, /UniqueDeviceID[\s:=]+([A-Fa-f0-9-]+)/i, udid) ||
                               _pull(raw, /UDID[\s:=]+([A-Fa-f0-9-]+)/i, udid);
                 ecid        = _pull(raw, /ECID[\s:=]+([A-Fa-f0-9x]+)/i, ecid);
@@ -6086,7 +6110,7 @@ async function extractHWID(files) {
                 // === Serial Apple do DEVICE (10-12 chars, ignora componentes) ===
                 // v4.4.60: _pullSerial valida formato — antes pegava serial de
                 // componente (ex: 7C569F4F, 8 hex) por aceitar 8-16 chars.
-                serial = _pullSerial(raw, serial);
+                _applySerial(raw);
                 // === UDID (40 hex iPhone antigo, ou 24 chars iPhone 6s+: 8hex-16hex) ===
                 udid = _pull(raw, /<key>(?:UniqueDeviceID|UDID)<\/key>\s*<string>([A-Fa-f0-9-]{20,45})<\/string>/i, udid) ||
                        _pull(raw, /"(?:UniqueDeviceID|UDID)"\s*:\s*"([A-Fa-f0-9-]{20,45})"/i, udid) ||
