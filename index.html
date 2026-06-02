@@ -2791,7 +2791,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.56";
+const VERSION = "4.4.60";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5940,6 +5940,41 @@ async function extractHWID(files) {
         const m = raw.match(re);
         return m ? m[1] : current;
     };
+    // v4.4.60: validação de serial Apple do DEVICE (não de componente).
+    // BUG: o serial vinha errado (ex: 7C569F4F) porque o regex aceitava 8-16
+    // chars e pegava o PRIMEIRO "SerialNumber" do arquivo — que muitas vezes é
+    // o serial de um COMPONENTE (chip, bateria, placa), não do device.
+    // O serial Apple do device tem SEMPRE 10-12 chars alfanuméricos
+    // (ex: HH1FD0430DXQ=12, formato 2021+ = 10). NUNCA 8 hex (isso é ChipID).
+    const _isAppleSerial = (s) => {
+        if (!s) return false;
+        const t = String(s).trim().toUpperCase();
+        if (!/^[A-Z0-9]{10,12}$/.test(t)) return false;  // device serial = 10-12 chars
+        if (/^0+$/.test(t)) return false;                 // tudo zero = placeholder
+        // Serial de componente/ChipID é TODO hex e curto. Serial Apple do device
+        // quase sempre tem letra fora do range hex (G-Z) ou tem 12 chars. Rejeita
+        // all-hex com menos de 12 chars (cobre 7C569F4F e variantes de componente).
+        if (/^[0-9A-F]+$/.test(t) && t.length < 12) return false;
+        return true;
+    };
+    // Pega o PRIMEIRO SerialNumber que é um serial de DEVICE válido — varre TODOS
+    // os matches do arquivo (g flag) e ignora os de componente (8-hex, etc).
+    const _pullSerial = (raw, current) => {
+        if (current) return current;
+        const patterns = [
+            /<key>\s*SerialNumber\s*<\/key>\s*<string>\s*([A-Z0-9]{8,16})\s*<\/string>/ig,
+            /"SerialNumber"\s*:\s*"([A-Z0-9]{8,16})"/ig,
+            /\b(?:Hardware\s+)?Serial(?:\s*Number)?\s*[:=]\s*([A-Z0-9]{8,16})\b/ig,
+        ];
+        for (const re of patterns) {
+            re.lastIndex = 0;
+            let m;
+            while ((m = re.exec(raw)) !== null) {
+                if (_isAppleSerial(m[1])) return m[1].toUpperCase();
+            }
+        }
+        return current;
+    };
     // Paths conhecidos por terem Serial/UDID/ECID em sysdiagnoses iOS
     // (não sweep TODOS os plists — só os que provavelmente carregam IDs)
     const _hwidPathHints = [
@@ -6009,7 +6044,7 @@ async function extractHWID(files) {
         if (name.endsWith('remotectl_dumpstate.txt')) {
             const raw = await readSafe(f);
             if (raw) {
-                serial      = _pull(raw, /SerialNumber[\s:=]+([A-Z0-9]+)/i, serial);
+                serial      = _pullSerial(raw, serial);  // v4.4.60: valida 10-12 chars (ignora serial de componente)
                 udid        = _pull(raw, /UniqueDeviceID[\s:=]+([A-Fa-f0-9-]+)/i, udid) ||
                               _pull(raw, /UDID[\s:=]+([A-Fa-f0-9-]+)/i, udid);
                 ecid        = _pull(raw, /ECID[\s:=]+([A-Fa-f0-9x]+)/i, ecid);
@@ -6048,10 +6083,10 @@ async function extractHWID(files) {
             if (!_hasIdKeyword(raw) && !_hasUdidPattern && !_hasProdPattern) continue;
             _fallbackCount++;
             {
-                // === Serial (12 chars Apple ou 8 chars antigo) ===
-                serial = _pull(raw, /<key>SerialNumber<\/key>\s*<string>([A-Z0-9]{8,16})<\/string>/i, serial) ||
-                         _pull(raw, /"SerialNumber"\s*:\s*"([A-Z0-9]{8,16})"/i, serial) ||
-                         _pull(raw, /\b(?:Hardware\s+)?Serial(?:Number)?\s*[:=]\s*([A-Z0-9]{8,16})\b/i, serial);
+                // === Serial Apple do DEVICE (10-12 chars, ignora componentes) ===
+                // v4.4.60: _pullSerial valida formato — antes pegava serial de
+                // componente (ex: 7C569F4F, 8 hex) por aceitar 8-16 chars.
+                serial = _pullSerial(raw, serial);
                 // === UDID (40 hex iPhone antigo, ou 24 chars iPhone 6s+: 8hex-16hex) ===
                 udid = _pull(raw, /<key>(?:UniqueDeviceID|UDID)<\/key>\s*<string>([A-Fa-f0-9-]{20,45})<\/string>/i, udid) ||
                        _pull(raw, /"(?:UniqueDeviceID|UDID)"\s*:\s*"([A-Fa-f0-9-]{20,45})"/i, udid) ||
