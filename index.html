@@ -2362,7 +2362,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.40</span>
+        <span id="version">v4.4.62</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2791,7 +2791,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.61";
+const VERSION = "4.4.62";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5952,10 +5952,12 @@ async function extractHWID(files) {
         const t = String(s).trim().toUpperCase();
         if (!/^[A-Z0-9]{10,12}$/.test(t)) return false;  // device serial = 10-12 chars
         if (/^0+$/.test(t)) return false;                 // tudo zero = placeholder
-        // Serial de componente/ChipID é TODO hex e curto. Serial Apple do device
-        // quase sempre tem letra fora do range hex (G-Z) ou tem 12 chars. Rejeita
-        // all-hex com menos de 12 chars (cobre 7C569F4F e variantes de componente).
-        if (/^[0-9A-F]+$/.test(t) && t.length < 12) return false;
+        // Serial de componente/ChipID é TODO hex e curto. v4.4.62: era `< 12`, o
+        // que também DESCARTAVA serials randomizados (2021+) de 10-11 chars feitos
+        // só de dígitos hex (0-9A-F) — falso-negativo que fazia o serial "sumir".
+        // O gate {10,12} acima já barra ChipID/serial de componente (8 hex), então
+        // só rejeitamos all-hex realmente curto (< 10).
+        if (/^[0-9A-F]+$/.test(t) && t.length < 10) return false;
         return true;
     };
     // v4.4.61: helper — varre patterns e retorna o 1º serial Apple de DEVICE válido.
@@ -6423,11 +6425,16 @@ async function checkFFLogPresence(files) {
         ok(`Log ${ffLogHex} · Free Fire encontrado (${firstHit.marker} em ${firstHit.file})`);
         return { found: true, logHex: ffLogHex, marker: firstHit.marker, file: firstHit.file };
     } else {
-        alertF(
-            `[CRITICAL][TAMPER] Log ${ffLogHex} · Free Fire NÃO encontrado no sysdiagnose`,
+        // v4.4.62: ausência de log do FF NÃO é mais W.O automático (era alertF →
+        // 1 alerta crítico → renderResults marcava W.O). O iOS rotaciona/limpa logs
+        // de apps de terceiros agressivamente, então não achar referência ao FF é
+        // comportamento NORMAL do sistema — não prova fraude. Rebaixado para warn
+        // (vira REVISAR/checagem manual, não reprovação). A varredura continua.
+        warn(
+            `[INFO] Log ${ffLogHex} · Free Fire não encontrado no sysdiagnose (não é reprovação)`,
             `Nenhuma referência a freefire/garena/com.dts.* em ${candidates.length} arquivo(s) analisados.\n` +
-            `Possibilidades: (a) device nunca teve FF instalado/aberto, (b) sysdiagnose adulterado/limpo, ` +
-            `(c) jogador rodou sysdiagnose em device DIFERENTE do que tem o FF (fraude clássica).`
+            `iOS limpa/rotaciona logs de apps de terceiros com frequência, então a ausência é esperada.\n` +
+            `Checar manualmente: (a) o jogador abriu o FF no período? (b) o sysdiagnose é do mesmo device?`
         );
         return { found: false, logHex: ffLogHex };
     }
@@ -7014,31 +7021,64 @@ async function _doHandleSysdiagnose(filesList, opts) {
         }
     }
     if (byType.mcEvents) {
+        // v4.4.62: classificação das chaves de perfil (SystemProfileRestrictions do
+        // MCSettingsEvents.plist) por regras forenses anti-cheat:
+        //   R1) BLACKLIST (khoindvn/khodivn, happymod, skibidi + cheats conhecidos)
+        //       => CRÍTICO, MESMO com hífen (ex.: HappyMod-481BBE7E-...). Antes o
+        //       capture só pegava com.x / x.profile e deixava "Nome-UUID" passar.
+        //   R2) hash hex CONTÍNUO (>=32) e SEM "-" => SUSPEITO (revisar).
+        //   R3) UUID com hífens (8-4-4-4-12 / Nome-UUID) e não-blacklist => ignora
+        //       (cassino/ad/OS — registros genéricos com hífen).
+        //   R4) com.apple.* / operadora de chip => ignora.
+        // Só R1 e R2 geram saída (conforme spec). MCSettingsEvents é bplist; sem
+        // parser de árvore nativo, lemos as strings (que sob SystemProfileRestrictions
+        // são as próprias chaves) e classificamos por string.
+        const PROFILE_BLACKLIST = /(khoindvn|khodivn|happymod|skibidi|esign|feather|ksign|gbox|scarlet|trollstore|sideload|iosgods|filza|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|geranium|frida|cycript|substrate|ffh4x|aimbot|wallhack|cheat|hack|mod[._-]?menu|injector|cracked|holograma|hologram)/i;
+        const UUID_RE    = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+        const NAME_UUID  = /-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+        const HEX_CONT   = /^[0-9A-Fa-f]{32,}$/;             // hash contínuo (sem hífen)
+        const CARRIER_RE = /(carrier|telephony|coretelephony|com\.apple\.(cmas|carrier|coretelephony))/i;
         for (const f of byType.mcEvents) {
-            const raw = await readSafe(f);
-            if (!raw) continue;
-            // Extrai TODOS os profile identifiers via strings ASCII
-            const strings = extractStrings(raw, 5);
-            const profileIds = new Set();
+            let bytes; try { bytes = new Uint8Array(await f.arrayBuffer()); } catch (e) { continue; }
+            const strings = extractStringsFromBytes(bytes, 5);
+            const hasSPR = strings.some(s => s.indexOf('SystemProfileRestrictions') !== -1);
+            // Candidatos a CHAVE de perfil (blacklist garante captura de HappyMod/khoindvn/...)
+            const cand = new Set();
             for (const s of strings) {
-                // Match anything that looks like an iOS profile identifier
-                if (s.match(/^[a-z][a-z0-9._-]+\.(profile|mdm|config|conf|payload)(-[0-9A-Fa-f-]+)?$/i)) {
-                    profileIds.add(s);
-                }
-                // Also catch com.* identifiers with UUID suffix
-                if (s.match(/^com\.[a-z][a-z0-9._-]+-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/i)) {
-                    profileIds.add(s);
-                }
-            }
-            ok(`MCSettingsEvents: ${profileIds.size} profile identifiers extraídos`);
-            for (const pid of profileIds) {
-                const c = classifyBundle(pid);
-                if (c) {
-                    alertF(`[${c.sev}] PROFILE MDM: ${pid}`, c.desc);
-                } else if (!pid.startsWith('com.apple.')) {
-                    warn(`[MEDIUM] Profile não-Apple no histórico: ${pid}`);
+                const t = s.trim();
+                if (!t || t.length > 256) continue;
+                if (PROFILE_BLACKLIST.test(t) ||
+                    /^[A-Za-z][A-Za-z0-9._-]*\.[A-Za-z0-9._-]+/.test(t) ||   // com.x.y / x.profile
+                    NAME_UUID.test(t) || UUID_RE.test(t) || HEX_CONT.test(t)) {
+                    cand.add(t);
                 }
             }
+            let crit = 0, susp = 0, ign = 0;
+            for (const k of cand) {
+                // R1 — blacklist de PALAVRAS-CHAVE (vence TUDO, inclusive hífen) => CRÍTICO.
+                // Não usamos prefix-hash aqui de propósito: prefixos curtos (3 chars,
+                // ex. "d14") batem em ~1/4096 hashes por acaso e gerariam W.O injusto.
+                // Hashes de cheat conhecidos (full match) já são pegos pelo hashSweep
+                // do Pass 8 — então não há perda de detecção.
+                if (PROFILE_BLACKLIST.test(k)) {
+                    const why = (k.match(PROFILE_BLACKLIST) || [])[0] || 'cheat';
+                    alertF(`[CRITICAL] PROFILE (SystemProfileRestrictions): ${k}`,
+                           `Blacklist de modificadores/cheat: "${why}". Arquivo: ${(f.webkitRelativePath||f.name)}.`);
+                    crit++; continue;
+                }
+                // R4 — Apple / operadora => ignora
+                if (k.startsWith('com.apple.') || CARRIER_RE.test(k)) { ign++; continue; }
+                // R3 — UUID com hífens (puro ou Nome-UUID) => ignora (cassino/ad/OS)
+                if (k.indexOf('-') !== -1 && (UUID_RE.test(k) || NAME_UUID.test(k))) { ign++; continue; }
+                // R2 — hash hex contínuo SEM hífen => SUSPEITO
+                if (HEX_CONT.test(k) && k.indexOf('-') === -1) {
+                    warn(`[SUSPEITO] PROFILE hash hex contínuo sem hífen: ${k}`,
+                         `Hash/assinatura hexadecimal sem "-" em SystemProfileRestrictions — revisar manualmente. Arquivo: ${(f.webkitRelativePath||f.name)}.`);
+                    susp++; continue;
+                }
+                ign++; // demais (genéricos) => ignora, conforme spec (só R1/R2 saem)
+            }
+            ok(`MCSettingsEvents: ${cand.size} chave(s) de perfil${hasSPR ? ' (SystemProfileRestrictions)' : ''} · ${crit} crítico · ${susp} suspeito · ${ign} ignorado`);
         }
     }
 
@@ -7492,6 +7532,41 @@ async function _doHandleSysdiagnose(filesList, opts) {
                 });
                 totalAssets++;
 
+                // v4.4.62: PARSE do CONTEÚDO dos managed settings (mcsettings /
+                // restrictions / profiletruth). Antes só computávamos o hash — o
+                // conteúdo (bplist binário) nunca era lido, então DNS/proxy/VPN e
+                // restrictions configurados via managed preferences passavam batido
+                // (a "falha na leitura da mcsettings"). Convertendo o bplist em
+                // strings (latin1) conseguimos ler as chaves. Tudo em try/catch:
+                // um arquivo malformado NUNCA pode quebrar a varredura.
+                if (grp.key === 'mcSettings' || grp.key === 'restrictions' || grp.key === 'profileTruth') {
+                    try {
+                        const isBplist = bytes.length > 8 &&
+                            bytes[0] === 0x62 && bytes[1] === 0x70 && bytes[2] === 0x6c &&
+                            bytes[3] === 0x69 && bytes[4] === 0x73 && bytes[5] === 0x74;
+                        const blob = extractStringsFromBytes(bytes, 4).join('\n');
+                        const RISKY_PAYLOADS = [
+                            'com.apple.dnsSettings.managed', 'com.apple.dnsProxy.managed',
+                            'com.apple.vpn.managed', 'com.apple.proxy.http.global',
+                            'com.apple.webcontent-filter', 'com.apple.security.root',
+                            'com.apple.applicationaccess',
+                        ];
+                        for (const p of RISKY_PAYLOADS) {
+                            if (blob.includes(p)) {
+                                warn(`[MEDIUM] ${grp.icon} ${grp.label}: payload gerenciado de risco — ${p}`,
+                                     `Encontrado dentro de ${f.name} (${isBplist ? 'bplist convertido p/ texto' : 'texto'}). Checar manualmente.`);
+                            }
+                        }
+                        const dnsReseller = blob.match(/nextdns|controld|control-d|adguard|cloudflare.{0,8}warp|opendns|quad9/i);
+                        if (dnsReseller) {
+                            warn(`[MEDIUM] ${grp.icon} ${grp.label}: DNS reseller em managed settings — ${dnsReseller[0]}`,
+                                 `String achada em ${f.name}; pode redirecionar DNS do FF login (checar manualmente).`);
+                        }
+                    } catch (e) {
+                        warn(`  parse de conteúdo falhou em ${f.name}: ${e.message} (ignorado — varredura continua)`);
+                    }
+                }
+
                 // Render no log: 1 linha por asset
                 const shortPath = path.length > 60 ? '…' + path.slice(-58) : path;
                 const sizeKb = (f.size / 1024).toFixed(1);
@@ -7802,9 +7877,15 @@ async function _doHandleSysdiagnose(filesList, opts) {
     ok(`Pass 8: ${allScanFiles.length} arquivos a varrer (skip ${files.length - allScanFiles.length} já cobertos)`);
 
     // Regex reutilizadas fora do loop (declarar 1× evita re-parse por arquivo)
-    const opaqueRe = /[a-zA-Z][a-zA-Z0-9.-]*\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/g;
-    const dnsRe = /(?:com|io)\.[a-zA-Z0-9._-]+\.(?:nextdns|controld|adguard|cloudflare|warp|opendns|quad9)[a-zA-Z0-9._-]*/gi;
-    const ckRe = /\b(esign|feather|ksign|gbox|scarlet|trollstore|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|iosgods|filza|ifunbox|geranium|frida|cycript|substrate|libhooker|ffh4x|aimbot|wallhack|cheat\.menu|mod\.menu|injector|holograma|hologram)\b/gi;
+    // v4.4.62 FIX (ReDoS / Pass 8 travando em ~53%): os quantificadores greedy
+    // ILIMITADOS ([..]* / [..]+) antes de um literal obrigatório causavam
+    // backtracking O(n²) CATASTRÓFICO em arquivos com runs longos desses chars
+    // (log/plist/base64 contendo "profile-"). Era a causa do Pass 8 demorar
+    // 215s+/travar a aba. Limitar a {0,160}/{1,160} torna LINEAR sem perder match
+    // real (prefixo de um profile identifier nunca passa de ~160 chars).
+    const opaqueRe = /[a-zA-Z][a-zA-Z0-9.-]{0,160}\.profile-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}/g;
+    const dnsRe = /(?:com|io)\.[a-zA-Z0-9._-]{1,160}\.(?:nextdns|controld|adguard|cloudflare|warp|opendns|quad9)[a-zA-Z0-9._-]*/gi;
+    const ckRe = /\b(happymod|skibidi|esign|feather|ksign|gbox|scarlet|trollstore|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|iosgods|filza|ifunbox|geranium|frida|cycript|substrate|libhooker|ffh4x|aimbot|wallhack|cheat\.menu|mod\.menu|injector|holograma|hologram)\b/gi;
     // v4.4.11: hash sweep — captura hashes SHA256 puros (60-68 hex) com OU sem
     // UUID suffix em QUALQUER arquivo da sysdiagnose. Necessário pra cruzar com
     // CHEAT_PROFILE_PREFIXES (Zeex/Fatality/Luxe/Dash/XTREMO/proxies) cujos IDs
@@ -7871,7 +7952,9 @@ async function _doHandleSysdiagnose(filesList, opts) {
             strings.indexOf('altstore') !== -1 || strings.indexOf('feather') !== -1 ||
             strings.indexOf('esign') !== -1 || strings.indexOf('scarlet') !== -1 ||
             strings.indexOf('trollstore') !== -1 || strings.indexOf('filza') !== -1 ||
-            strings.indexOf('geranium') !== -1) {
+            strings.indexOf('geranium') !== -1 ||
+            strings.indexOf('happymod') !== -1 || strings.indexOf('HappyMod') !== -1 ||
+            strings.indexOf('skibidi') !== -1) {
             ckRe.lastIndex = 0;
             while ((m = ckRe.exec(strings)) !== null) {
                 const kw = m[0].toLowerCase();
@@ -7956,6 +8039,7 @@ async function _doHandleSysdiagnose(filesList, opts) {
     // cap 1500 → 1200 (sysdiagnoses normais têm 500-1500 files, 1200 já cobre
     // a esmagadora maioria). Era 280-700s, deve cair pra 30-90s.
     const PASS8_HARD_CAP = 1200;
+    const PASS8_TIME_BUDGET_MS = 60000; // v4.4.62: teto de tempo (rede de segurança anti-trava)
     const filesToScan = allScanFiles.slice(0, PASS8_HARD_CAP);
     if (allScanFiles.length > PASS8_HARD_CAP) {
         warn(`[PERF] Sysdiagnose com ${allScanFiles.length} arquivos — limitado a ${PASS8_HARD_CAP} mais relevantes pra Pass 8 (evita travar)`);
@@ -7963,6 +8047,13 @@ async function _doHandleSysdiagnose(filesList, opts) {
     const PASS8_BATCH = 6;
     let lastYield = performance.now();
     for (let i = 0; i < filesToScan.length; i += PASS8_BATCH) {
+        // v4.4.62: rede de segurança — se algum arquivo patológico ainda fizer o
+        // Pass 8 estourar o orçamento de tempo, para com resultado PARCIAL em vez
+        // de travar a aba indefinidamente.
+        if (performance.now() - _pass8Start > PASS8_TIME_BUDGET_MS) {
+            warn(`[PERF] Pass 8 excedeu ${Math.round(PASS8_TIME_BUDGET_MS/1000)}s — interrompido em ${scanCount}/${filesToScan.length} arquivos (resultado parcial; evita travar a aba)`);
+            break;
+        }
         const batch = filesToScan.slice(i, i + PASS8_BATCH);
         const reads = await Promise.all(batch.map(async (f) => ({ f, raw: await readSafe(f) })));
         for (const { f, raw } of reads) {
