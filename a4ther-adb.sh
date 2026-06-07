@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/env bash
 # ============================================================
 #  a4ther — Auditoria de integridade Free Fire via ADB Wi-Fi
-#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.65
+#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.66
 #
 #  Assistente passo a passo para auditoria CONSENTIDA de um
 #  dispositivo Android (o dono precisa habilitar a Depuração
@@ -35,7 +35,7 @@ info()  { printf '%s\n' "${CYN}ℹ  $*${NC}"; }
 ok()    { printf '%s\n' "${GRN}✓  $*${NC}"; }
 warn()  { printf '%s\n' "${YLW}⚠  $*${NC}"; }
 err()   { printf '%s\n' "${RED}✗  $*${NC}"; }
-ask()   { local p="$1" __v; printf '%s' "${BLD}❯ ${p}${NC} "; read -r __v; printf '%s' "$__v"; }
+ask()   { local p="$1" __v; printf '%s' "${BLD}❯ ${p}${NC} " >&2; read -r __v; printf '%s' "$__v"; }
 pause() { printf '%s' "${DIM}— Pressione ENTER para continuar —${NC}"; read -r _; }
 
 # Downloader ROBUSTO: wget primeiro (não usa libngtcp2/QUIC, então funciona
@@ -65,7 +65,7 @@ banner() {
   / __ | / // /_/ __/ _ \/ -_) __/
  /_/ |_|/_//_/(_)__/_//_/\__/_/    AUDIT · ADB Wi-Fi
 EOF
-  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.65${NC}"
+  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.66${NC}"
   hr
 }
 
@@ -227,13 +227,26 @@ step_target() {
   printf '%s\n' "   ${BLD}1)${NC} Free Fire ${DIM}(com.dts.freefireth)${NC}"
   printf '%s\n' "   ${BLD}2)${NC} Free Fire MAX ${DIM}(com.dts.freefiremax)${NC}"
   while :; do
-    local c; c="$(ask 'Opção [1/2]')"
+    # Lê DIRETO (sem $(...)): com $(ask) o prompt + códigos de cor ANSI eram
+    # capturados JUNTO com o valor e o case NUNCA batia — era a causa do
+    # "Opção inválida" mesmo digitando "1".
+    local raw c
+    printf '%s' "${BLD}❯ Digite 1 ou 2:${NC} "; read -r raw
+    # Sanitiza: minúsculas + remove ')' e '.' de menu/pacote + trim + colapsa
+    # espaços. Assim "1)", "01", "Free Fire", "com.dts.freefireth", "FF MAX" etc
+    # caem todos numa forma canônica.
+    c=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr -d ').' \
+        | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/[[:space:]]+/ /g')
     case "$c" in
-      1) PKG="com.dts.freefireth"; PKG_LABEL="Free Fire";     break ;;
-      2) PKG="com.dts.freefiremax"; PKG_LABEL="Free Fire MAX"; break ;;
-      *) warn "Opção inválida." ;;
+      1|01|ff|freefire|"free fire"|freefireth|comdtsfreefireth)
+        PKG="com.dts.freefireth";  PKG_LABEL="Free Fire";     break ;;
+      2|02|ffmax|"ff max"|freefiremax|"freefire max"|"free fire max"|comdtsfreefiremax)
+        PKG="com.dts.freefiremax"; PKG_LABEL="Free Fire MAX"; break ;;
+      "") warn "Você não digitou nada. Digite 1 (Free Fire) ou 2 (Free Fire MAX)." ;;
+      *)  err "Jogo não reconhecido. Por favor, digite apenas o número 1 ou 2." ;;
     esac
   done
+  ok "Jogo selecionado: ${PKG_LABEL} (${PKG}). Avançando para a ETAPA 3…"
   # Confirma que o pacote existe no device
   if ! adb -s "$ADB_TARGET" shell pm path "$PKG" 2>/dev/null | tr -d '\r' | grep -q '^package:'; then
     err "O pacote ${PKG} NÃO está instalado neste dispositivo."
@@ -410,7 +423,7 @@ pull_artifacts() {
       | xargs -0 sha256sum 2>/dev/null | sort ) > "${out}/_integrity_sha256.txt"
   local hashed; hashed="$(grep -c . "${out}/_integrity_sha256.txt" 2>/dev/null || echo 0)"
   {
-    echo "A4ther Audit · v4.4.65"
+    echo "A4ther Audit · v4.4.66"
     echo "data         : $(date '+%Y-%m-%d %H:%M:%S')"
     echo "alvo         : ${PKG_LABEL} (${PKG})"
     echo "device       : ${ADB_TARGET}"

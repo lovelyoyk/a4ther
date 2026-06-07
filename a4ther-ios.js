@@ -1,5 +1,5 @@
 // ============================================================
-//  A4ther Systems v4.4.65 | LS Aluguel| LS Aluguel
+//  A4ther Systems v4.4.66 | LS Aluguel
 //  iOS Free Fire Anti-Cheat Scanner (Scriptable)
 //  Roda em iPhone SEM jailbreak via app Scriptable (gratuito App Store).
 //
@@ -13,7 +13,7 @@
 //    6. Vê o resultado
 // ============================================================
 
-const VERSION = "4.4.65";
+const VERSION = "4.4.66";
 
 // ============================================================
 //  DATA — bundles, domínios, IPs, TLDs, ASNs (109+ entries)
@@ -837,7 +837,7 @@ function buildResultTable(stats) {
     const hdr = new UITableRow();
     hdr.height = 80;
     hdr.isHeader = true;
-    const c = hdr.addText("A4THER SYSTEMS", `v${VERSION} ▪A4ther Systems v4.4.65 | LS Aluguel ▪ FF iOS Scanner`);
+    const c = hdr.addText("A4THER SYSTEMS", `v${VERSION} ▪ LS Aluguel ▪ FF iOS Scanner`);
     c.titleFont = Font.boldSystemFont(22);
     c.titleColor = Color.cyan();
     c.subtitleFont = Font.systemFont(12);
@@ -892,7 +892,7 @@ function buildResultTable(stats) {
 function buildTextReport(stats) {
     const lines = [];
     lines.push("=========================================");
-    lines.push(`  A4ther Systems v${VERSION} |A4ther Systems v4.4.65 | LS Aluguel`);
+    lines.push(`  A4ther Systems v${VERSION} | LS Aluguel`);
     lines.push("  Free Fire iOS Anti-Cheat Scanner");
     lines.push(`  ${new Date().toISOString()}`);
     lines.push("=========================================");
@@ -1126,7 +1126,7 @@ function buildProfileTable(profileInfo) {
     const hdr = new UITableRow();
     hdr.height = 80;
     hdr.isHeader = true;
-    const c = hdr.addText("A4THER SYSTEMS", `v${VERSION} ▪A4ther Systems v4.4.65 | LS Aluguel ▪ Profile Analyzer`);
+    const c = hdr.addText("A4THER SYSTEMS", `v${VERSION} ▪ LS Aluguel ▪ Profile Analyzer`);
     c.titleFont = Font.boldSystemFont(22);
     c.titleColor = Color.cyan();
     c.subtitleFont = Font.systemFont(12);
@@ -2213,7 +2213,7 @@ async function runProfileAnalyzer() {
         const path = fm.joinPath(fm.documentsDirectory(), `a4ther_profile_${ts}.txt`);
         const lines = [];
         lines.push("=========================================");
-        lines.push(`  A4ther Systems v${VERSION} |A4ther Systems v4.4.65 | LS Aluguel`);
+        lines.push(`  A4ther Systems v${VERSION} | LS Aluguel`);
         lines.push("  iOS Profile Analyzer");
         lines.push(`  ${new Date().toISOString()}`);
         lines.push(`  Source: ${profile.path}`);
