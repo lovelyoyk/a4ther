@@ -25,15 +25,15 @@ else
 fi
 
 # ---------- Relatório ----------
-# v4.4.67: salva na RAIZ do armazenamento interno (/storage/emulated/0/a4ther_audits)
-# pra o .txt aparecer no gerenciador de arquivos do celular. O $HOME do Termux só
-# é visível dentro do Termux (o user perdia o arquivo). Só cai pro HOME se o
-# storage não estiver acessível (sem termux-setup-storage / sem permissão).
+# v4.4.68: salva na pasta pública DOWNLOAD (/storage/emulated/0/Download/a4ther_audits)
+# pra o .txt aparecer no Gerenciador de Arquivos normal do celular (o cliente pega e
+# sobe no site). O $HOME do Termux só é visível dentro do Termux. Só cai pro HOME se
+# o storage não estiver acessível (sem termux-setup-storage / sem permissão).
 TS=$(date '+%Y%m%d_%H%M%S' 2>/dev/null)
 [ -z "$TS" ] && TS="scan"
 REPORT=""
 REPORT_DIR_TRIED=""
-for D in /storage/emulated/0 /sdcard "$HOME/storage/shared" "$HOME" /data/local/tmp /tmp .; do
+for D in /storage/emulated/0/Download /sdcard/Download "$HOME/storage/shared/Download" /storage/emulated/0 /sdcard "$HOME/storage/shared" "$HOME" /data/local/tmp /tmp .; do
     REPORT_DIR_TRIED="$REPORT_DIR_TRIED $D"
     [ -d "$D" ] || mkdir -p "$D" 2>/dev/null
     [ -d "$D" ] && [ -w "$D" ] || continue

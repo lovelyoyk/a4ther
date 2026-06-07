@@ -71,23 +71,31 @@ EOF
 
 # ---------- Config ----------
 TS="$(date +%Y%m%d_%H%M%S)"
-# v4.4.67: salva no armazenamento INTERNO compartilhado (/storage/emulated/0),
-# visível no gerenciador de arquivos do celular — não mais no $HOME do Termux
-# (que só é acessível dentro do Termux). Pede permissão de storage se faltar.
+# v4.4.68: destino = pasta pública DOWNLOAD (/storage/emulated/0/Download/
+# a4ther_audits) — acessível pelo Gerenciador de Arquivos normal; o cliente pega
+# e sobe no site. CRÍTICO: TODO aviso vai pro STDERR (>&2). Antes os warn/info
+# iam pro stdout e o OUT_ROOT="$(_pick_outroot)" capturava o TEXTO do aviso JUNTO
+# com o path → o mkdir recebia "⚠ Preciso de permissão…/…" e estourava com
+# "File name too long". A função retorna SÓ o caminho limpo.
 _pick_outroot() {
   local D
-  for D in /storage/emulated/0 /sdcard "${HOME}/storage/shared"; do
-    [ -d "$D" ] && [ -w "$D" ] && { printf '%s' "$D/a4ther_audits"; return 0; }
-  done
-  if command -v termux-setup-storage >/dev/null 2>&1; then
-    warn "Preciso de permissão de armazenamento pra salvar o relatório onde você consegue abrir."
-    info "Vou abrir o pedido de permissão — ACEITE na janela do Android…"
+  # destrava o storage (idempotente — só age se ainda não tem permissão)
+  if command -v termux-setup-storage >/dev/null 2>&1 \
+     && [ ! -w /storage/emulated/0 ] && [ ! -w "${HOME}/storage/shared" ]; then
+    warn "Preciso de permissão de armazenamento pra salvar onde você consegue abrir." >&2
+    info "Vou abrir o pedido — ACEITE na janela do Android (Permitir)…" >&2
     termux-setup-storage 2>/dev/null; sleep 2
-    for D in "${HOME}/storage/shared" /storage/emulated/0 /sdcard; do
-      [ -d "$D" ] && [ -w "$D" ] && { printf '%s' "$D/a4ther_audits"; return 0; }
-    done
   fi
-  warn "Sem acesso ao armazenamento interno — salvando dentro do Termux (${HOME}/a4ther_audits)."
+  # preferência: Download público > raiz do storage > symlink do Termux
+  for D in /storage/emulated/0/Download /sdcard/Download "${HOME}/storage/shared/Download" \
+           /storage/emulated/0 /sdcard "${HOME}/storage/shared"; do
+    if { [ -d "$D" ] || mkdir -p "$D" 2>/dev/null; } && [ -w "$D" ]; then
+      printf '%s' "$D/a4ther_audits"; return 0
+    fi
+  done
+  # fallback: HOME do Termux (invisível p/ não-root) — ensina a puxar via adb
+  warn "Sem acesso ao armazenamento — salvando no Termux. No PC, puxe com:" >&2
+  warn "  adb pull ${HOME}/a4ther_audits" >&2
   printf '%s' "${HOME}/a4ther_audits"
 }
 OUT_ROOT="$(_pick_outroot)"
