@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.1 | LS Aluguel
+#  A4ther Systems v4.4.65 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.59"
+VERSION="4.4.65"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -540,6 +540,14 @@ KVER=$(uname -r 2>/dev/null)
 case "$KVER" in
     *KSU*|*kernelsu*|*KernelSU*|*APatch*|*apatch*|*Magisk*|*magisk*|*-perf+*|*custom*|*ksu*)
         alert "Kernel suspeito: $KVER"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+esac
+# v4.4.63 (KellerSS-tier): kernels CUSTOM nomeados. Não são cheat por si só,
+# mas indicam device fortemente modificado (flash de kernel → root/SUSFS/GKI).
+case "$KVER" in
+    *arter97*|*Arter97*|*sultan*|*Sultan*|*lychee*|*Lychee*|*chronos*|*Chronos*|*alucard*|*Alucard*|*RealKing*|*QuantumX*)
+        warn "Kernel CUSTOM nomeado: $KVER — device modificado (kernel flashado)"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+    *kali*|*Kali*|*nethunter*|*NetHunter*)
+        alert "Kernel Kali/NetHunter: $KVER — ROM de pentest (tooling avançado)"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
 esac
 
 # Paths kernel-level
@@ -1498,6 +1506,16 @@ for PKG in $FF_PKGS; do
     GAB_DIR="/sdcard/Android/data/$PKG/files/contentcache/Optional/android/gameassetbundles"
     [ -d "$GAB_DIR" ] || continue
     info "gameassetbundles: $GAB_DIR"
+    # v4.4.63: INVENTÁRIO técnico (sempre exibe — info completa p/ perícia)
+    _gn=$(find "$GAB_DIR" -maxdepth 3 -type f 2>/dev/null | wc -l | tr -d ' ')
+    _gsh=$(find "$GAB_DIR" -maxdepth 3 -type f -name 'shader*' 2>/dev/null | wc -l | tr -d ' ')
+    _gsz=$(du -sh "$GAB_DIR" 2>/dev/null | awk '{print $1}')
+    info "  inventário: ${_gn:-0} arquivo(s) no bundle (${_gsh:-0} shader*) · total ${_gsz:-?}"
+    _gls=$(ls -t "$GAB_DIR"/shaders* 2>/dev/null | head -1)
+    if [ -n "$_gls" ]; then
+        _gh=""; have sha256sum && _gh=$(sha256sum "$_gls" 2>/dev/null | awk '{print $1}')
+        info "  shader recente: $(basename "$_gls") ($(du -h "$_gls" 2>/dev/null | awk '{print $1}'))${_gh:+ · sha256 ${_gh}}"
+    fi
     if have find; then
         # listar arquivos shader* / asset
         SH_FILES=$(find "$GAB_DIR" 2>/dev/null -maxdepth 3 -type f 2>/dev/null | head -n 40)
@@ -1596,6 +1614,21 @@ for PKG in $FF_PKGS; do
     RDIR="/sdcard/Android/data/$PKG/files/MReplays"
     [ -d "$RDIR" ] || continue
     info "MReplays: $RDIR"
+    # v4.4.63: INVENTÁRIO técnico dos replays (sempre exibe — info completa)
+    _rb=$(find "$RDIR" -maxdepth 2 -type f -name '*.bin' 2>/dev/null | wc -l | tr -d ' ')
+    _rj=$(find "$RDIR" -maxdepth 2 -type f -name '*.json' 2>/dev/null | wc -l | tr -d ' ')
+    _rsz=$(du -sh "$RDIR" 2>/dev/null | awk '{print $1}')
+    info "  inventário: ${_rb:-0} .bin · ${_rj:-0} .json · total ${_rsz:-?}"
+    _rlb=$(ls -t "$RDIR"/*.bin 2>/dev/null | head -1)
+    if [ -n "$_rlb" ]; then
+        _rh=""; have sha256sum && _rh=$(sha256sum "$_rlb" 2>/dev/null | awk '{print $1}')
+        info "  replay recente (.bin): $(basename "$_rlb") ($(du -h "$_rlb" 2>/dev/null | awk '{print $1}'))${_rh:+ · sha256 ${_rh}}"
+    fi
+    _rlj=$(ls -t "$RDIR"/*.json 2>/dev/null | head -1)
+    if [ -n "$_rlj" ]; then
+        _jh=""; have sha256sum && _jh=$(sha256sum "$_rlj" 2>/dev/null | awk '{print $1}')
+        info "  metadata (.json): $(basename "$_rlj") ($(du -h "$_rlj" 2>/dev/null | awk '{print $1}'))${_jh:+ · sha256 ${_jh}}"
+    fi
     if have find; then
         BINS=$(find "$RDIR" 2>/dev/null -maxdepth 2 -type f -name '*.bin' 2>/dev/null)
         [ -n "$BINS" ] && echo "$BINS" | while IFS= read -r B; do
@@ -3049,6 +3082,27 @@ done
 BR_HITS=0
 BR_PATHS="/data/user_de/0/com.android.shell/files/bugreports /data/data/com.android.shell/files/bugreports /sdcard/bugreports /storage/emulated/0/bugreports /sdcard/Download /storage/emulated/0/Download"
 
+# v4.4.7: globais preenchidos por br_parse (modo offline) e usados como
+# fallback na seção 31 (HWID) quando o getprop LIVE vem vazio — que é o caso
+# quando o scanner roda sobre um bugreport.zip puxado de OUTRO device.
+BR_SERIAL=""; BR_BOOT_SERIAL=""; BR_MAC=""; BR_BT_MAC=""
+BR_ANDROID_ID=""; BR_WIDEVINE=""; BR_FINGERPRINT=""; BR_BOOTLOADER=""
+# v4.4.7: região/SIM/Play também saem do dump (usados no fallback do §31b)
+BR_LOCALE=""; BR_COUNTRY=""; BR_SIM_COUNTRY=""; BR_SIM_OPERATOR=""
+BR_SIM_MCC=""; BR_PLAY_COUNTRY=""
+
+# br_prop NOME ARQUIVO — extrai o valor de uma System Property do dump do
+# bugreport. O getprop dentro do bugreport tem o formato:
+#     [ro.serialno]: [R5CN30XXXXX]
+# Os '.' do nome são escapados (senão viram coringa de regex) e os colchetes
+# do valor são removidos. Retorna string vazia se a chave não existir.
+br_prop() {
+    [ -r "$2" ] || return 0
+    _pn=$(printf '%s' "$1" | sed 's/\./\\./g')
+    grep -m1 -E "^\[$_pn\]:" "$2" 2>/dev/null \
+        | sed -E 's/^\[[^]]*\]:[[:space:]]*\[(.*)\][[:space:]]*$/\1/'
+}
+
 # Helper: parseia 1 bugreport (zip ou txt) e roda TODAS as extrações
 br_parse() {
     _BRFILE="$1"
@@ -3083,6 +3137,82 @@ br_parse() {
     }
     _BRSIZE=$(stat -c '%s' "$_BRMAIN" 2>/dev/null)
     info "  Conteúdo principal: $_BRMAIN ($_BRSIZE bytes)"
+
+    # ── 0. HWID / IDENTIFICADORES DO DEVICE (v4.4.7) ────────────────
+    # ESTE era o passo que faltava: o bugreport carrega o dump COMPLETO do
+    # getprop ([ro.serialno]: [VALOR]) + android_id/MAC/Widevine nas seções
+    # do dumpsys. Sem extrair aqui, a seção 31 (HWID) — que só lia getprop
+    # LIVE — vinha 100% vazia em modo offline (Serial: ?). Preenche os
+    # globais BR_* que a seção 31 usa como fallback.
+    _GP_SERIAL=$(br_prop ro.serialno "$_BRMAIN")
+    [ -z "$_GP_SERIAL" ] && _GP_SERIAL=$(br_prop ro.boot.serialno "$_BRMAIN")
+    [ -z "$_GP_SERIAL" ] && _GP_SERIAL=$(br_prop ro.vendor.boot.serialno "$_BRMAIN")
+    [ -z "$_GP_SERIAL" ] && _GP_SERIAL=$(br_prop ril.serialnumber "$_BRMAIN")    # Samsung/RIL
+    [ -z "$_GP_SERIAL" ] && _GP_SERIAL=$(br_prop ro.serialno.fact "$_BRMAIN")    # Samsung fact
+    [ -z "$_GP_SERIAL" ] && _GP_SERIAL=$(br_prop ro.boot.em.serial "$_BRMAIN")   # MediaTek
+    [ -z "$_GP_SERIAL" ] && _GP_SERIAL=$(br_prop ril.serial "$_BRMAIN")          # OPPO/realme
+    # Fallback OEM 1: linha "Serial number:" (header de alguns dumpstate Samsung)
+    [ -z "$_GP_SERIAL" ] && _GP_SERIAL=$(grep -m1 -iE '^Serial( number)?:' "$_BRMAIN" 2>/dev/null | sed -E 's/.*:[[:space:]]*//')
+    # Fallback OEM 2: kernel cmdline androidboot.serialno= (sempre presente no bugreport)
+    [ -z "$_GP_SERIAL" ] && _GP_SERIAL=$(grep -m1 -oE 'androidboot\.serialno=[^ ]+' "$_BRMAIN" 2>/dev/null | cut -d= -f2)
+    [ -z "$BR_SERIAL" ] && [ -n "$_GP_SERIAL" ] && BR_SERIAL="$_GP_SERIAL"
+
+    _GP_BOOTSER=$(br_prop ro.boot.serialno "$_BRMAIN")
+    [ -z "$BR_BOOT_SERIAL" ] && [ -n "$_GP_BOOTSER" ] && BR_BOOT_SERIAL="$_GP_BOOTSER"
+
+    _GP_FP=$(br_prop ro.build.fingerprint "$_BRMAIN")
+    [ -z "$_GP_FP" ] && _GP_FP=$(grep -m1 -E 'Build fingerprint:' "$_BRMAIN" 2>/dev/null | sed -E "s/.*'([^']*)'.*/\1/")
+    [ -z "$BR_FINGERPRINT" ] && [ -n "$_GP_FP" ] && BR_FINGERPRINT="$_GP_FP"
+
+    _GP_BL=$(br_prop ro.bootloader "$_BRMAIN")
+    [ -z "$BR_BOOTLOADER" ] && [ -n "$_GP_BL" ] && BR_BOOTLOADER="$_GP_BL"
+
+    _GP_BTMAC=$(br_prop ro.boot.btmacaddr "$_BRMAIN")
+    [ -z "$_GP_BTMAC" ] && _GP_BTMAC=$(br_prop persist.service.bdroid.bdaddr "$_BRMAIN")
+    [ -z "$BR_BT_MAC" ] && [ -n "$_GP_BTMAC" ] && BR_BT_MAC="$_GP_BTMAC"
+
+    # android_id: no dumpsys settings aparece como  android_id=<16 hex>
+    _GP_AID=$(grep -m1 -oE 'android_id[=:][[:space:]]*[0-9a-f]{16}' "$_BRMAIN" 2>/dev/null | grep -oE '[0-9a-f]{16}' | head -1)
+    [ -z "$BR_ANDROID_ID" ] && [ -n "$_GP_AID" ] && BR_ANDROID_ID="$_GP_AID"
+
+    # Widevine deviceUniqueId/PluginUniqueId no dumpsys media.drm embutido
+    _GP_WV=$(grep -m1 -iE 'deviceUniqueId|PluginUniqueId' "$_BRMAIN" 2>/dev/null | grep -oE '[0-9A-Fa-f-]{16,}' | head -1)
+    [ -z "$BR_WIDEVINE" ] && [ -n "$_GP_WV" ] && BR_WIDEVINE="$_GP_WV"
+
+    # MAC wlan0 (ignora 02:.. que é o randomizado por privacidade quando possível)
+    _GP_MAC=$(grep -m1 -iE 'wlan0.*HWaddr|Wi-?Fi.*MAC|factory.*MAC' "$_BRMAIN" 2>/dev/null | grep -oiE '([0-9a-f]{2}:){5}[0-9a-f]{2}' | head -1)
+    [ -z "$_GP_MAC" ] && _GP_MAC=$(br_prop ro.boot.wifi.macaddr "$_BRMAIN")
+    [ -z "$_GP_MAC" ] && _GP_MAC=$(br_prop persist.sys.wifi.mac "$_BRMAIN")
+    [ -z "$BR_MAC" ] && [ -n "$_GP_MAC" ] && BR_MAC="$_GP_MAC"
+
+    # Região / SIM / Play Store (usados no fallback do §31b em modo offline)
+    _GP_LOC=$(br_prop ro.product.locale "$_BRMAIN")
+    [ -z "$_GP_LOC" ] && _GP_LOC=$(br_prop persist.sys.locale "$_BRMAIN")
+    [ -z "$BR_LOCALE" ] && [ -n "$_GP_LOC" ] && BR_LOCALE="$_GP_LOC"
+
+    _GP_CTRY=$(br_prop persist.sys.country "$_BRMAIN")
+    [ -z "$_GP_CTRY" ] && _GP_CTRY=$(br_prop ro.csc.countryiso_code "$_BRMAIN")
+    [ -z "$_GP_CTRY" ] && _GP_CTRY=$(br_prop ro.product.locale.region "$_BRMAIN")
+    [ -z "$BR_COUNTRY" ] && [ -n "$_GP_CTRY" ] && BR_COUNTRY="$_GP_CTRY"
+
+    _GP_SIMC=$(br_prop gsm.sim.operator.iso-country "$_BRMAIN")
+    [ -z "$_GP_SIMC" ] && _GP_SIMC=$(br_prop gsm.operator.iso-country "$_BRMAIN")
+    [ -z "$BR_SIM_COUNTRY" ] && [ -n "$_GP_SIMC" ] && BR_SIM_COUNTRY=$(printf '%s' "$_GP_SIMC" | tr '[:lower:]' '[:upper:]')
+    _GP_SIMOP=$(br_prop gsm.sim.operator.alpha "$_BRMAIN")
+    [ -z "$BR_SIM_OPERATOR" ] && [ -n "$_GP_SIMOP" ] && BR_SIM_OPERATOR="$_GP_SIMOP"
+    _GP_SIMN=$(br_prop gsm.sim.operator.numeric "$_BRMAIN")
+    [ -z "$BR_SIM_MCC" ] && [ -n "$_GP_SIMN" ] && BR_SIM_MCC=$(printf '%s' "$_GP_SIMN" | cut -c1-3)
+
+    _GP_PLAY=$(br_prop ro.com.google.gmsversion "$_BRMAIN" | sed -nE 's/.*_([A-Z]{2}).*/\1/p')
+    [ -z "$BR_PLAY_COUNTRY" ] && [ -n "$_GP_PLAY" ] && BR_PLAY_COUNTRY="$_GP_PLAY"
+
+    if [ -n "$BR_SERIAL$BR_ANDROID_ID$BR_WIDEVINE$BR_MAC" ]; then
+        info "  HWID do bugreport → serial=${BR_SERIAL:-?} android_id=${BR_ANDROID_ID:-?} widevine=${BR_WIDEVINE:-?} mac=${BR_MAC:-?}"
+    else
+        warn "  Nenhum identificador (serial/android_id/widevine/MAC) achado no bugreport."
+        warn "  ↳ Gere o bugreport como FULL (não 'interactive/mini'):"
+        warn "    adb bugreport <arq>.zip   OU   Developer options → Take bug report → Full"
+    fi
 
     # ── 1. Build/version info ─────────────────────────────────────────
     _BUILD=$(grep -m1 -E '^Build: |Build fingerprint:' "$_BRMAIN" 2>/dev/null | head -c 200)
@@ -3527,18 +3657,24 @@ MAC=$(cat /sys/class/net/wlan0/address 2>/dev/null)
 [ -z "$MAC" ] && MAC=$(cat /sys/class/net/eth0/address 2>/dev/null)
 
 # ─── ANDROID ID ─── 3 fontes
+# v4.4.7: android_id canônico = 16 dígitos hex (64-bit). Valida cada fonte de
+# QUERY pra não aceitar lixo (banner de shell, msg de erro de OEM, ou um binário
+# errado resolvido por `have cmd`) como se fosse o ID.
+is_android_id() { printf '%s' "$1" | grep -qE '^[0-9a-fA-F]{16}$'; }
 ANDROID_ID=""
 ANDROID_ID=$(setting_get secure android_id)
+is_android_id "$ANDROID_ID" || ANDROID_ID=""
 # v4.4.59: métodos alternativos que furam o bloqueio do MIUI/HyperOS no Termux.
 # No Redmi/HyperOS o comando `settings` falha pra apps não-privilegiados, mas o
 # `content query` (provider direto) e o `cmd settings` muitas vezes funcionam.
 if [ -z "$ANDROID_ID" ] && have content; then
     ANDROID_ID=$(content query --uri content://settings/secure --where "name=\'android_id\'" 2>/dev/null \
         | grep -oE 'value=[A-Za-z0-9]+' | head -1 | cut -d= -f2)
+    is_android_id "$ANDROID_ID" || ANDROID_ID=""
 fi
 if [ -z "$ANDROID_ID" ] && have cmd; then
     _AID=$(cmd settings get secure android_id 2>/dev/null)
-    case "$_AID" in ""|*Failure*|*Exception*|null|cmd:*) ;; *) ANDROID_ID="$_AID" ;; esac
+    is_android_id "$_AID" && ANDROID_ID="$_AID"
 fi
 # settings via service call (raro, mas funciona em alguns)
 if [ -z "$ANDROID_ID" ] && have service; then
@@ -3577,6 +3713,21 @@ BOOTLOADER=$(gp ro.bootloader)
 [ -z "$BOOTLOADER" ] && BOOTLOADER=$(gp ro.boot.bootloader)
 # Build description (mais único que fingerprint em alguns devices)
 BUILD_DESC=$(gp ro.build.description)
+
+# v4.4.7: FALLBACK BUGREPORT — em modo offline (BUGREPORT_FILE=) o getprop/sys
+# LIVE vem vazio (o script não roda no device-alvo). Preenche cada campo ainda
+# vazio com o valor extraído do bugreport (br_parse → BR_*). O valor LIVE sempre
+# tem prioridade; o do bugreport só entra no buraco.
+[ -z "$SERIAL" ]      && [ -n "$BR_SERIAL" ]      && SERIAL="$BR_SERIAL"
+[ -z "$BOOT_SERIAL" ] && [ -n "$BR_BOOT_SERIAL" ] && BOOT_SERIAL="$BR_BOOT_SERIAL"
+[ -z "$MAC" ]         && [ -n "$BR_MAC" ]         && MAC="$BR_MAC"
+[ -z "$BT_MAC" ]      && [ -n "$BR_BT_MAC" ]      && BT_MAC="$BR_BT_MAC"
+[ -z "$ANDROID_ID" ]  && [ -n "$BR_ANDROID_ID" ]  && ANDROID_ID="$BR_ANDROID_ID"
+[ -z "$WIDEVINE_ID" ] && [ -n "$BR_WIDEVINE" ]    && WIDEVINE_ID="$BR_WIDEVINE"
+[ -z "$FINGERPRINT" ] && [ -n "$BR_FINGERPRINT" ] && FINGERPRINT="$BR_FINGERPRINT"
+[ -z "$BOOTLOADER" ]  && [ -n "$BR_BOOTLOADER" ]  && BOOTLOADER="$BR_BOOTLOADER"
+[ -n "$BR_SERIAL$BR_ANDROID_ID$BR_WIDEVINE" ] && \
+    info "Serial/HWID preenchidos do BUGREPORT (modo offline)"
 
 # HWID composto — usa TODOS os campos disponíveis (não vazios).
 # Widevine + Boot ID + Fingerprint são os pillars quando serial/MAC estão bloqueados.
@@ -3660,6 +3811,14 @@ for VPATH in /data/data/com.android.vending/shared_prefs/finsky.xml \
     }
 done
 [ -z "$PLAY_COUNTRY_NOW" ] && PLAY_COUNTRY_NOW=$(gp ro.com.google.gmsversion 2>/dev/null | sed -nE 's/.*_([A-Z]{2}).*/\1/p')
+
+# v4.4.7: fallback bugreport (modo offline) — live vem vazio fora do device-alvo
+[ -z "$LOCALE_NOW" ]       && [ -n "$BR_LOCALE" ]       && LOCALE_NOW="$BR_LOCALE"
+[ -z "$COUNTRY_NOW" ]      && [ -n "$BR_COUNTRY" ]      && COUNTRY_NOW="$BR_COUNTRY"
+[ -z "$SIM_COUNTRY" ]      && [ -n "$BR_SIM_COUNTRY" ]  && SIM_COUNTRY="$BR_SIM_COUNTRY"
+[ -z "$SIM_OPERATOR" ]     && [ -n "$BR_SIM_OPERATOR" ] && SIM_OPERATOR="$BR_SIM_OPERATOR"
+[ -z "$SIM_MCC" ]          && [ -n "$BR_SIM_MCC" ]      && SIM_MCC="$BR_SIM_MCC"
+[ -z "$PLAY_COUNTRY_NOW" ] && [ -n "$BR_PLAY_COUNTRY" ] && PLAY_COUNTRY_NOW="$BR_PLAY_COUNTRY"
 
 info "Locale device:    ${LOCALE_NOW:-?}"
 info "Country device:   ${COUNTRY_NOW:-?}"

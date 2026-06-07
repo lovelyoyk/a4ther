@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/env bash
 # ============================================================
 #  a4ther — Auditoria de integridade Free Fire via ADB Wi-Fi
-#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.63
+#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.65
 #
 #  Assistente passo a passo para auditoria CONSENTIDA de um
 #  dispositivo Android (o dono precisa habilitar a Depuração
@@ -65,7 +65,7 @@ banner() {
   / __ | / // /_/ __/ _ \/ -_) __/
  /_/ |_|/_//_/(_)__/_//_/\__/_/    AUDIT · ADB Wi-Fi
 EOF
-  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.63${NC}"
+  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.65${NC}"
   hr
 }
 
@@ -95,54 +95,113 @@ ensure_adb() {
   adb start-server >/dev/null 2>&1 || true
 }
 
-# ---------- 1. Conexão ADB Wi-Fi ----------
-step_connect() {
-  hr; info "ETAPA 1/4 — Conexão ADB via Wi-Fi"
-  cat <<EOF
-${DIM}  No dispositivo ALVO:
-   • Opções do desenvolvedor → ative 'Depuração sem fio'
-   • Toque em 'Depuração sem fio' para ver IP:porta de conexão
-   • (1ª vez) 'Parear com código' mostra IP:porta + código de 6 díg.${NC}
-EOF
+# ---------- Inputs validados (UX passo-a-passo do pareamento Wi-Fi) ----------
+# Cada dado é pedido SEPARADAMENTE, repete até vir válido e explica EXATAMENTE o
+# que faltou. O valor sai em REPLY_FIELD (não usa $(...) pra não capturar o
+# prompt junto com o valor). O usuário só preenche um campo simples por vez.
 
-  # Pareamento (Android 11+, só na 1ª vez)
-  local needpair; needpair="$(ask 'Precisa PAREAR primeiro (1ª vez no Android 11+)? [s/N]')"
-  if [ "$needpair" = "s" ] || [ "$needpair" = "S" ]; then
-    local pip pport pcode
-    pip="$(ask 'IP de pareamento (ex: 192.168.0.10)')"
-    pport="$(ask 'PORTA de pareamento')"
-    pcode="$(ask 'Código de 6 dígitos')"
-    info "Pareando ${pip}:${pport}…"
-    if printf '%s\n' "$pcode" | adb pair "${pip}:${pport}" 2>&1 | grep -qi 'Successfully paired'; then
-      ok "Pareado com sucesso."
-    else
-      warn "Pareamento não confirmado — tente o 'connect' mesmo assim ou refaça."
+# 1) Endereço IP — só números e pontos, 4 octetos de 0 a 255
+read_ip() {  # $1 = texto do prompt
+  local v prompt="$1"
+  while :; do
+    printf '%s' "${BLD}❯ ${prompt}${NC} "; read -r v
+    v=$(printf '%s' "$v" | tr -d '[:space:]')
+    if [ -z "$v" ]; then warn "Campo vazio. Digite o Endereço IP (ex: 192.168.0.10)."; continue; fi
+    case "$v" in
+      *[!0-9.]*) warn "O IP tem só NÚMEROS e PONTOS — você digitou outro caractere. Tente de novo (ex: 192.168.0.10)."; continue ;;
+    esac
+    if ( IFS=.; set -- $v; [ "$#" -eq 4 ] || exit 1; for o in "$@"; do { [ -n "$o" ] && [ "$o" -le 255 ] 2>/dev/null; } || exit 1; done; exit 0 ); then
+      REPLY_FIELD="$v"; return 0
     fi
+    warn "Formato de IP inválido. São 4 números de 0 a 255 separados por ponto (ex: 192.168.0.10)."
+  done
+}
+
+# 2/4) Porta — SÓ números. $2 = nome amigável ("de pareamento" / "de conexão")
+read_port() {  # $1 = prompt · $2 = nome
+  local v prompt="$1" nome="$2"
+  while :; do
+    printf '%s' "${BLD}❯ ${prompt}${NC} "; read -r v
+    v=$(printf '%s' "$v" | tr -d '[:space:]')
+    if [ -z "$v" ]; then warn "Campo vazio. Digite a PORTA ${nome} (só os números)."; continue; fi
+    case "$v" in
+      *[!0-9]*) warn "Você digitou letras ou símbolos num campo de NÚMEROS. Tente novamente a Porta ${nome} — só os números, sem o IP e sem os dois-pontos."; continue ;;
+    esac
+    REPLY_FIELD="$v"; return 0
+  done
+}
+
+# 3) Código de pareamento — EXATAMENTE 6 dígitos
+read_code() {  # $1 = prompt
+  local v prompt="$1"
+  while :; do
+    printf '%s' "${BLD}❯ ${prompt}${NC} "; read -r v
+    v=$(printf '%s' "$v" | tr -d '[:space:]')
+    case "$v" in
+      *[!0-9]*) warn "O código tem só NÚMEROS. Tente de novo o Código de Pareamento de 6 dígitos."; continue ;;
+    esac
+    if [ "${#v}" -ne 6 ]; then warn "O código precisa ter EXATAMENTE 6 dígitos — você digitou ${#v}. Tente de novo."; continue; fi
+    REPLY_FIELD="$v"; return 0
+  done
+}
+
+# ---------- 1. Conexão ADB Wi-Fi (passo a passo) ----------
+step_connect() {
+  hr; info "ETAPA 1/4 — Conexão ADB via Wi-Fi (passo a passo)"
+  printf '%s\n' "${DIM}  No CELULAR que vai ser escaneado, abra:
+    Configurações → Opções do Desenvolvedor → Depuração sem fio
+    → toque em 'Parear dispositivo com código de pareamento'
+
+  Vai abrir uma janela com  IP : PORTA  e um  CÓDIGO  de 6 dígitos.
+  Deixe essa janela ABERTA e preencha abaixo — um dado por vez.${NC}"
+
+  local ip ppair pcode pconn
+  read_ip   "1. Digite apenas o Endereço IP (ex: 192.168.0.10):";                                          ip="$REPLY_FIELD"
+  read_port "2. Digite os 5 números da PORTA (os números depois dos ':' na janela de pareamento):" "de pareamento"; ppair="$REPLY_FIELD"
+  read_code "3. Digite o Código de Pareamento de 6 dígitos:";                                              pcode="$REPLY_FIELD"
+
+  # Junta IP:Porta em segundo plano — o usuário não precisa saber a sintaxe
+  info "Pareando ${ip}:${ppair} …"
+  if printf '%s\n' "$pcode" | adb pair "${ip}:${ppair}" 2>&1 | grep -qi 'Successfully paired'; then
+    ok "Pareado com sucesso!"
+  else
+    warn "Pareamento não confirmado. Confira IP/Porta/Código e se a janela de pareamento ainda está aberta. Vou tentar conectar mesmo assim…"
   fi
 
-  # Connect (com retry)
-  local ip port tries=0 max=3
+  # No Android 11+ a porta de CONEXÃO é DIFERENTE da de pareamento. Tenta achar
+  # automaticamente via mDNS; se não der, pede ao usuário com instrução clara.
+  info "Procurando a porta de conexão do aparelho…"
+  pconn=$(adb mdns services 2>/dev/null | grep -i '_adb-tls-connect' | grep -oE "${ip}:[0-9]+" | head -1 | cut -d: -f2)
+  if [ -n "$pconn" ]; then
+    ok "Porta de conexão encontrada automaticamente: ${pconn}"
+  else
+    printf '%s\n' "${DIM}  Quase lá! Agora FECHE a janela de pareamento e fique na tela
+  'Depuração sem fio'. No alto dela aparece outro  IP : PORTA
+  — essa porta de CONEXÃO é diferente da de pareamento.${NC}"
+    read_port "4. Digite os números da PORTA de conexão (a da tela 'Depuração sem fio'):" "de conexão"; pconn="$REPLY_FIELD"
+  fi
+
+  # Connect com retry
+  local tries=0 max=3
   while [ "$tries" -lt "$max" ]; do
     tries=$((tries+1))
-    ip="$(ask 'IP de conexão (ex: 192.168.0.10)')"
-    port="$(ask 'PORTA de conexão')"
-    if ! printf '%s' "$ip" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$' || ! printf '%s' "$port" | grep -Eq '^[0-9]{2,5}$'; then
-      warn "IP ou porta com formato inválido. (tentativa ${tries}/${max})"; continue
-    fi
-    ADB_TARGET="${ip}:${port}"
-    info "Conectando em ${ADB_TARGET}…"
+    ADB_TARGET="${ip}:${pconn}"
+    info "Conectando em ${ADB_TARGET} … (tentativa ${tries}/${max})"
     adb connect "$ADB_TARGET" >/dev/null 2>&1
     sleep 1
     if [ "$(adb -s "$ADB_TARGET" get-state 2>/dev/null)" = "device" ]; then
-      ok "Conexão estabelecida e autorizada: ${ADB_TARGET}"
+      ok "Conectado e autorizado: ${ADB_TARGET}"
       adb -s "$ADB_TARGET" shell getprop ro.product.model 2>/dev/null \
         | tr -d '\r' | sed 's/^/   Modelo: /' || true
       return 0
     fi
     err "Não foi possível conectar/autorizar ${ADB_TARGET}. (tentativa ${tries}/${max})"
     adb disconnect "$ADB_TARGET" >/dev/null 2>&1 || true
+    if [ "$tries" -lt "$max" ]; then
+      read_port "Confira a PORTA de conexão na tela 'Depuração sem fio' e digite de novo:" "de conexão"; pconn="$REPLY_FIELD"
+    fi
   done
-  err "Conexão falhou após ${max} tentativas. Verifique Wi-Fi/pareamento e rode de novo."
+  err "Conexão falhou após ${max} tentativas. Confirme que o Termux e o celular estão no MESMO Wi-Fi e refaça o pareamento."
   exit 1
 }
 
@@ -351,7 +410,7 @@ pull_artifacts() {
       | xargs -0 sha256sum 2>/dev/null | sort ) > "${out}/_integrity_sha256.txt"
   local hashed; hashed="$(grep -c . "${out}/_integrity_sha256.txt" 2>/dev/null || echo 0)"
   {
-    echo "A4ther Audit · v4.4.63"
+    echo "A4ther Audit · v4.4.65"
     echo "data         : $(date '+%Y-%m-%d %H:%M:%S')"
     echo "alvo         : ${PKG_LABEL} (${PKG})"
     echo "device       : ${ADB_TARGET}"

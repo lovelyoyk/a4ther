@@ -1,5 +1,5 @@
 // ============================================================
-//  A4ther Systems v3.3.0 | LS Aluguel
+//  A4ther Systems v4.4.65 | LS Aluguel| LS Aluguel
 //  iOS Free Fire Anti-Cheat Scanner (Scriptable)
 //  Roda em iPhone SEM jailbreak via app Scriptable (gratuito App Store).
 //
@@ -13,7 +13,7 @@
 //    6. Vê o resultado
 // ============================================================
 
-const VERSION = "3.3.0";
+const VERSION = "4.4.65";
 
 // ============================================================
 //  DATA — bundles, domínios, IPs, TLDs, ASNs (109+ entries)
@@ -837,7 +837,7 @@ function buildResultTable(stats) {
     const hdr = new UITableRow();
     hdr.height = 80;
     hdr.isHeader = true;
-    const c = hdr.addText("A4THER SYSTEMS", `v${VERSION} ▪ LS Aluguel ▪ FF iOS Scanner`);
+    const c = hdr.addText("A4THER SYSTEMS", `v${VERSION} ▪A4ther Systems v4.4.65 | LS Aluguel ▪ FF iOS Scanner`);
     c.titleFont = Font.boldSystemFont(22);
     c.titleColor = Color.cyan();
     c.subtitleFont = Font.systemFont(12);
@@ -892,7 +892,7 @@ function buildResultTable(stats) {
 function buildTextReport(stats) {
     const lines = [];
     lines.push("=========================================");
-    lines.push(`  A4ther Systems v${VERSION} | LS Aluguel`);
+    lines.push(`  A4ther Systems v${VERSION} |A4ther Systems v4.4.65 | LS Aluguel`);
     lines.push("  Free Fire iOS Anti-Cheat Scanner");
     lines.push(`  ${new Date().toISOString()}`);
     lines.push("=========================================");
@@ -1126,7 +1126,7 @@ function buildProfileTable(profileInfo) {
     const hdr = new UITableRow();
     hdr.height = 80;
     hdr.isHeader = true;
-    const c = hdr.addText("A4THER SYSTEMS", `v${VERSION} ▪ LS Aluguel ▪ Profile Analyzer`);
+    const c = hdr.addText("A4THER SYSTEMS", `v${VERSION} ▪A4ther Systems v4.4.65 | LS Aluguel ▪ Profile Analyzer`);
     c.titleFont = Font.boldSystemFont(22);
     c.titleColor = Color.cyan();
     c.subtitleFont = Font.systemFont(12);
@@ -1433,6 +1433,92 @@ function tryListDir(folder, sub, fm) {
     return null;
 }
 
+// ============================================================
+//  BINARY PLIST (bplist00) SUPPORT  (v3.3.1)
+//  Scriptable não tem parser de plist nativo. Os profiles do MCState
+//  (.stub) e o MCSettingsEvents.plist/mcsettings.plist são BINARY plists:
+//  fm.readString() devolve null/lixo e data.toRawString() mistura os
+//  bytes, então as regexes que procuram <key>/identifiers nunca achavam
+//  nada. Aqui "convertemos" o bplist extraindo as strings legíveis (as
+//  chaves e values ASCII ficam em texto puro dentro do binário), que é o
+//  equivalente prático a converter bplist→XML antes de ler.
+// ============================================================
+const _B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function base64ToBytes(b64) {
+    if (!b64) return [];
+    const lookup = {};
+    for (let i = 0; i < _B64_ALPHABET.length; i++) lookup[_B64_ALPHABET[i]] = i;
+    const clean = String(b64).replace(/[^A-Za-z0-9+/]/g, "");
+    const bytes = [];
+    for (let i = 0; i < clean.length; i += 4) {
+        const c1 = lookup[clean[i]];
+        const c2 = lookup[clean[i + 1]];
+        const c3 = lookup[clean[i + 2]];
+        const c4 = lookup[clean[i + 3]];
+        if (c1 === undefined || c2 === undefined) break;
+        bytes.push(((c1 << 2) | (c2 >> 4)) & 0xff);
+        if (clean[i + 2] !== undefined && c3 !== undefined) bytes.push(((c2 << 4) | (c3 >> 2)) & 0xff);
+        if (clean[i + 3] !== undefined && c4 !== undefined) bytes.push(((c3 << 6) | c4) & 0xff);
+    }
+    return bytes;
+}
+
+// Lê bytes de um arquivo de forma estável entre versões do Scriptable:
+// passa por base64 (API garantida) em vez de depender de Data.bytes/getLength.
+function readFileBytes(fm, path) {
+    try {
+        const data = fm.read(path);
+        if (!data) return [];
+        return base64ToBytes(data.toBase64String());
+    } catch (e) {
+        return [];
+    }
+}
+
+// Extrai runs de caracteres imprimíveis (>= minLen) de um array de bytes.
+function extractStringsFromBytes(bytes, minLen) {
+    minLen = minLen || 4;
+    let out = "", cur = "";
+    for (let i = 0; i < bytes.length; i++) {
+        const b = bytes[i];
+        if (b >= 32 && b < 127) {
+            cur += String.fromCharCode(b);
+        } else {
+            if (cur.length >= minLen) out += cur + "\n";
+            cur = "";
+        }
+    }
+    if (cur.length >= minLen) out += cur + "\n";
+    return out;
+}
+
+// Lê um arquivo que pode ser XML plist, binary plist (bplist00) ou texto.
+// Para bplist, devolve as strings legíveis (pras nossas regexes). NUNCA lança.
+function readPlistText(fm, path) {
+    let raw = null;
+    try { raw = fm.readString(path); } catch (e) { raw = null; }
+    // XML plist / texto legível já serve direto.
+    if (raw && (raw.indexOf("<plist") !== -1 || raw.indexOf("<?xml") !== -1 ||
+                raw.indexOf("<key>") !== -1)) {
+        return raw;
+    }
+    // Senão, lê os bytes e detecta a assinatura "bplist".
+    const bytes = readFileBytes(fm, path);
+    if (bytes.length >= 8) {
+        const magic = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]);
+        if (magic === "bplist") {
+            return extractStringsFromBytes(bytes, 4);
+        }
+    }
+    // Sem magic mas com bytes: ainda tenta extrair strings (robusto p/ variantes).
+    if (bytes.length > 0) {
+        const extracted = extractStringsFromBytes(bytes, 4);
+        if (extracted && extracted.length >= 20) return extracted;
+    }
+    return raw || "";
+}
+
 async function scanSysdiagnoseApplications(folder, fm) {
     okItems.push("── Apps instalados (mobile_installation.log) ──");
     // PATH CORRETO confirmado: logs/MobileInstallation/mobile_installation.log[.0|.1|...]
@@ -1532,6 +1618,14 @@ async function scanSysdiagnoseApplications(folder, fm) {
             ffFound++;
         }
     }
+    // v3.3.1: ausência do FF nas logs é só AVISO, NUNCA erro crítico/W.O.
+    // O iOS rotaciona e limpa logs de apps de terceiros agressivamente, então não
+    // ter registro do FF no sysdiagnose é comportamento NORMAL do sistema — não é
+    // prova de fraude. A varredura continua normalmente.
+    if (ffFound === 0) {
+        warnings.push("[sysdiag/apps] Logs/registros do Free Fire não encontrados no sysdiagnose " +
+                      "(comportamento normal do iOS — NÃO é reprovação/W.O.)");
+    }
     // FF non-official re-sign
     for (const b of bundles) {
         if (b.toLowerCase().includes("freefire") && !FF_OFFICIAL.has(b) && !CHEAT_APPS[b]) {
@@ -1583,30 +1677,79 @@ async function scanSysdiagnoseProfiles(folder, fm) {
         // profile-*.stub são os profiles instalados (binary plists)
         if (!f.match(/\.(mobileconfig|plist|stub)$/i)) continue;
         const full = fm.joinPath(dirInfo.path, f);
+        // v3.3.1: leitura ciente de bplist. readString/toRawString devolvia lixo
+        // (ou nada) pra binary plist, então o parse via regex XML nunca achava as
+        // chaves. readPlistText detecta bplist00 e extrai as strings legíveis.
         let raw = "";
-        try { raw = fm.readString(full); } catch (e) {}
-        if (!raw) {
-            try {
-                const data = fm.read(full);
-                raw = data.toRawString();
-            } catch (e) {}
-        }
+        try { raw = readPlistText(fm, full); } catch (e) {}
         if (!raw || raw.length < 30) continue;
         profileCount++;
         if (f.endsWith(".stub")) stubsFound++;
-        // Use analyzeProfile com noReset + prefix
-        analyzeProfile(raw, { noReset: true, filePrefix: `MCState/${f}` });
+        // try/catch: 1 profile malformado não pode quebrar a varredura inteira.
+        try {
+            analyzeProfile(raw, { noReset: true, filePrefix: `MCState/${f}` });
+        } catch (e) {
+            warnings.push(`[MCState/${f}] erro ao analisar profile (ignorado): ${String(e)}`);
+        }
     }
     okItems.push(`${profileCount} profiles analisados (${stubsFound} stubs)`);
 
     // MCSettingsEvents.plist tem o histórico de install/remove de profiles
+    // v3.3.1: cobre MCSettingsEvents.plist + mcsettings.plist + ManagedPreferences
+    // (o "mcsettings" pedido) e lê com readPlistText (bplist→strings). Antes só
+    // tinha o tryReadFile (readString) que não lia binary plist.
     const eventsCandidates = [
         "logs/MCState/Shared/MCSettingsEvents.plist",
         "MCState/Shared/MCSettingsEvents.plist",
+        "logs/MCState/Shared/mcsettings.plist",
+        "MCState/Shared/mcsettings.plist",
+        "ManagedPreferences/mcsettings.plist",
+        "Library/ManagedPreferences/mcsettings.plist",
     ];
-    const er = tryReadFile(folder, eventsCandidates, fm);
+    let er = null;
+    for (const c of eventsCandidates) {
+        const p = joinFolderPath(folder, c, fm);
+        try {
+            if (fm.fileExists(p)) {
+                const txt = readPlistText(fm, p);
+                if (txt && txt.length > 0) { er = { path: p, raw: txt }; break; }
+            }
+        } catch (e) { /* ignore, tenta o próximo */ }
+    }
     if (er) {
         okItems.push(`MCSettingsEvents.plist presente (${er.raw.length} bytes)`);
+
+        // v3.3.1: classificação das chaves de SystemProfileRestrictions (paridade
+        // com o scanner web):
+        //   R1) blacklist (khoindvn/khodivn, happymod, skibidi + cheats) => CRÍTICO
+        //       MESMO com hífen (ex.: HappyMod-481BBE7E-...).
+        //   R2) hash hex contínuo (>=32) e SEM "-" => SUSPEITO.
+        //   R3) UUID com hífens / R4) com.apple. / operadora => ignora.
+        const SPR_BLACKLIST = /(khoindvn|khodivn|happymod|skibidi|esign|feather|ksign|gbox|scarlet|trollstore|sideload|iosgods|filza|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|geranium|frida|cycript|substrate|ffh4x|aimbot|wallhack|cheat|hack|mod[._-]?menu|injector|cracked|holograma|hologram)/i;
+        const SPR_UUID = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+        const SPR_NAME_UUID = /-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+        const SPR_HEX = /^[0-9A-Fa-f]{32,}$/;
+        const SPR_CARRIER = /(carrier|telephony|coretelephony)/i;
+        const sprSeen = new Set();
+        for (let tok of er.raw.split(/[^A-Za-z0-9._-]+/)) {
+            tok = tok.trim();
+            if (!tok || tok.length < 5 || tok.length > 256 || sprSeen.has(tok)) continue;
+            const isCand = SPR_BLACKLIST.test(tok) ||
+                /^[A-Za-z][A-Za-z0-9._-]*\.[A-Za-z0-9._-]+/.test(tok) ||
+                SPR_NAME_UUID.test(tok) || SPR_UUID.test(tok) || SPR_HEX.test(tok);
+            if (!isCand) continue;
+            sprSeen.add(tok);
+            if (SPR_BLACKLIST.test(tok)) {                                   // R1
+                const why = (tok.match(SPR_BLACKLIST) || [])[0] || "cheat";
+                alerts.push(`[CRITICAL] PROFILE (SystemProfileRestrictions): ${tok} — blacklist "${why}"`);
+            } else if (tok.startsWith("com.apple.") || SPR_CARRIER.test(tok)) {
+                /* R4: Apple/operadora => ignora */
+            } else if (tok.indexOf("-") !== -1 && (SPR_UUID.test(tok) || SPR_NAME_UUID.test(tok))) {
+                /* R3: UUID com hífen (cassino/ad/OS) => ignora */
+            } else if (SPR_HEX.test(tok) && tok.indexOf("-") === -1) {       // R2
+                warnings.push(`[SUSPEITO] PROFILE hash hex contínuo sem hífen: ${tok}`);
+            }
+        }
 
         // Extrai profile identifiers no conteúdo (XML ou binary com strings ASCII)
         const profileIdRegex = /(com\.[a-zA-Z][a-zA-Z0-9._-]+(?:profile)?(?:-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})?)/gi;
@@ -1898,9 +2041,46 @@ async function scanSysdiagnoseSystemInfo(folder, fm) {
         }
     }
 
-    // remotectl_dumpstate.txt — system info detalhado
-    const rd = tryReadFile(folder, ["remotectl_dumpstate.txt"], fm);
+    // remotectl_dumpstate.txt — system info detalhado + Serial/UDID/ProductType
+    const rd = tryReadFile(folder, [
+        "remotectl_dumpstate.txt",
+        "logs/remotectl_dumpstate.txt",
+    ], fm);
     if (rd) {
+        // v3.3.1: EXTRAÇÃO DO SERIAL NUMBER (antes inexistente). No sysdiagnose o
+        // serial do device fica em remotectl_dumpstate.txt como "SerialNumber => X"
+        // e/ou "IOPlatformSerialNumber" no IORegistry. Validamos o formato Apple
+        // (10-12 alfanuméricos) pra NÃO pegar serial de COMPONENTE (ex.: ChipID de
+        // 8 hex), que era o motivo clássico do serial vir errado/vazio.
+        const isAppleSerial = (s) => {
+            if (!s) return false;
+            const t = String(s).trim().toUpperCase();
+            if (!/^[A-Z0-9]{10,12}$/.test(t)) return false; // device serial = 10-12 chars
+            if (/^0+$/.test(t)) return false;               // tudo zero = placeholder
+            if (/^[0-9A-F]+$/.test(t) && t.length < 10) return false; // all-hex curto = componente
+            return true;
+        };
+        const serialPatterns = [
+            /IOPlatformSerialNumber["\s=:>()]+([A-Z0-9]{10,12})/i, // IORegistry (forte)
+            /\bSerialNumber\s*(?:=>|[:=])\s*"?([A-Z0-9]{10,12})"?/i, // dumpstate "=>"
+            /\bSerial\s*Number\s*[:=]\s*"?([A-Z0-9]{10,12})"?/i,
+        ];
+        let serial = null;
+        for (const re of serialPatterns) {
+            const m = rd.raw.match(re);
+            if (m && isAppleSerial(m[1])) { serial = m[1].toUpperCase(); break; }
+        }
+        if (serial) {
+            okItems.push(`Serial Number: ${serial}`);
+        } else {
+            warnings.push("Serial Number não localizado em remotectl_dumpstate.txt (checar manualmente)");
+        }
+        // Bônus úteis pro laudo: UDID + ProductType
+        const udidM = rd.raw.match(/UniqueDeviceID["\s=:>()]+([A-Fa-f0-9-]{20,45})/i);
+        if (udidM) okItems.push(`UDID: ${udidM[1]}`);
+        const ptM = rd.raw.match(/ProductType["\s=:>()]+([A-Za-z]+\d+,\d+)/i);
+        if (ptM) okItems.push(`ProductType: ${ptM[1]}`);
+
         // Procura JB indicators
         const jbHints = rd.raw.split("\n").filter(l =>
             /jailbroken|trollstore|sileo|cydia|frida|substrate|dopamine|palera1n/i.test(l)
@@ -1908,6 +2088,8 @@ async function scanSysdiagnoseSystemInfo(folder, fm) {
         for (const l of jbHints) {
             alerts.push(`[sysdiag/remotectl] ${l.substring(0, 180)}`);
         }
+    } else {
+        warnings.push("remotectl_dumpstate.txt não encontrado — Serial Number indisponível neste sysdiagnose");
     }
 }
 
@@ -2031,7 +2213,7 @@ async function runProfileAnalyzer() {
         const path = fm.joinPath(fm.documentsDirectory(), `a4ther_profile_${ts}.txt`);
         const lines = [];
         lines.push("=========================================");
-        lines.push(`  A4ther Systems v${VERSION} | LS Aluguel`);
+        lines.push(`  A4ther Systems v${VERSION} |A4ther Systems v4.4.65 | LS Aluguel`);
         lines.push("  iOS Profile Analyzer");
         lines.push(`  ${new Date().toISOString()}`);
         lines.push(`  Source: ${profile.path}`);
