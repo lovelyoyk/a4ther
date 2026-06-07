@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.67 | LS Aluguel
+#  A4ther Systems v4.4.68 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.67"
+VERSION="4.4.68"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -1868,10 +1868,59 @@ fi
 # Lista de keywords expandida (silent_aim, neck_aim, drip, luxe, hgmods, etc.)
 if have find; then
     SMART_IGNORE='Android/data|Android/obb|DCIM|Pictures|Movies|Music|WhatsApp|Telegram|\.thumbnails|FreeFire|com\.dts\.'
-    SMART_KEYS='aim(bot|lock|assist)|silent.?aim|neck.?aim|no.?recoil|recoil.?off|wall.?(view|hack)|visionhack|overlayhack|injector|memoryhack|memhack|speedhack|bypass|mod.?menu|cheat.?panel|vip.?tool|ff.?tool|macro.?fire|script.?aim|passador|replay.?(tool|edit)|drip.?mod|luxe.?mod|hgmods|shizuku.?ff|mt.?manager.?ff|ffh4x|fatality|polar.?bear|teambot|op999|panelff|nova.?esp|huyjit|esp.?ff|gameguardian|gg.?script|lua.?ff|holograma|hologram(?:_|ff|mod|cheat)?|holo.?(ff|mod|cheat|hack|panel)'
+    # v4.4.68: assinaturas de cheat como LISTA — 1 padrão ERE por linha. O grep -E
+    # trata cada linha como um -e separado (OR implícito), então não precisa da
+    # regex-monstro numa linha só (estourava limite/sintaxe) e fica fácil de
+    # manter/expandir. Sintaxe ERE pura: nada de (?:...) PCRE — só (...) e .?.
+    # (corrige o crash 'grep: bad regex ... repetition-operator operand invalid'
+    #  causado por  hologram(?:_|ff|mod|cheat)?  — o (?: não existe em ERE.)
+    SMART_SIGS=$(cat <<'SIGS'
+aim(bot|lock|assist)
+silent.?aim
+neck.?aim
+no.?recoil
+recoil.?off
+wall.?(view|hack)
+visionhack
+overlayhack
+injector
+memoryhack
+memhack
+speedhack
+bypass
+mod.?menu
+cheat.?panel
+vip.?tool
+ff.?tool
+macro.?fire
+script.?aim
+passador
+replay.?(tool|edit)
+drip.?mod
+luxe.?mod
+hgmods
+shizuku.?ff
+mt.?manager.?ff
+ffh4x
+fatality
+polar.?bear
+teambot
+op999
+panelff
+nova.?esp
+huyjit
+esp.?ff
+gameguardian
+gg.?script
+lua.?ff
+holograma
+hologram(_|ff|mod|cheat)?
+holo.?(ff|mod|cheat|hack|panel)
+SIGS
+)
     SMART_RES=$(find /storage/emulated/0 -type f -newermt "2026-01-01" 2>/dev/null \
         | grep -viE "$SMART_IGNORE" \
-        | grep -iE "$SMART_KEYS" \
+        | grep -iE "$SMART_SIGS" \
         | head -20)
     if [ -n "$SMART_RES" ]; then
         echo "$SMART_RES" | while IFS= read -r L; do

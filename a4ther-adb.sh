@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/env bash
 # ============================================================
 #  a4ther — Auditoria de integridade Free Fire via ADB Wi-Fi
-#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.67
+#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.68
 #
 #  Assistente passo a passo para auditoria CONSENTIDA de um
 #  dispositivo Android (o dono precisa habilitar a Depuração
@@ -65,7 +65,7 @@ banner() {
   / __ | / // /_/ __/ _ \/ -_) __/
  /_/ |_|/_//_/(_)__/_//_/\__/_/    AUDIT · ADB Wi-Fi
 EOF
-  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.67${NC}"
+  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.68${NC}"
   hr
 }
 
@@ -442,7 +442,7 @@ pull_artifacts() {
       | xargs -0 sha256sum 2>/dev/null | sort ) > "${out}/_integrity_sha256.txt"
   local hashed; hashed="$(grep -c . "${out}/_integrity_sha256.txt" 2>/dev/null || echo 0)"
   {
-    echo "A4ther Audit · v4.4.67"
+    echo "A4ther Audit · v4.4.68"
     echo "data         : $(date '+%Y-%m-%d %H:%M:%S')"
     echo "alvo         : ${PKG_LABEL} (${PKG})"
     echo "device       : ${ADB_TARGET}"
