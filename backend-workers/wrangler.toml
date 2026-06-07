@@ -1,0 +1,28 @@
+name = "a4ther-api"
+main = "worker.js"
+compatibility_date = "2026-05-01"
+workers_dev = true
+
+# ─── D1 Database (SQLite serverless) ───
+# 1) Cria o DB:  npx wrangler d1 create a4ther-db
+# 2) Cola o database_id que ele retorna abaixo:
+[[d1_databases]]
+binding       = "DB"
+database_name = "a4ther-db"
+database_id   = "REPLACE_WITH_D1_ID"
+
+# ─── Env vars ───
+[vars]
+ALLOWED_ORIGINS = "https://lovelyoyk.github.io,https://lspainel.com.br,https://a4ther.lspainel.com.br,http://localhost:5173,http://192.168.1.145:5173"
+
+# Secret (não vai aqui — usar: npx wrangler secret put ADMIN_TOKEN)
+# ADMIN_TOKEN = (set via secret)
+
+# ─── Custom domain opcional ───
+# Em CF dashboard → Workers & Pages → seu worker → Settings → Domains & Routes
+# Adicionar: api.lspainel.com.br
+# Ou rota: lspainel.com.br/api/a4ther/*  (Workers Route)
+
+# [[routes]]
+# pattern = "api.lspainel.com.br/*"
+# custom_domain = true
