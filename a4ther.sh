@@ -4314,7 +4314,7 @@ for TWKDIR in /Library/MobileSubstrate/DynamicLibraries \
               /var/jb/usr/lib/TweakInject; do
     if [ -d "$TWKDIR" ]; then
         info "Tweaks em $TWKDIR:"
-        ls "$TWKDIR" 2>/dev/null | grep -i '\.dylib$\|\.plist$' | while IFS= read -r T; do
+        ls "$TWKDIR" 2>/dev/null | grep -iE '\.(dylib|plist)$' | while IFS= read -r T; do
             [ -z "$T" ] && continue
             case "$T" in
                 *cheat*|*hack*|*mod*|*aim*|*esp*|*wallhack*|*ff*|*freefire*|*macro*|*helper*|*menu*)
@@ -4532,7 +4532,7 @@ for BID in $FF_IOS_BUNDLES; do
             # checar se app é assinado pela App Store
             EMBED_PROV="$APP_DIR/embedded.mobileprovision"
             if [ -f "$EMBED_PROV" ]; then
-                if strings "$EMBED_PROV" 2>/dev/null | grep -q 'AppleAppStoreUpdateConfiguration\|ProductionIOS'; then
+                if strings "$EMBED_PROV" 2>/dev/null | grep -qE 'AppleAppStoreUpdateConfiguration|ProductionIOS'; then
                     ok "  Assinatura: App Store (OFICIAL)"
                 else
                     alert "  Assinatura NAO-AppStore (sideload/modded)"

@@ -368,7 +368,11 @@ step_scan() {
   hr
 
   # 4) Só LOCALIZA o .txt no device (NÃO puxa — fica pro save opcional)
-  REMOTE_RPT="$(adb -s "$ADB_TARGET" shell "ls -t /sdcard/a4ther/a4ther_reports/scan_*.txt 2>/dev/null | head -n1" | tr -d '\r')"
+  # v4.4.68: o a4ther.sh agora salva em Download/a4ther_audits — procura lá
+  # PRIMEIRO; mantém os paths antigos como fallback pra não quebrar device velho.
+  REMOTE_RPT="$(adb -s "$ADB_TARGET" shell "ls -t /sdcard/Download/a4ther_audits/scan_*.txt 2>/dev/null | head -n1" | tr -d '\r')"
+  [ -z "$REMOTE_RPT" ] && REMOTE_RPT="$(adb -s "$ADB_TARGET" shell "ls -t /sdcard/a4ther_audits/scan_*.txt 2>/dev/null | head -n1" | tr -d '\r')"
+  [ -z "$REMOTE_RPT" ] && REMOTE_RPT="$(adb -s "$ADB_TARGET" shell "ls -t /sdcard/a4ther/a4ther_reports/scan_*.txt 2>/dev/null | head -n1" | tr -d '\r')"
   [ -z "$REMOTE_RPT" ] && REMOTE_RPT="$(adb -s "$ADB_TARGET" shell "ls -t /sdcard/Download/scan_*.txt 2>/dev/null | head -n1" | tr -d '\r')"
 
   # 5) RESUMO consolidado de críticos/suspeitos NA TELA
@@ -499,6 +503,11 @@ save_dump() {
   hr
   ok "Dump salvo em:"
   printf '   %s\n' "${BLD}${AUDIT_DIR}${NC}"
+  # v4.4.68: instrução de acesso conforme onde o save caiu
+  case "$AUDIT_DIR" in
+    */Download/*)             info "No celular: ${BLD}Gerenciador de Arquivos → Download → a4ther_audits${NC}" ;;
+    "${HOME}"/*|/data/data/*) warn "Pasta do Termux (invisível no Gerenciador). No PC puxe com: ${BLD}adb pull ${AUDIT_DIR}${NC}" ;;
+  esac
   [ -n "$SCAN_TXT" ] && \
   printf '   %s\n' "${GRN}• $(basename "$SCAN_TXT")   ← RELATÓRIO p/ enviar ao A4ther${NC}"
   printf '   %s\n' "${DIM}• _scan_console.log     (saída completa do scan)${NC}"
