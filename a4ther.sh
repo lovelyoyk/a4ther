@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.66 | LS Aluguel
+#  A4ther Systems v4.4.67 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.66"
+VERSION="4.4.67"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -25,19 +25,20 @@ else
 fi
 
 # ---------- Relatório ----------
-# v4.4.2: ordem ALTERADA — /sdcard primeiro pra o .txt ficar no gerenciador de
-# arquivos do Android (Termux $HOME só é visível dentro do Termux, user perdia
-# o arquivo). Se /sdcard não writable (sem termux-setup-storage), cai pro HOME.
+# v4.4.67: salva na RAIZ do armazenamento interno (/storage/emulated/0/a4ther_audits)
+# pra o .txt aparecer no gerenciador de arquivos do celular. O $HOME do Termux só
+# é visível dentro do Termux (o user perdia o arquivo). Só cai pro HOME se o
+# storage não estiver acessível (sem termux-setup-storage / sem permissão).
 TS=$(date '+%Y%m%d_%H%M%S' 2>/dev/null)
 [ -z "$TS" ] && TS="scan"
 REPORT=""
 REPORT_DIR_TRIED=""
-for D in /sdcard/a4ther /storage/emulated/0/a4ther "$HOME" /sdcard /storage/emulated/0 /data/local/tmp /tmp .; do
+for D in /storage/emulated/0 /sdcard "$HOME/storage/shared" "$HOME" /data/local/tmp /tmp .; do
     REPORT_DIR_TRIED="$REPORT_DIR_TRIED $D"
     [ -d "$D" ] || mkdir -p "$D" 2>/dev/null
     [ -d "$D" ] && [ -w "$D" ] || continue
-    if mkdir -p "$D/a4ther_reports" 2>/dev/null; then
-        REPORT="$D/a4ther_reports/scan_${TS}.txt"
+    if mkdir -p "$D/a4ther_audits" 2>/dev/null; then
+        REPORT="$D/a4ther_audits/scan_${TS}.txt"
         : > "$REPORT" 2>/dev/null && break
         REPORT=""
     fi
@@ -2807,6 +2808,59 @@ header "PROXY CHEATS / FF NETWORK / CHEAT INFRA"
 
 PROXY_NET_HITS=0
 
+# 0) v4.4.67 — VARREDURA AGRESSIVA DE REDE: interfaces virtuais, proxies locais,
+#    Private DNS e módulos/apps de bypass. VPN/túnel/proxy local é o vetor nº1
+#    de cheat de rede no FF (redireciona o tráfego do jogo por um MITM/painel).
+
+# 0a) Interfaces de túnel/VPN ATIVAS (tun0/ppp0/wg0/…)
+for IFACE in tun0 tun1 tun2 ppp0 ppp1 tap0 wg0 vpn0 ipsec0; do
+    if ip link show "$IFACE" 2>/dev/null | grep -q 'state UP' \
+       || ip addr show "$IFACE" 2>/dev/null | grep -q 'inet '; then
+        alert "  INTERFACE VIRTUAL ATIVA: ${IFACE} (VPN/túnel — pode mascarar a infra do FF)"
+        PROXY_NET_HITS=$((PROXY_NET_HITS+1))
+    fi
+done
+if [ -r /proc/net/dev ]; then
+    VIRT_IF=$(awk -F: 'NR>2{gsub(/ /,"",$1); if($1 ~ /^(tun|ppp|tap|wg|vpn|ipsec)[0-9]/) print $1}' /proc/net/dev 2>/dev/null | tr '\n' ' ')
+    [ -n "$VIRT_IF" ] && warn "  Interfaces de túnel em /proc/net/dev: ${VIRT_IF}"
+fi
+
+# 0b) PROXY LOCAL escutando (ss/netstat): porta local em LISTEN = ponto de MITM.
+_NETLISTEN=""
+if have ss; then _NETLISTEN=$(ss -tln 2>/dev/null)
+elif have netstat; then _NETLISTEN=$(netstat -tln 2>/dev/null); fi
+if [ -n "$_NETLISTEN" ]; then
+    PROXY_PORTS=$(printf '%s\n' "$_NETLISTEN" | grep -oE '127\.0\.0\.1:(1080|3128|8080|8081|8000|8888|9090|9050|6573|8118|10808|10809|7890|7891|8123|1087|8889)' | sort -u | tr '\n' ' ')
+    [ -n "$PROXY_PORTS" ] && { alert "  PROXY LOCAL em LISTEN: ${PROXY_PORTS}(MITM/painel de cheat?)"; PROXY_NET_HITS=$((PROXY_NET_HITS+1)); }
+fi
+
+# 0c) Private DNS custom (DNS-over-TLS próprio pode rotear/filtrar a infra do jogo)
+PDNS_MODE=$(setting_get global private_dns_mode)
+PDNS_HOST=$(setting_get global private_dns_specifier)
+case "$PDNS_MODE" in
+    hostname|on) [ -n "$PDNS_HOST" ] && warn "  Private DNS custom ativo: ${PDNS_HOST} (revisar)" ;;
+esac
+
+# 0d) MÓDULOS root (Magisk/KSU) focados em BYPASS DE REDE
+for MODROOT in /data/adb/modules /data/adb/modules_update /sbin/.magisk/modules; do
+    [ -d "$MODROOT" ] || continue
+    NETMODS=$(ls "$MODROOT" 2>/dev/null | grep -iE 'proxy|tunnel|clash|v2ray|xray|trojan|mitm|burp|sslunpin|dns|vpn|warp|tun2|netbypass|hostfix|ff[._-]?net|garena')
+    for M in $NETMODS; do
+        alert "  MÓDULO de rede (root): ${MODROOT##*/}/${M} (bypass/proxy/MITM)"
+        PROXY_NET_HITS=$((PROXY_NET_HITS+1))
+    done
+done
+
+# 0e) Apps de captura/proxy/VPN local instalados (interceptam o tráfego do FF)
+if have pm; then
+    NETAPPS=$(pm list packages 2>/dev/null | sed 's/^package://' \
+        | grep -iE 'httpcanary|packagecapture|http\.injector|netcapture|networkcapture|mitmproxy|charles|burp|clash|kr328|v2ray|napsternet|drony|postern|proxydroid|com\.evozi|sniffer|tcpdump' | head -10)
+    for A in $NETAPPS; do
+        alert "  APP de captura/proxy/VPN: ${A} (intercepta o tráfego do jogo)"
+        PROXY_NET_HITS=$((PROXY_NET_HITS+1))
+    done
+fi
+
 # 1) Conexões ATIVAS do processo Free Fire via /proc/<pid>/net/tcp
 if have pidof; then
     for PKG in $FF_PKGS; do
@@ -3599,44 +3653,45 @@ fi
 # ============================================================
 header "HWID"
 
-# ─── SERIAL ─── v4.4.32: 13 fontes em ordem de prioridade
-# A maioria falha em Android 10+ pra UID não-privilegiado (Termux), mas alguns
-# devices vendor expõem em paths /sys que não estão bloqueados.
-SERIAL=$(gp ro.serialno)
-[ -z "$SERIAL" ] && SERIAL=$(gp ro.boot.serialno)
-[ -z "$SERIAL" ] && SERIAL=$(gp ro.boot.em.serial)
-[ -z "$SERIAL" ] && SERIAL=$(gp ril.serialnumber)
-# kernel cmdline guarda o serial da boot (passa do bootloader pro kernel)
-[ -z "$SERIAL" ] && SERIAL=$(cat /proc/cmdline 2>/dev/null | grep -oE 'androidboot\.serialno=[^ ]+' | cut -d= -f2 | head -1)
-# vendor-specific (alguns kernels expõem em /sys/class)
-[ -z "$SERIAL" ] && SERIAL=$(cat /sys/class/android_usb/android0/iSerial 2>/dev/null)
-[ -z "$SERIAL" ] && SERIAL=$(cat /sys/class/android_usb/f_mass_storage/lun/file 2>/dev/null | head -c 64)
-# v4.4.32: fontes adicionais (vendor-specific)
-# Qualcomm SoC serial (sempre disponível em Snapdragon, raramente bloqueado)
-[ -z "$SERIAL" ] && SERIAL=$(cat /sys/devices/soc0/serial_number 2>/dev/null)
-[ -z "$SERIAL" ] && SERIAL=$(cat /sys/devices/system/soc/soc0/serial_number 2>/dev/null)
-# MediaTek SoC
-[ -z "$SERIAL" ] && SERIAL=$(cat /proc/mt_efuse 2>/dev/null | grep -oE '[A-F0-9]{16,}' | head -1)
-# Samsung-specific
-[ -z "$SERIAL" ] && SERIAL=$(gp ro.serialno.fact)
-[ -z "$SERIAL" ] && SERIAL=$(gp ril.product_code)
-# Xiaomi/MIUI/HyperOS (v4.4.57: + props específicas do HyperOS / Redmi)
-[ -z "$SERIAL" ] && SERIAL=$(gp ro.ril.miui.imei0)
-[ -z "$SERIAL" ] && SERIAL=$(gp ro.boot.cpuid)
-[ -z "$SERIAL" ] && SERIAL=$(gp persist.radio.serialno)
-[ -z "$SERIAL" ] && SERIAL=$(gp ro.boot.hardware.revision)
-[ -z "$SERIAL" ] && SERIAL=$(cat /sys/devices/platform/soc/soc0/serial_number 2>/dev/null)
-[ -z "$SERIAL" ] && SERIAL=$(cat /proc/serial_number 2>/dev/null | head -c 64)
-# HyperOS guarda em /sys/devices/platform/.../serial às vezes
-[ -z "$SERIAL" ] && SERIAL=$(find /sys/devices -maxdepth 4 -name 'serial_number' 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -c 64)
-# OPPO/realme
-[ -z "$SERIAL" ] && SERIAL=$(gp ril.serial)
-# service call iphonesubinfo — funciona em uid 2000 (shell), raramente em Termux
-[ -z "$SERIAL" ] && have service && \
-    SERIAL=$(service call iphonesubinfo 1 2>/dev/null | grep -oE "'[A-Z0-9]+'" | tr -d "'" | head -1)
-# v4.4.57: getprop direto via service call (uid 2000 destrava muitos)
-[ -z "$SERIAL" ] && have service && [ "$_IS_SHELL" = "1" ] && \
-    SERIAL=$(service call iphonesubinfo 4 2>/dev/null | grep -oE "'[A-Z0-9]+'" | tr -d "'" | head -1)
+# ─── SERIAL ─── v4.4.67: prioriza o serial REAL do hardware; o ro.boot.serialno
+# (= "Boot serial") vai por ÚLTIMO. Antes ele era a 2ª fonte e, no Android 10+
+# (onde ro.serialno volta vazio p/ UID não-privilegiado), o "Serial" acabava
+# ESPELHANDO o "Boot serial". Agora rastreia a FONTE (SERIAL_SRC), valida o
+# candidato e só cai no boot serial se nenhuma fonte real responder. O
+# `service call iphonesubinfo` (uid 2000/shell) destrava o IMEI/serial real.
+SERIAL=""; SERIAL_SRC=""
+# parser do `service call` (parcel UTF-16 → ascii): conteúdo entre aspas de cada
+# linha (1 caractere real + \0, que o dump mostra como '.'), sem os '.'/espaços.
+_svc() { awk -F"'" 'NF>1{printf "%s",$2}' 2>/dev/null | tr -d '. '; }
+# _ser <fonte> <valor>: aceita o 1º candidato VÁLIDO (>=6 alfanum, sem erro/0).
+_ser() {
+    [ -n "$SERIAL" ] && return 0
+    case "$2" in ""|*Failure*|*Exception*|*error*|null|unknown|0|00000000|0x0) return 0 ;; esac
+    printf '%s' "$2" | grep -qE '^[A-Za-z0-9_.:-]{6,}$' || return 0
+    SERIAL="$2"; SERIAL_SRC="$1"
+}
+_ser ro.serialno              "$(gp ro.serialno)"
+[ -z "$SERIAL" ] && have service && _ser iphonesubinfo "$(service call iphonesubinfo 1 2>/dev/null | _svc)"
+_ser ro.vendor.boot.serialno  "$(gp ro.vendor.boot.serialno)"
+_ser ril.serialnumber         "$(gp ril.serialnumber)"
+_ser ro.serialno.fact         "$(gp ro.serialno.fact)"
+_ser ro.boot.em.serial        "$(gp ro.boot.em.serial)"
+_ser ril.serial               "$(gp ril.serial)"
+_ser ril.product_code         "$(gp ril.product_code)"
+# SoC serial (/sys) — identificador real, raramente bloqueado pelo privacy lock
+_ser soc0                     "$(cat /sys/devices/soc0/serial_number 2>/dev/null)"
+_ser soc0-sys                 "$(cat /sys/devices/system/soc/soc0/serial_number 2>/dev/null)"
+_ser platform-soc0            "$(cat /sys/devices/platform/soc/soc0/serial_number 2>/dev/null)"
+_ser mt_efuse                 "$(cat /proc/mt_efuse 2>/dev/null | grep -oE '[A-F0-9]{16,}' | head -1)"
+_ser android_usb              "$(cat /sys/class/android_usb/android0/iSerial 2>/dev/null)"
+_ser sys-serial               "$(find /sys/devices -maxdepth 4 -name 'serial_number' 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -c 64)"
+_ser proc-serial              "$(cat /proc/serial_number 2>/dev/null | head -c 64)"
+_ser ro.ril.miui.imei0        "$(gp ro.ril.miui.imei0)"
+_ser ro.boot.cpuid            "$(gp ro.boot.cpuid)"
+_ser persist.radio.serialno   "$(gp persist.radio.serialno)"
+# ÚLTIMO recurso — é o próprio "Boot serial" (espelha quando nada acima respondeu)
+_ser ro.boot.serialno         "$(gp ro.boot.serialno)"
+_ser cmdline                  "$(cat /proc/cmdline 2>/dev/null | grep -oE 'androidboot\.serialno=[^ ]+' | cut -d= -f2 | head -1)"
 
 # ─── BOOT SERIAL ─── 4 fontes
 BOOT_SERIAL=$(gp ro.boot.serialno)
@@ -3745,7 +3800,11 @@ elif have md5; then
     HASH_HWID_ALT=$(printf '%s' "$HWID_ALT_RAW" | md5 -q 2>/dev/null)
 fi
 
-info "Serial:        ${SERIAL:-?}"
+if [ -n "$SERIAL" ] && [ -n "$BOOT_SERIAL" ] && [ "$SERIAL" = "$BOOT_SERIAL" ]; then
+    info "Serial:        ${SERIAL}  (= Boot serial; fonte: ${SERIAL_SRC:-boot})"
+else
+    info "Serial:        ${SERIAL:-?}${SERIAL_SRC:+  (fonte: ${SERIAL_SRC})}"
+fi
 info "Boot serial:   ${BOOT_SERIAL:-?}"
 info "MAC wlan0:     ${MAC:-?}"
 info "Bluetooth MAC: ${BT_MAC:-?}"

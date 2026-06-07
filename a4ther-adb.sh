@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/env bash
 # ============================================================
 #  a4ther — Auditoria de integridade Free Fire via ADB Wi-Fi
-#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.66
+#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.67
 #
 #  Assistente passo a passo para auditoria CONSENTIDA de um
 #  dispositivo Android (o dono precisa habilitar a Depuração
@@ -65,13 +65,32 @@ banner() {
   / __ | / // /_/ __/ _ \/ -_) __/
  /_/ |_|/_//_/(_)__/_//_/\__/_/    AUDIT · ADB Wi-Fi
 EOF
-  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.66${NC}"
+  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.67${NC}"
   hr
 }
 
 # ---------- Config ----------
 TS="$(date +%Y%m%d_%H%M%S)"
-OUT_ROOT="${HOME}/a4ther/audits"
+# v4.4.67: salva no armazenamento INTERNO compartilhado (/storage/emulated/0),
+# visível no gerenciador de arquivos do celular — não mais no $HOME do Termux
+# (que só é acessível dentro do Termux). Pede permissão de storage se faltar.
+_pick_outroot() {
+  local D
+  for D in /storage/emulated/0 /sdcard "${HOME}/storage/shared"; do
+    [ -d "$D" ] && [ -w "$D" ] && { printf '%s' "$D/a4ther_audits"; return 0; }
+  done
+  if command -v termux-setup-storage >/dev/null 2>&1; then
+    warn "Preciso de permissão de armazenamento pra salvar o relatório onde você consegue abrir."
+    info "Vou abrir o pedido de permissão — ACEITE na janela do Android…"
+    termux-setup-storage 2>/dev/null; sleep 2
+    for D in "${HOME}/storage/shared" /storage/emulated/0 /sdcard; do
+      [ -d "$D" ] && [ -w "$D" ] && { printf '%s' "$D/a4ther_audits"; return 0; }
+    done
+  fi
+  warn "Sem acesso ao armazenamento interno — salvando dentro do Termux (${HOME}/a4ther_audits)."
+  printf '%s' "${HOME}/a4ther_audits"
+}
+OUT_ROOT="$(_pick_outroot)"
 ADB_TARGET=""        # ip:porta do connect
 PKG=""               # pacote escolhido
 PKG_LABEL=""
@@ -423,7 +442,7 @@ pull_artifacts() {
       | xargs -0 sha256sum 2>/dev/null | sort ) > "${out}/_integrity_sha256.txt"
   local hashed; hashed="$(grep -c . "${out}/_integrity_sha256.txt" 2>/dev/null || echo 0)"
   {
-    echo "A4ther Audit · v4.4.66"
+    echo "A4ther Audit · v4.4.67"
     echo "data         : $(date '+%Y-%m-%d %H:%M:%S')"
     echo "alvo         : ${PKG_LABEL} (${PKG})"
     echo "device       : ${ADB_TARGET}"
@@ -442,7 +461,7 @@ save_dump() {
     s|S) : ;;
     *)
       # salvaguarda: só apaga se o caminho for MESMO a pasta de audits desta run
-      case "$AUDIT_DIR" in */a4ther/audits/*) [ -n "$AUDIT_DIR" ] && rm -rf "$AUDIT_DIR" 2>/dev/null ;; esac
+      case "$AUDIT_DIR" in */a4ther_audits/*|*/a4ther/audits/*) [ -n "$AUDIT_DIR" ] && rm -rf "$AUDIT_DIR" 2>/dev/null ;; esac
       # limpa o rastro NO DEVICE também: o .txt que o a4ther.sh gerou + cópia em
       # Downloads + o script enviado. Assim "não salvar" = nada fica em lugar nenhum.
       if [ -n "$REMOTE_RPT" ]; then
