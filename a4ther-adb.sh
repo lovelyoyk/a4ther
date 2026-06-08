@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/env bash
 # ============================================================
 #  a4ther — Auditoria de integridade Free Fire via ADB Wi-Fi
-#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.70
+#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.74
 #
 #  Assistente passo a passo para auditoria CONSENTIDA de um
 #  dispositivo Android (o dono precisa habilitar a Depuração
@@ -12,9 +12,11 @@
 #    4) Scan COMPLETO device + FF VIA adb shell (uid 2000 → destrava
 #       serial/HWID/dumpsys). Os RESULTADOS (críticos/suspeitos) são
 #       exibidos DIRETO na tela do Termux + um RESUMO consolidado.
-#  No FINAL: pergunta se deseja SALVAR o dump completo da análise
-#  (relatório .txt + artefatos sensíveis + manifesto SHA-256). Se não,
-#  nada é salvo no Termux — a análise fica só na tela (independente).
+#  No FINAL: gera UM ÚNICO arquivo .txt (A4THER_UPLOAD_SITE_<data>.txt) na
+#  pasta Download, juntando relatório + lista de artefatos + hashes SHA-256 +
+#  detecção de rede num só arquivo — é ESSE que o cliente sobe no site. A pasta
+#  de backup (log completo) é opcional. v4.4.69: saída unificada + performance
+#  (round-trips adb agrupados/paralelos; sem loop de `adb pull` por arquivo).
 #
 #  Instalação como comando `a4ther`:
 #    cp a4ther-adb.sh $PREFIX/bin/a4ther && chmod +x $PREFIX/bin/a4ther
@@ -65,7 +67,7 @@ banner() {
   / __ | / // /_/ __/ _ \/ -_) __/
  /_/ |_|/_//_/(_)__/_//_/\__/_/    AUDIT · ADB Wi-Fi
 EOF
-  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.70${NC}"
+  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.74${NC}"
   hr
 }
 
@@ -99,15 +101,27 @@ _pick_outroot() {
   printf '%s' "${HOME}/a4ther_audits"
 }
 OUT_ROOT="$(_pick_outroot)"
+# DL_ROOT = pasta PÚBLICA onde o arquivo ÚNICO de upload vai ficar (fácil de achar
+# no Gerenciador de Arquivos). OUT_ROOT termina em /a4ther_audits → DL_ROOT é o pai
+# (a própria pasta Download). Se o save caiu no HOME do Termux, fica no HOME mesmo.
+case "$OUT_ROOT" in
+  */a4ther_audits) DL_ROOT="${OUT_ROOT%/a4ther_audits}" ;;
+  *)               DL_ROOT="$OUT_ROOT" ;;
+esac
 ADB_TARGET=""        # ip:porta do connect
 PKG=""               # pacote escolhido
 PKG_LABEL=""
-AUDIT_DIR=""         # pasta de saída desta auditoria (definida no step_scan)
+AUDIT_DIR=""         # pasta de BACKUP desta auditoria (log completo; opcional)
 REMOTE_A4=""         # caminho do a4ther.sh no device
-REMOTE_RPT=""        # caminho do scan_*.txt NO DEVICE (puxado só se o user salvar)
-LOG_FILE=""          # log da saída do scan (resumo é montado daqui)
-SCAN_TXT=""          # .txt oficial — preenchido só quando o user OPTA por salvar
+REMOTE_RPT=""        # caminho do scan_*.txt NO DEVICE (só p/ limpar rastro)
+LOG_FILE=""          # log da saída do scan (resumo + relatório são montados daqui)
+MASTER_TXT=""        # >>> o ARQUIVO ÚNICO que o cliente sobe no site <<<
+DEV_META=""          # meta do device (1 chamada adb agrupada)
+SHA_MANIFEST=""      # manifesto SHA-256 dos artefatos (1 chamada adb, hash no device)
 A4_URL="https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh"
+
+# Remove códigos de cor ANSI (o relatório vai limpo pro .txt que o site parseia).
+strip_color() { sed -E 's/\x1B\[[0-9;]*[mK]//g' 2>/dev/null; }
 
 # ---------- 0. Dependências ----------
 ensure_adb() {
@@ -367,15 +381,9 @@ step_scan() {
     | tee "$LOG_FILE"
   hr
 
-  # 4) Só LOCALIZA o .txt no device (NÃO puxa — fica pro save opcional)
-  # v4.4.68: o a4ther.sh agora salva em Download/a4ther_audits — procura lá
-  # PRIMEIRO; mantém os paths antigos como fallback pra não quebrar device velho.
-  REMOTE_RPT="$(adb -s "$ADB_TARGET" shell "ls -t /sdcard/Download/a4ther_audits/scan_*.txt 2>/dev/null | head -n1" | tr -d '\r')"
-  [ -z "$REMOTE_RPT" ] && REMOTE_RPT="$(adb -s "$ADB_TARGET" shell "ls -t /sdcard/a4ther_audits/scan_*.txt 2>/dev/null | head -n1" | tr -d '\r')"
-  [ -z "$REMOTE_RPT" ] && REMOTE_RPT="$(adb -s "$ADB_TARGET" shell "ls -t /sdcard/a4ther/a4ther_reports/scan_*.txt 2>/dev/null | head -n1" | tr -d '\r')"
-  [ -z "$REMOTE_RPT" ] && REMOTE_RPT="$(adb -s "$ADB_TARGET" shell "ls -t /sdcard/Download/scan_*.txt 2>/dev/null | head -n1" | tr -d '\r')"
-
-  # 5) RESUMO consolidado de críticos/suspeitos NA TELA
+  # 4) RESUMO consolidado de críticos/suspeitos NA TELA (lido do log local —
+  #    zero round-trip adb). A localização do .txt no device + meta + hashes são
+  #    coletados em PARALELO no finalize() (1 chamada adb agrupada cada).
   show_resumo "$LOG_FILE"
 }
 
@@ -419,102 +427,178 @@ show_resumo() {
   hr
 }
 
-# ---------- Coleta dos artefatos (SÓ roda quando o user OPTA por salvar) ----------
-pull_artifacts() {
-  local base="/sdcard/Android/data/${PKG}/files"
-  local out="$AUDIT_DIR"
-  info "Coletando artefatos sensíveis de ${base}…"
-  if ! adb -s "$ADB_TARGET" shell "[ -d '$base' ] && echo OK" 2>/dev/null | tr -d '\r' | grep -q OK; then
-    warn "Diretório ${base} inacessível (Scoped Storage/OEM ou precisa de root). Tentando assim mesmo."
-  fi
-  local list="${out}/_filelist.txt"
-  adb -s "$ADB_TARGET" shell \
-    "find '$base' -type f \( -iname '*.bin' -o -iname '*.json' -o -ipath '*mreplay*' -o -ipath '*shader*' \) 2>/dev/null" \
-    | tr -d '\r' > "$list"
-  local total; total="$(grep -c . "$list" 2>/dev/null || echo 0)"
-  if [ "$total" -eq 0 ]; then
-    warn "Nenhum artefato encontrado (acesso bloqueado, jogo nunca aberto, ou caminho diferente)."
-  else
-    info "${total} arquivo(s) candidato(s). Puxando…"
-    local pulled=0 failed=0 remote rel localdir
-    while IFS= read -r remote; do
-      [ -z "$remote" ] && continue
-      rel="${remote#/sdcard/}"; localdir="${out}/$(dirname "$rel")"; mkdir -p "$localdir"
-      if adb -s "$ADB_TARGET" pull "$remote" "$localdir/" >/dev/null 2>&1; then
-        pulled=$((pulled+1)); printf '%s\r' "${DIM}   ✓ ${pulled}/${total}${NC}"
-      else
-        failed=$((failed+1)); warn "falhou: $rel"
-      fi
-    done < "$list"
-    printf '\n'; ok "Artefatos: ${pulled} extraídos · ${failed} falha(s)"
-  fi
+# ============================================================
+#  COLETA PÓS-SCAN — agrupada e em PARALELO (performance v4.4.69)
+#  Cada coletor = UMA chamada `adb shell` (sem abrir/fechar adb num loop). No
+#  finalize() eles rodam em background (&) e um `wait` junta tudo — os round-trips
+#  de Wi-Fi se SOBREPÕEM em vez de somar. Antes: ~6+ chamadas adb sequenciais.
+# ============================================================
 
-  info "Gerando manifesto SHA-256…"
-  ( cd "$out" && find . -type f ! -name '_*' -print0 2>/dev/null \
-      | xargs -0 sha256sum 2>/dev/null | sort ) > "${out}/_integrity_sha256.txt"
-  local hashed; hashed="$(grep -c . "${out}/_integrity_sha256.txt" 2>/dev/null || echo 0)"
-  {
-    echo "A4ther Audit · v4.4.70"
-    echo "data         : $(date '+%Y-%m-%d %H:%M:%S')"
-    echo "alvo         : ${PKG_LABEL} (${PKG})"
-    echo "device       : ${ADB_TARGET}"
-    echo "modelo       : $(adb -s "$ADB_TARGET" shell getprop ro.product.model 2>/dev/null | tr -d '\r')"
-    echo "fingerprint  : $(adb -s "$ADB_TARGET" shell getprop ro.build.fingerprint 2>/dev/null | tr -d '\r')"
-    echo "relatorio    : ${SCAN_TXT:-<não salvo>}"
-    echo "artefatos    : ${total:-0} candidatos / ${hashed} com hash"
-  } > "${out}/_audit_meta.txt"
+# Meta do device numa ÚNICA chamada (antes: vários `getprop` separados).
+collect_meta() {
+  adb -s "$ADB_TARGET" shell '
+    echo "model=$(getprop ro.product.model)"
+    echo "brand=$(getprop ro.product.brand)"
+    echo "device=$(getprop ro.product.device)"
+    echo "android=$(getprop ro.build.version.release)"
+    echo "sdk=$(getprop ro.build.version.sdk)"
+    echo "fp=$(getprop ro.build.fingerprint)"
+  ' 2>/dev/null | tr -d '\r'
+}
+# Lê um campo do meta agrupado: meta_get brand → valor de "brand=..."
+meta_get() { printf '%s\n' "$DEV_META" | sed -n "s/^$1=//p" | head -n1; }
+
+# Localiza o scan_*.txt no device numa ÚNICA chamada (antes: 4 `ls -t` em
+# sequência). Só precisamos do caminho pra limpar o rastro no device depois.
+collect_rpt() {
+  adb -s "$ADB_TARGET" shell '
+    for p in /sdcard/Download/a4ther_audits /sdcard/a4ther_audits \
+             /sdcard/a4ther/a4ther_reports /sdcard/Download; do
+      f=$(ls -t "$p"/scan_*.txt 2>/dev/null | head -n1)
+      [ -n "$f" ] && { echo "$f"; break; }
+    done
+  ' 2>/dev/null | tr -d '\r' | head -n1
 }
 
-# ---------- Opção final: SALVAR o dump completo? ----------
-save_dump() {
+# Manifesto SHA-256 dos artefatos do FF — hash calculado NO PRÓPRIO DEVICE
+# (`-exec sha256sum {} +`), UMA chamada adb, SEM puxar nenhum arquivo. Antes o
+# script fazia um loop de N `adb pull` (um round-trip por .bin/.json) e só então
+# hasheava local — lentíssimo no Wi-Fi. A lista de arquivos sai do manifesto (awk).
+collect_hashes() {
+  local base="/sdcard/Android/data/${PKG}/files"
+  adb -s "$ADB_TARGET" shell "find '$base' -maxdepth 8 -type f \( -iname '*.bin' -o -iname '*.json' -o -ipath '*mreplay*' -o -ipath '*shader*' \) -exec sha256sum {} + 2>/dev/null | sort" 2>/dev/null | tr -d '\r'
+}
+
+# ============================================================
+#  build_master — gera o ARQUIVO ÚNICO de upload (A4THER_UPLOAD_SITE_*.txt)
+#  Junta num só .txt: cabeçalho/meta + relatório COMPLETO do scan (que já inclui
+#  IDENTIFICAÇÃO, SERIAL/HWID e DETECÇÃO DE REDE) + lista de artefatos + manifesto
+#  SHA-256. É ESTE o arquivo que o cliente sobe no site. Compatível com o parser
+#  do site: as linhas ●/ALERTA/AVISO viram alertas; os ANEXOS não batem nenhuma
+#  tag, então NÃO geram falso positivo nem poluem os campos do device.
+# ============================================================
+build_master() {
+  MASTER_TXT="${DL_ROOT}/A4THER_UPLOAD_SITE_${TS}.txt"
+
+  # corpo = saída do scan SEM cores (o site parseia linha a linha). Se o strip
+  # falhar por algum motivo, cai pro log cru — NUNCA deixa o corpo vazio.
+  local body=""
+  if [ -s "$LOG_FILE" ]; then
+    body="$(strip_color < "$LOG_FILE")"
+    [ -z "$body" ] && body="$(cat "$LOG_FILE" 2>/dev/null)"
+  fi
+
+  # lista de arquivos = caminhos extraídos do manifesto (awk em C, não loop bash)
+  local filelist nfiles
+  filelist="$(printf '%s\n' "$SHA_MANIFEST" | awk 'NF>=2{ $1=""; sub(/^[ \t]+/,""); print }')"
+  # grep -c imprime "0" E sai 1 quando não acha — NÃO usar `|| echo 0` (duplicaria).
+  nfiles="$(printf '%s\n' "$filelist" | grep -c . 2>/dev/null)"; [ -z "$nfiles" ] && nfiles=0
+
+  {
+    echo "============================================================"
+    echo " A4THER SYSTEMS — RELATORIO UNICO DE AUDITORIA"
+    echo " Gerado por a4ther v4.4.74 (coletor ADB Wi-Fi)"
+    echo " >>> Envie SOMENTE este arquivo .txt ao site verificador <<<"
+    echo "============================================================"
+    echo "data         : $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "alvo         : ${PKG_LABEL} (${PKG})"
+    echo "device (adb) : ${ADB_TARGET}"
+    echo "modelo       : $(meta_get brand) $(meta_get model)  [$(meta_get device)]"
+    echo "android      : $(meta_get android) (SDK $(meta_get sdk))"
+    echo "fingerprint  : $(meta_get fp)"
+    echo "artefatos FF : ${nfiles} arquivo(s) com hash SHA-256"
+    echo ""
+    echo "============================================================"
+    echo "=== RELATORIO COMPLETO DO SCAN (device + Free Fire) ==="
+    echo "=== inclui IDENTIFICACAO, SERIAL/HWID, DETECCAO DE REDE, FF ==="
+    echo "============================================================"
+    if [ -n "$body" ]; then printf '%s\n' "$body"
+    else echo "(log do scan vazio — verifique a conexao ADB e rode de novo)"; fi
+    echo ""
+    echo "============================================================"
+    echo "=== ANEXO 1 - LISTA DE ARTEFATOS FREE FIRE (${nfiles}) ==="
+    echo "============================================================"
+    if [ "${nfiles:-0}" -gt 0 ]; then printf '%s\n' "$filelist"
+    else echo "(nenhum artefato acessivel — Scoped Storage/OEM ou jogo nunca aberto)"; fi
+    echo ""
+    echo "============================================================"
+    echo "=== ANEXO 2 - MANIFESTO DE INTEGRIDADE (SHA-256) ==="
+    echo "============================================================"
+    if [ -n "$SHA_MANIFEST" ]; then printf '%s\n' "$SHA_MANIFEST"
+    else echo "(sem hashes — artefatos inacessiveis)"; fi
+    echo ""
+    echo "============================================================"
+    echo " FIM DO RELATORIO - A4ther v4.4.74"
+    echo "============================================================"
+  } > "$MASTER_TXT" 2>/dev/null
+}
+
+# ---------- Finalização: coleta paralela → ARQUIVO ÚNICO → backup opcional ----------
+finalize() {
   hr
-  local d; d="$(ask 'Deseja SALVAR o dump completo da análise (relatório .txt + artefatos + SHA-256)? [s/N]')"
+  info "Montando o relatório ÚNICO (coletando meta + hashes do device em paralelo)…"
+
+  # 3 coletas INDEPENDENTES em background → round-trips adb sobrepostos; `wait` junta.
+  local meta_tmp="${AUDIT_DIR}/.meta" rpt_tmp="${AUDIT_DIR}/.rpt" sha_tmp="${AUDIT_DIR}/.sha"
+  collect_meta   > "$meta_tmp" 2>/dev/null &
+  collect_rpt    > "$rpt_tmp"  2>/dev/null &
+  collect_hashes > "$sha_tmp"  2>/dev/null &
+  wait
+  DEV_META="$(cat "$meta_tmp" 2>/dev/null)"
+  REMOTE_RPT="$(head -n1 "$rpt_tmp" 2>/dev/null)"
+  SHA_MANIFEST="$(cat "$sha_tmp" 2>/dev/null)"
+  rm -f "$meta_tmp" "$rpt_tmp" "$sha_tmp" 2>/dev/null
+
+  # >>> o arquivo ÚNICO de upload <<<
+  build_master
+
+  hr
+  if [ -s "$MASTER_TXT" ]; then
+    ok "Relatório gerado!"
+    printf '\n%s\n' "${GRN}${BLD}  ►  ENVIE ESTE ARQUIVO ÚNICO AO SITE A4THER:${NC}"
+    printf '   %s\n' "${GRN}${BLD}$(basename "$MASTER_TXT")${NC}"
+    case "$MASTER_TXT" in
+      */Download/*) info "Onde está: ${BLD}Gerenciador de Arquivos → Download → $(basename "$MASTER_TXT")${NC}" ;;
+      *)            warn "Pasta do Termux (invisível no Gerenciador). No PC: ${BLD}adb pull $MASTER_TXT${NC}" ;;
+    esac
+    info "No site, use o modo ${BLD}'Android · scan TXT'${NC}${CYN}. NÃO precisa enviar a pasta nem outros arquivos."
+  else
+    err "Falha ao gerar o arquivo único em ${MASTER_TXT}."
+    warn "O log completo do scan está em ${LOG_FILE} — envie esse se precisar."
+  fi
+  hr
+
+  # A pasta de BACKUP (log completo) é opcional — o arquivo único já basta pro site.
+  local d; d="$(ask 'Guardar também a pasta de BACKUP local (log completo do scan)? [s/N]')"
   case "$d" in
-    s|S) : ;;
+    s|S)
+      # grava os anexos soltos na pasta (dados já estão em memória — sem novo adb)
+      printf '%s\n' "$SHA_MANIFEST" > "${AUDIT_DIR}/_integrity_sha256.txt" 2>/dev/null
+      printf '%s\n' "$SHA_MANIFEST" | awk 'NF>=2{ $1=""; sub(/^[ \t]+/,""); print }' \
+        > "${AUDIT_DIR}/_filelist.txt" 2>/dev/null
+      {
+        echo "A4ther Audit · v4.4.74"
+        echo "data        : $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "alvo        : ${PKG_LABEL} (${PKG})"
+        echo "device      : ${ADB_TARGET}"
+        echo "modelo      : $(meta_get brand) $(meta_get model)"
+        echo "fingerprint : $(meta_get fp)"
+        echo "relatorio   : ${MASTER_TXT}"
+      } > "${AUDIT_DIR}/_audit_meta.txt" 2>/dev/null
+      ok "Backup em: ${BLD}${AUDIT_DIR}${NC}"
+      warn "Pro site, envie MESMO ASSIM só o ${BLD}$(basename "$MASTER_TXT")${NC}."
+      ;;
     *)
-      # salvaguarda: só apaga se o caminho for MESMO a pasta de audits desta run
+      # descarta a pasta de backup, MAS mantém o arquivo ÚNICO de upload (em DL_ROOT)
       case "$AUDIT_DIR" in */a4ther_audits/*|*/a4ther/audits/*) [ -n "$AUDIT_DIR" ] && rm -rf "$AUDIT_DIR" 2>/dev/null ;; esac
-      # limpa o rastro NO DEVICE também: o .txt que o a4ther.sh gerou + cópia em
-      # Downloads + o script enviado. Assim "não salvar" = nada fica em lugar nenhum.
+      # limpa o rastro NO DEVICE: .txt gerado pelo a4ther.sh + cópia + script enviado
       if [ -n "$REMOTE_RPT" ]; then
         adb -s "$ADB_TARGET" shell "rm -f '$REMOTE_RPT' '/sdcard/Download/$(basename "$REMOTE_RPT")'" >/dev/null 2>&1
       fi
       [ -n "$REMOTE_A4" ] && adb -s "$ADB_TARGET" shell "rm -f '$REMOTE_A4'" >/dev/null 2>&1
-      ok "Dump descartado — análise só na tela; limpei o .txt e o script do device."
-      info "Pra refazer e salvar, é só rodar o a4ther de novo."
-      return 0 ;;
+      ok "Backup descartado e rastros do device limpos — ficou só o arquivo único de upload."
+      ;;
   esac
-
-  info "Salvando o dump completo em ${AUDIT_DIR}…"
-  # 1) puxa o relatório .txt do device
-  if [ -n "$REMOTE_RPT" ]; then
-    if adb -s "$ADB_TARGET" pull "$REMOTE_RPT" "${AUDIT_DIR}/" >/dev/null 2>&1; then
-      SCAN_TXT="${AUDIT_DIR}/$(basename "$REMOTE_RPT")"
-      ok "Relatório salvo: $(basename "$SCAN_TXT")"
-    else
-      warn "Relatório está em ${REMOTE_RPT} no device, mas o pull falhou — pegue manualmente."
-    fi
-  else
-    warn "Não encontrei o scan_*.txt no device (veja ${LOG_FILE})."
-  fi
-  # 2) artefatos + manifesto + meta
-  pull_artifacts
-
-  hr
-  ok "Dump salvo em:"
-  printf '   %s\n' "${BLD}${AUDIT_DIR}${NC}"
-  # v4.4.68: instrução de acesso conforme onde o save caiu
-  case "$AUDIT_DIR" in
-    */Download/*)             info "No celular: ${BLD}Gerenciador de Arquivos → Download → a4ther_audits${NC}" ;;
-    "${HOME}"/*|/data/data/*) warn "Pasta do Termux (invisível no Gerenciador). No PC puxe com: ${BLD}adb pull ${AUDIT_DIR}${NC}" ;;
-  esac
-  [ -n "$SCAN_TXT" ] && \
-  printf '   %s\n' "${GRN}• $(basename "$SCAN_TXT")   ← RELATÓRIO p/ enviar ao A4ther${NC}"
-  printf '   %s\n' "${DIM}• _scan_console.log     (saída completa do scan)${NC}"
-  printf '   %s\n' "${DIM}• _filelist.txt         (lista de artefatos)${NC}"
-  printf '   %s\n' "${DIM}• _integrity_sha256.txt (hashes p/ comparação)${NC}"
-  printf '   %s\n' "${DIM}• _audit_meta.txt       (contexto do device)${NC}"
-  [ -n "$SCAN_TXT" ] && info "ENVIE o ${BLD}$(basename "$SCAN_TXT")${NC}${CYN} ao A4ther (site, modo 'Android · scan TXT')."
 }
 
 # ---------- main ----------
@@ -526,7 +610,7 @@ main() {
   step_target
   step_origin
   step_scan
-  save_dump
+  finalize
   hr; ok "Concluído."
   local d; d="$(ask 'Desconectar o adb agora? [s/N]')"
   case "$d" in s|S) adb disconnect "$ADB_TARGET" >/dev/null 2>&1 && ok "Desconectado." ;; esac

@@ -2381,7 +2381,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.70</span>
+        <span id="version">v4.4.74</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2850,7 +2850,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.70";
+const VERSION = "4.4.74";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -3527,15 +3527,13 @@ const KNOWN_CHEAT_IPS = {
 // prefixes específicos NUNCA aparecem em profiles legítimos no ecossistema
 // observado. Greedy match (mais longo wins) ordena pra precisão.
 // v4.4.35: tabela de prefixes de cheats conhecidos.
-// v4.4.63: prefixes curtos (≤2 chars) RE-ADICIONADOS a pedido do operador —
-// são proxies de cheat confirmados. O controle de falso-positivo agora é o
-// TRAÇO "-" na hash (ver identifyCheatProfile): perfis de CASSINO/ad/OS usam
-// Nome-UUID/UUID hifenizado, então quando a hash casada TEM "-" o match é
-// rebaixado pra SUSPEITA (REVISAR, não W.O); SEM "-" = proxy de cheat
-// confirmado => CRÍTICO. Assim os hifenizados (a maioria das colisões de
-// prefixo curto) viram só aviso, e os cheats reais (hash crua sem "-") ficam
-// críticos. (Risco residual: hash crua SEM "-" de device limpo começando com
-// um prefixo de 2 chars → ~1/256 = W.O falso; raro, aceito pelo operador.)
+// v4.4.63: prefixes curtos (≤2 chars) RE-ADICIONADOS a pedido do operador.
+// v4.4.73: ⚠ estes prefixos NÃO classificam mais PROFILES do MCState. O
+// "vazamento de escopo" (hash de profile "06af329…" rotulado como Zeex/Cassino
+// por bater no prefixo "06", + o log contraditório "tem traço") foi REMOVIDO:
+// identifyCheatProfile virou só GATE de IOC conhecido, e a severidade de profile
+// é decidida EXCLUSIVAMENTE pela REGRA DO TRAÇO em classifyMcstateProfile
+// (sem "-" ⇒ CRÍTICO · com "-" ⇒ MEDIUM), estritamente separada deste motor.
 const CHEAT_PROFILE_PREFIXES = {
     // Zeex free/vip (3-char prefixes)
     "78f":  { name: "Zeex (free/vip)",      sev: "CRITICAL", desc: "Cheat panel Zeex — proxy conhecido (free/vip variants)" },
@@ -3572,7 +3570,9 @@ const CHEAT_PROFILE_PREFIXES = {
     "bd32d3": { name: "KhoinDVN DNS Proxy", sev: "CRITICAL", desc: "Profile DNS cheat KhoinDVN (hash bd32d3a8... confirmado threat intel)" },
     "90eb5f": { name: "KhoinDVN DNS Proxy", sev: "CRITICAL", desc: "Profile DNS cheat KhoinDVN (hash 90eb5f87... confirmado threat intel)" },
     // ─── v4.4.63: prefixos curtos RE-ADICIONADOS (proxies de cheat confirmados).
-    // FP controlado pelo traço "-" em identifyCheatProfile: com "-" → SUSPEITA. ───
+    // v4.4.73: NÃO classificam profiles do MCState (sem Zeex/Cassino em profile);
+    // servem só de GATE de relevância p/ o sweep do Pass 8. Severidade de profile
+    // = regra do traço em classifyMcstateProfile. ───
     // Zeex
     "06":   { name: "Zeex (free/vip)",      sev: "CRITICAL", desc: "Cheat panel Zeex — proxy confirmado (prefixo curto · filtrado por traço)" },
     // Fatality (bypass)
@@ -3641,20 +3641,30 @@ function identifyCheatProfile(pid) {
         }
     }
     if (!hit) return null;
-    // v4.4.63: TRAÇO "-" na hash do profile = padrão CASSINO/ad/OS (usam Nome-UUID /
-    // UUID hifenizado). Rebaixa o match por PREFIXO pra SUSPEITA (REVISAR, não W.O).
-    // Sem "-" = proxy de cheat confirmado → mantém a severidade original (CRÍTICO).
-    // String-markers (com.xtremo.mobile, dash.proxy…) NÃO sofrem downgrade — a
-    // semântica de "-" só vale pra hash. `casino:true` faz o emit usar warn().
-    if (hit.match.startsWith('prefix:') && pidLower.indexOf('-') !== -1) {
-        hit.casino = true;
-        hit.sev = 'MEDIUM';
-        hit.name = `${hit.name} · possível cassino`;
-        hit.desc = `${hit.desc} — tem traço "-" na hash (padrão cassino/ad/OS): SUSPEITA, revisar (não é W.O automático).`;
-    } else {
-        hit.casino = false;
-    }
+    // v4.4.73: a antiga lógica "TRAÇO '-' → cassino/MEDIUM" foi REMOVIDA daqui. Ela
+    // misturava escopos: rotulava hash de PROFILE do MCState como "Zeex/Cassino" e
+    // gerava o log CONTRADITÓRIO "tem traço" (o sufixo -UUID do SHA256-UUID sempre
+    // tem "-"). A regra do traço agora vive SÓ no classificador de profiles
+    // (classifyMcstateProfile / passes MCSettings+MCProfileEvents), estritamente
+    // separada do motor de cheat/proxy. identifyCheatProfile volta a ser só um
+    // identificador de IOC conhecido (prefixo/string), com a severidade original.
     return hit;
+}
+
+/* v4.4.73 — classificador de PROFILE do MCState pela REGRA DO TRAÇO, ISOLADO do
+   motor Cassino/Zeex (identifyCheatProfile). As ÚNICAS saídas possíveis:
+     • sem "-"  ⇒ CRÍTICO  → "Perfil Malicioso Detectado (UUID Anômalo)"
+     • com "-"  ⇒ MEDIUM   → "Perfil de Configuração Suspeito/Existente"
+   Profile é profile: nada de atribuição cassino/Zeex/proxy. Testa SÓ a string
+   limpa do identificador (sem descrições acopladas) — `"06af329…".indexOf('-')`
+   retorna -1 ⇒ CRÍTICO, como exigido. */
+function classifyMcstateProfile(pid) {
+    if (String(pid || '').indexOf('-') === -1) {
+        return { critical: true,  label: 'Perfil Malicioso Detectado (UUID Anômalo)',
+                 why: 'identificador sem "-" (hash/UUID contínuo ⇒ injeção manual ofuscada)' };
+    }
+    return { critical: false, label: 'Perfil de Configuração Suspeito/Existente',
+             why: 'formato UUID padrão Apple / Nome-UUID / operadora (com "-")' };
 }
 
 const TELEMETRY_DOMAINS = [
@@ -4408,11 +4418,14 @@ function renderResults(stats) {
     // FIX v4.4.5: regex case-INSENSITIVE pra contar "Profile UUID" (P maiúsculo,
     // resto minúsculo) — antes só batia em "PROFILE" todo maiúsculo, perdendo
     // 9 de cada 13 alerts de profile típicos.
+    // v4.4.71: + "perfil" — os profiles CRÍTICOS de mcstate (regra do traço) saem
+    // com label PT-BR "[CRITICAL] Perfil Malicioso Detectado (UUID Anômalo)"; sem
+    // isso o contador "Perfis MDM" ficava 0 mesmo com profiles maliciosos detectados.
     let cheatCount = 0, profileCount = 0;
     for (const a of alerts) {
         const m = (typeof a === 'string' ? a : a.msg) || '';
         if (/\[CHEAT\]|\[CERT\]|\[SIDELOAD\]|\[JAILBREAK\]/i.test(m)) cheatCount++;
-        if (/profile|mdm|\[dns\]/i.test(m)) profileCount++;
+        if (/profile|perfil|mdm|\[dns\]/i.test(m)) profileCount++;
     }
     // FIX v4.4.5: appsCount caía em '?' porque handleSysdiagnose sempre chamava
     // renderResults({}) sem passar bundles. Agora também aceita stats.appsInstalled
@@ -4783,7 +4796,7 @@ async function _bugreportToReport(txt) {
     };
     const first = (...keys) => { for (const k of keys) { const v = prop(k); if (v) return v; } return ''; };
 
-    L.push('A4ther bugreport parser v4.4.70');
+    L.push('A4ther bugreport parser v4.4.74');
 
     // ── INFO DO SISTEMA ──
     H('INFO DO SISTEMA (bugreport)');
@@ -5337,6 +5350,183 @@ function extractStringsFromBytes(buf, minLen) {
     }
     const re = new RegExp(`[\\x20-\\x7e]{${minLen},}`, 'g');
     return text.match(re) || [];
+}
+
+/* ============================================================
+   v4.4.72: PARSER ESTRUTURADO DE PLIST (binário bplist00 + XML)
+   ------------------------------------------------------------
+   MOTIVO: ler MCSettingsEvents/MCProfileEvents.plist via
+   extractStringsFromBytes (varredura de runs ASCII crus) INGERIA
+   os BYTES-MARCADOR do bplist colados na string seguinte:
+     0x4X (data)    → '@ A B C D … O'   → "Dcom.apple…", "Bcom.apple…"
+     0x5X (ASCII)   → 'P Q R … ^'
+     0x6X (UTF-16)  → '` a b c d e f …' → hash "06af329…" virava "f06af329…"
+   além de repetir o mesmo hash dezenas de vezes (cada run/variante
+   virava um candidato). A correção é PARSEAR a árvore de objetos do
+   bplist (igual plistlib / `plutil -convert xml1`) e navegar o
+   dicionário Root → SystemProfileRestrictions → chaves: limpas,
+   únicas, sem byte de marcador.
+   Representação: dict→Map, array→Array, string→String, int/real→
+   Number, bool→Boolean, date→Date, data→Uint8Array, uid→{UID}. */
+function parseBinaryPlist(buf) {
+    if (!buf || buf.length < 40) throw new Error('bplist curto');
+    let hdr = '';
+    for (let i = 0; i < 8; i++) hdr += String.fromCharCode(buf[i]);
+    if (hdr !== 'bplist00') throw new Error('sem header bplist00');
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    const rUInt = (off, size) => { let v = 0; for (let i = 0; i < size; i++) v = v * 256 + buf[off + i]; return v; };
+    const tEnd = buf.length - 32;                 // trailer = 32 bytes finais
+    const offSize = buf[tEnd + 6], refSize = buf[tEnd + 7];
+    const numObj = rUInt(tEnd + 8, 8), topObj = rUInt(tEnd + 16, 8), offTab = rUInt(tEnd + 24, 8);
+    if (numObj <= 0 || numObj > 8000000 || offSize < 1 || refSize < 1) throw new Error('trailer inválido');
+    const offsets = new Array(numObj);
+    for (let i = 0; i < numObj; i++) offsets[i] = rUInt(offTab + i * offSize, offSize);
+    // lenAt: quando o nibble baixo == 0xF, o tamanho real vem num int seguinte.
+    const lenAt = (info, off) => {
+        if (info !== 0x0F) return [info, off + 1];
+        const im = buf[off + 1], ib = 1 << (im & 0x0F);
+        return [rUInt(off + 2, ib), off + 2 + ib];
+    };
+    const tdLatin1 = new TextDecoder('latin1', { fatal: false });
+    const tdU16be  = new TextDecoder('utf-16be', { fatal: false });
+    const parseAt = (idx, depth) => {
+        if (depth > 200) throw new Error('profundidade excedida');
+        if (idx < 0 || idx >= numObj) throw new Error('ref inválida');
+        const off = offsets[idx], marker = buf[off], type = marker & 0xF0, info = marker & 0x0F;
+        switch (type) {
+            case 0x00:
+                if (marker === 0x08) return false;
+                if (marker === 0x09) return true;
+                return null;                                   // null / fill
+            case 0x10: return rUInt(off + 1, 1 << info);       // int
+            case 0x20: { const n = 1 << info; return n === 4 ? dv.getFloat32(off + 1) : dv.getFloat64(off + 1); } // real
+            case 0x30: return new Date(978307200000 + dv.getFloat64(off + 1) * 1000); // date (epoch 2001)
+            case 0x40: { const [l, o] = lenAt(info, off); return buf.slice(o, o + l); } // data
+            case 0x50: { const [l, o] = lenAt(info, off); return tdLatin1.decode(buf.slice(o, o + l)); } // ASCII
+            case 0x60: { const [l, o] = lenAt(info, off); return tdU16be.decode(buf.slice(o, o + l * 2)); } // UTF-16BE
+            case 0x80: return { UID: rUInt(off + 1, info + 1) };
+            case 0xA0: case 0xC0: {                            // array / set
+                const [c, o] = lenAt(info, off); const arr = [];
+                for (let i = 0; i < c; i++) arr.push(parseAt(rUInt(o + i * refSize, refSize), depth + 1));
+                return arr;
+            }
+            case 0xD0: {                                       // dict
+                const [c, o] = lenAt(info, off); const map = new Map();
+                for (let i = 0; i < c; i++) {
+                    const k = parseAt(rUInt(o + i * refSize, refSize), depth + 1);
+                    const v = parseAt(rUInt(o + (c + i) * refSize, refSize), depth + 1);
+                    map.set(typeof k === 'string' ? k : String(k), v);
+                }
+                return map;
+            }
+            default: throw new Error('marker 0x' + marker.toString(16));
+        }
+    };
+    return parseAt(topObj, 0);
+}
+
+/* XML plist → mesma representação, via DOMParser nativo (no browser é o
+   equivalente a `plutil -convert xml1`). */
+function parseXmlPlist(text) {
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    if (doc.querySelector('parsererror')) throw new Error('XML plist inválido');
+    const rootEl = doc.querySelector('plist > *') || doc.querySelector('dict, array');
+    if (!rootEl) throw new Error('plist sem root');
+    const node = (el) => {
+        switch (el.tagName) {
+            case 'dict': {
+                const map = new Map(); let key = null;
+                for (const child of el.children) {
+                    if (child.tagName === 'key') key = child.textContent;
+                    else if (key !== null) { map.set(key, node(child)); key = null; }
+                }
+                return map;
+            }
+            case 'array':   return Array.from(el.children).map(node);
+            case 'integer': return parseInt(el.textContent, 10);
+            case 'real':    return parseFloat(el.textContent);
+            case 'true':    return true;
+            case 'false':   return false;
+            case 'date':    return new Date(el.textContent);
+            default:        return el.textContent;             // string / data
+        }
+    };
+    return node(rootEl);
+}
+
+/* parsePlistAuto — detecta bplist00 vs XML; NUNCA lança (retorna null no
+   fracasso → o chamador cai pro fallback de texto). */
+function parsePlistAuto(buf) {
+    try {
+        if (buf && buf.length > 8 &&
+            buf[0] === 0x62 && buf[1] === 0x70 && buf[2] === 0x6c && buf[3] === 0x69 &&
+            buf[4] === 0x73 && buf[5] === 0x74) return parseBinaryPlist(buf);
+        if (buf && buf.length > 5 && (buf[0] === 0x3c || (buf[0] === 0xef && buf[1] === 0xbb))) {
+            return parseXmlPlist(new TextDecoder('utf-8', { fatal: false }).decode(buf));
+        }
+    } catch (e) { /* fallback no chamador */ }
+    return null;
+}
+
+/* MCSettingsEvents: Root → SystemProfileRestrictions → CHAVES (limpas).
+   É exatamente o caminho do dicionário onde ficam os nomes reais dos
+   profiles (com.thanhcongregedit.apple-dns, com.loko.bugs.1234,
+   06af329ab9…, UUIDs com traço). */
+function mcsettingsProfileKeys(root) {
+    if (!(root instanceof Map)) return [];
+    let spr = root.get('SystemProfileRestrictions');
+    if (!(spr instanceof Map)) {
+        for (const [k, v] of root) if (/profilerestrictions/i.test(k) && v instanceof Map) { spr = v; break; }
+    }
+    return spr instanceof Map ? Array.from(spr.keys()).filter(k => typeof k === 'string') : [];
+}
+
+/* MCProfileEvents: walk → para cada CHAVE que pareça hash/UUID/reverse-DNS de
+   profile, agrega os eventos (Operation/Process/Timestamp) do valor. Chaves
+   limpas + Map ⇒ dedup automático (sem repetição do mesmo hash). */
+function mcprofileEventsFromPlist(root) {
+    const ops = new Map();
+    const PIDRE = /^[0-9A-Fa-f]{16,}(?:-[0-9A-Fa-f]{2,})*$|^[A-Za-z][A-Za-z0-9_.-]*\.[A-Za-z0-9_.-]+$/;
+    const ensure = (k) => { if (!ops.has(k)) ops.set(k, { installs: [], removes: [], updates: [], processes: new Set(), lastSeen: null }); return ops.get(k); };
+    const readEvt = (entry, vMap) => {
+        if (!(vMap instanceof Map)) return;
+        const op = String(vMap.get('Operation') || vMap.get('operation') || '').toLowerCase();
+        const proc = vMap.get('Process') || vMap.get('process') || null;
+        const tsRaw = vMap.get('Timestamp') || vMap.get('timestamp') || vMap.get('Date') || vMap.get('date') || null;
+        const ts = tsRaw instanceof Date ? tsRaw.getTime() : (tsRaw ? new Date(tsRaw).getTime() : null);
+        const ev = { ts, proc: proc ? String(proc) : null };
+        if (op.includes('install') || op.includes('activate') || op.includes('enable')) entry.installs.push(ev);
+        else if (op.includes('remove') || op.includes('deactiv') || op.includes('disable')) entry.removes.push(ev);
+        else entry.updates.push(ev);
+        if (proc) entry.processes.add(String(proc));
+        if (ts && (!entry.lastSeen || ts > entry.lastSeen)) entry.lastSeen = ts;
+    };
+    const walk = (node, depth) => {
+        if (depth > 60 || node == null) return;
+        if (node instanceof Map) {
+            for (const [k, v] of node) {
+                if (typeof k === 'string' && PIDRE.test(k)) {
+                    const entry = ensure(k);
+                    if (v instanceof Map) readEvt(entry, v);
+                    else if (Array.isArray(v)) v.forEach(it => readEvt(entry, it));
+                }
+                walk(v, depth + 1);
+            }
+        } else if (Array.isArray(node)) { for (const it of node) walk(it, depth + 1); }
+    };
+    walk(root, 0);
+    return ops;
+}
+
+/* Coleta TODAS as strings (chaves + valores) de uma árvore de plist — usado
+   p/ varrer hosts/IPs/payloads a partir de dados JÁ limpos. */
+function collectPlistStrings(node, out, depth) {
+    out = out || []; depth = depth || 0;
+    if (depth > 60 || node == null) return out;
+    if (typeof node === 'string') { if (node.length >= 4) out.push(node); }
+    else if (node instanceof Map) { for (const [k, v] of node) { if (typeof k === 'string' && k.length >= 4) out.push(k); collectPlistStrings(v, out, depth + 1); } }
+    else if (Array.isArray(node)) { for (const it of node) collectPlistStrings(it, out, depth + 1); }
+    return out;
 }
 
 /* readSafe — cache WeakMap pra evitar re-leituras do mesmo File entre passes.
@@ -7359,6 +7549,15 @@ async function _doHandleSysdiagnose(filesList, opts) {
         }
     }
 
+    // v4.4.74: Set ÚNICO p/ TODOS os identificadores de perfil (MCSettingsEvents
+    // SystemProfileRestrictions + MCProfileEvents) — cada UUID/Nome entra 1× só.
+    // A classificação roda DEPOIS, num único loop mutuamente exclusivo (abaixo,
+    // "AVALIAÇÃO UNIFICADA"): acaba o double-dipping (mesmo hash em CRITICAL e
+    // MEDIUM) e o flood de repetição do log histórico de eventos.
+    const UNIFIED_PROFILES = new Set();
+    const PROFILE_SRC = new Map();    // id -> arquivo de origem (1º visto)
+    const PROFILE_DETAIL = new Map(); // id -> timeline forense (MCProfileEvents)
+
     // ─── SCAN PASS 2: profile stubs + MCSettingsEvents (PERFIS MDM) ───
     if (byType.profileStub) {
         ok(`${byType.profileStub.length} profile-*.stub files`);
@@ -7374,13 +7573,16 @@ async function _doHandleSysdiagnose(filesList, opts) {
         //   R1) BLACKLIST (khoindvn/khodivn, happymod, skibidi + cheats conhecidos)
         //       => CRÍTICO, MESMO com hífen (ex.: HappyMod-481BBE7E-...). Antes o
         //       capture só pegava com.x / x.profile e deixava "Nome-UUID" passar.
-        //   R2) hash hex CONTÍNUO (>=32) e SEM "-" => SUSPEITO (revisar).
-        //   R3) UUID com hífens (8-4-4-4-12 / Nome-UUID) e não-blacklist => ignora
-        //       (cassino/ad/OS — registros genéricos com hífen).
-        //   R4) com.apple.* / operadora de chip => ignora.
-        // Só R1 e R2 geram saída (conforme spec). MCSettingsEvents é bplist; sem
-        // parser de árvore nativo, lemos as strings (que sob SystemProfileRestrictions
-        // são as próprias chaves) e classificamos por string.
+        //   R2) v4.4.71 REGRA DO TRAÇO: identificador SEM "-" (hash/UUID contínuo,
+        //       ex.: 06af329ab9f4bbde…) => CRÍTICO (W.O + conta no painel "Perfis MDM").
+        //   R3) identificador COM "-" (UUID 8-4-4-4-12 / Nome-UUID) => AVISO
+        //       (perfil suspeito/existente — revisar, não dá W.O direto).
+        //   R4) com.apple.* => ignora (interno iOS); operadora de chip => AVISO.
+        // v4.4.72: MCSettingsEvents é bplist binário — agora PARSEADO estruturalmente
+        // (parsePlistAuto → mcsettingsProfileKeys), navegando Root →
+        // SystemProfileRestrictions → chaves LIMPAS. O caminho antigo de varredura
+        // de strings (extractStringsFromBytes) ingeria os byte-marcadores do bplist
+        // (virava "f06af329…"/"Dcom.apple…") e fica só como FALLBACK.
         // v4.4.63 FIX (falso-positivo): faltava \b. "esign" SEM word-boundary
         // casava DENTRO de "codesigning" (cod·ESIGN·ing) — então strings 100%
         // legítimas da Apple presentes em TODO device (trustedCodeSigningIdentities,
@@ -7395,50 +7597,44 @@ async function _doHandleSysdiagnose(filesList, opts) {
         const CARRIER_RE = /(carrier|telephony|coretelephony|com\.apple\.(cmas|carrier|coretelephony))/i;
         for (const f of byType.mcEvents) {
             let bytes; try { bytes = new Uint8Array(await f.arrayBuffer()); } catch (e) { continue; }
-            const strings = extractStringsFromBytes(bytes, 5);
-            const hasSPR = strings.some(s => s.indexOf('SystemProfileRestrictions') !== -1);
-            // Candidatos a CHAVE de perfil (blacklist garante captura de HappyMod/khoindvn/...)
-            const cand = new Set();
-            for (const s of strings) {
-                const t = s.trim();
-                if (!t || t.length > 256) continue;
-                if (PROFILE_BLACKLIST.test(t) ||
-                    /^[A-Za-z][A-Za-z0-9._-]*\.[A-Za-z0-9._-]+/.test(t) ||   // com.x.y / x.profile
-                    NAME_UUID.test(t) || UUID_RE.test(t) || HEX_CONT.test(t)) {
-                    cand.add(t);
+            // v4.4.72: PARSER ESTRUTURADO — navega Root → SystemProfileRestrictions e
+            // extrai as CHAVES limpas (sem byte-marcador do bplist, sem duplicata: as
+            // chaves de um dict são únicas). Só usa o caminho de texto
+            // (extractStringsFromBytes) se o parse estrutural falhar.
+            const root = parsePlistAuto(bytes);
+            let cand, hasSPR, source;
+            if (root) {
+                cand = new Set(mcsettingsProfileKeys(root));
+                hasSPR = (root instanceof Map) && root.has('SystemProfileRestrictions');
+                source = 'estruturado';
+            } else {
+                const strings = extractStringsFromBytes(bytes, 5);
+                hasSPR = strings.some(s => s.indexOf('SystemProfileRestrictions') !== -1);
+                // Candidatos a CHAVE de perfil (blacklist garante captura de HappyMod/khoindvn/...)
+                cand = new Set();
+                for (const s of strings) {
+                    const t = s.trim();
+                    if (!t || t.length > 256) continue;
+                    if (PROFILE_BLACKLIST.test(t) ||
+                        /^[A-Za-z][A-Za-z0-9._-]*\.[A-Za-z0-9._-]+/.test(t) ||   // com.x.y / x.profile
+                        NAME_UUID.test(t) || UUID_RE.test(t) || HEX_CONT.test(t)) {
+                        cand.add(t);
+                    }
                 }
+                source = 'texto/fallback';
             }
-            let crit = 0, susp = 0, ign = 0;
-            for (const k of cand) {
-                // R1 — blacklist de PALAVRAS-CHAVE (vence TUDO, inclusive hífen) => CRÍTICO.
-                // Não usamos prefix-hash aqui de propósito: prefixos curtos (3 chars,
-                // ex. "d14") batem em ~1/4096 hashes por acaso e gerariam W.O injusto.
-                // Hashes de cheat conhecidos (full match) já são pegos pelo hashSweep
-                // do Pass 8 — então não há perda de detecção.
-                if (PROFILE_BLACKLIST.test(k)) {
-                    const why = (k.match(PROFILE_BLACKLIST) || [])[0] || 'cheat';
-                    alertF(`[CRITICAL] PROFILE (SystemProfileRestrictions): ${k}`,
-                           `Blacklist de modificadores/cheat: "${why}". Arquivo: ${(f.webkitRelativePath||f.name)}.`);
-                    crit++; continue;
-                }
-                // R4 — Apple / operadora => ignora
-                if (k.startsWith('com.apple.') || CARRIER_RE.test(k)) { ign++; continue; }
-                // R3 — UUID com hífens (puro ou Nome-UUID) => ignora (cassino/ad/OS)
-                if (k.indexOf('-') !== -1 && (UUID_RE.test(k) || NAME_UUID.test(k))) { ign++; continue; }
-                // R2 — hash hex contínuo SEM hífen => SUSPEITO
-                if (HEX_CONT.test(k) && k.indexOf('-') === -1) {
-                    warn(`[SUSPEITO] PROFILE hash hex contínuo sem hífen: ${k}`,
-                         `Hash/assinatura hexadecimal sem "-" em SystemProfileRestrictions — revisar manualmente. Arquivo: ${(f.webkitRelativePath||f.name)}.`);
-                    susp++; continue;
-                }
-                ign++; // demais (genéricos) => ignora, conforme spec (só R1/R2 saem)
-            }
-            ok(`MCSettingsEvents: ${cand.size} chave(s) de perfil${hasSPR ? ' (SystemProfileRestrictions)' : ''} · ${crit} crítico · ${susp} suspeito · ${ign} ignorado`);
+            // v4.4.74: NÃO classifica aqui — só COLETA as chaves no Set unificado.
+            // A avaliação (crítico/aviso) é ÚNICA e mutuamente exclusiva, feita 1×
+            // depois de juntar MCSettingsEvents + MCProfileEvents (acaba o double-dip).
+            for (const k of cand) { UNIFIED_PROFILES.add(k); PROFILE_SRC.set(k, (f.webkitRelativePath||f.name)); }
+            ok(`MCSettingsEvents (${source}): ${cand.size} chave(s) de perfil${hasSPR ? ' (SystemProfileRestrictions)' : ''} → coletadas p/ avaliação unificada`);
         }
     }
 
-    // ─── SCAN PASS 2.5: MCProfileEvents — XML-aware parser (v4.4.7) ───
+    // ─── SCAN PASS 2.5: MCProfileEvents — parser estrutural bplist/XML (v4.4.72) ───
     // Captura TODOS os profile UUIDs (SHA256+SHA256-UUID) com install/remove + timestamp.
+    // v4.4.72: parse estrutural (parsePlistAuto/mcprofileEventsFromPlist) — chaves
+    // limpas e ÚNICAS (acabou a repetição do mesmo hash + o lixo "f06af329…").
     // v4.4.7: estruturas AGREGADORAS movidas pra fora do loop — quando há múltiplos
     // arquivos MCProfileEvents.plist (ex: snapshot + backup + ConfigurationProfiles),
     // antes cada arquivo gerava seu próprio alert por UUID — gerando duplicatas
@@ -7469,17 +7665,34 @@ async function _doHandleSysdiagnose(filesList, opts) {
                 buf[4] === 0x73 && buf[5] === 0x74;
             isXmlPlist = buf.length > 5 && buf[0] === 0x3c;
 
-            // Decode pra texto + string pool
+            // v4.4.72: PARSER ESTRUTURADO primeiro — navega a árvore do plist e extrai
+            // as chaves de profile LIMPAS (sem byte-marcador) com seus eventos. O
+            // stringPool/textForRegex passam a vir da árvore (chaves+valores já limpos),
+            // alimentando o scan de hosts/IPs/payloads SEM lixo. Só cai pro decode de
+            // texto/regex se o parse estrutural falhar.
             let textForRegex = '';
             let stringPool = [];
-            if (isXmlPlist) {
+            const root = parsePlistAuto(buf);
+            if (root) {
+                const structOps = mcprofileEventsFromPlist(root);
+                for (const [k, e] of structOps) {
+                    if (!profileOps.has(k)) profileOps.set(k, { installs: [], removes: [], updates: [], processes: new Set(), lastSeen: null });
+                    const tgt = profileOps.get(k);
+                    tgt.installs.push(...e.installs); tgt.removes.push(...e.removes); tgt.updates.push(...e.updates);
+                    for (const p of e.processes) tgt.processes.add(p);
+                    if (e.lastSeen && (!tgt.lastSeen || e.lastSeen > tgt.lastSeen)) tgt.lastSeen = e.lastSeen;
+                }
+                stringPool = collectPlistStrings(root, [], 0);
+                textForRegex = stringPool.join('\n');
+                ok(`  formato: ${isBplist ? 'bplist' : 'XML'} estruturado · ${structOps.size} profile(s) limpo(s) · ${stringPool.length} strings`);
+            } else if (isXmlPlist) {
                 try { textForRegex = new TextDecoder('utf-8', { fatal: false }).decode(buf); } catch (e) {}
                 stringPool = textForRegex.split(/[<>\s"]+/).filter(s => s.length >= 5);
-                ok(`  formato: XML plist · ${textForRegex.length} bytes`);
+                ok(`  formato: XML plist (fallback texto) · ${textForRegex.length} bytes`);
             } else if (isBplist) {
                 stringPool = extractStringsFromBytes(buf, 5);
                 textForRegex = stringPool.join('\n');
-                ok(`  formato: bplist binário · ${stringPool.length} strings`);
+                ok(`  formato: bplist binário (fallback texto) · ${stringPool.length} strings`);
             } else {
                 try { textForRegex = new TextDecoder('utf-8', { fatal: false }).decode(buf); } catch (e) {}
                 stringPool = textForRegex.split(/\s+/).filter(s => s.length >= 5);
@@ -7644,97 +7857,30 @@ async function _doHandleSysdiagnose(filesList, opts) {
                 const sortedIds = Array.from(profileOps.entries())
                     .sort((a, b) => (b[1].lastSeen || 0) - (a[1].lastSeen || 0));
 
-                // Primeira passada: agrupa por cheatId.name → { sev, desc, pids[], events agg + timeline }
-                const cheatGroups = new Map();
-                const unidentified = [];
+                // v4.4.73 — ISOLAMENTO DE ESCOPO (Profiles ≠ Proxies/Cassino):
+                // os UUIDs de profile do MCState NÃO passam mais pelo motor de prefixo
+                // Cassino/Zeex (identifyCheatProfile). Aquele motor casava o hash
+                // "06af329…" no prefixo curto "06"=Zeex e, como o SHA256-UUID tem sufixo
+                // "-UUID", caía no downgrade "tem traço → cassino" — log contraditório
+                // (hash SEM traço rotulado "tem traço"). Agora a classificação é
+                // PURAMENTE a regra do traço (classifyMcstateProfile):
+                //   SEM "-" ⇒ CRÍTICO "Perfil Malicioso (UUID Anômalo)" (W.O + painel MDM)
+                //   COM "-" ⇒ MEDIUM  "Perfil de Configuração Suspeito/Existente"
+                // O histórico install/remove/update entra SÓ no DETALHE (forense).
                 for (const [pid, entry] of sortedIds) {
-                    const cheatId = identifyCheatProfile(pid);
-                    if (cheatId) {
-                        if (!cheatGroups.has(cheatId.name)) {
-                            cheatGroups.set(cheatId.name, {
-                                name: cheatId.name, sev: cheatId.sev, desc: cheatId.desc, casino: cheatId.casino,
-                                pids: [], totalInstalls: 0, totalRemoves: 0, totalUpdates: 0,
-                                processes: new Set(), latestSeen: null, matches: new Set(),
-                                // v4.4.15: timeline — primeiras/últimas install/remove com data formatada
-                                firstInstall: null, lastInstall: null, lastRemove: null,
-                            });
-                        }
-                        const g = cheatGroups.get(cheatId.name);
-                        g.pids.push(pid);
-                        g.totalInstalls += entry.installs.length;
-                        g.totalRemoves  += entry.removes.length;
-                        g.totalUpdates  += entry.updates.length;
-                        for (const p of entry.processes) g.processes.add(p);
-                        if (entry.lastSeen && (!g.latestSeen || entry.lastSeen > g.latestSeen)) {
-                            g.latestSeen = entry.lastSeen;
-                        }
-                        g.matches.add(cheatId.match);
-                        // Agrega timeline events
-                        for (const ev of entry.installs) {
-                            if (!ev.ts) continue;
-                            if (!g.firstInstall || ev.ts < g.firstInstall) g.firstInstall = ev.ts;
-                            if (!g.lastInstall  || ev.ts > g.lastInstall)  g.lastInstall  = ev.ts;
-                        }
-                        for (const ev of entry.removes) {
-                            if (!ev.ts) continue;
-                            if (!g.lastRemove || ev.ts > g.lastRemove) g.lastRemove = ev.ts;
-                        }
-                    } else {
-                        unidentified.push([pid, entry]);
-                    }
-                }
-
-                // Format helper — pt-BR friendly date
-                const _fmtDate = (ts) => {
-                    if (!ts) return null;
-                    const d = new Date(ts);
-                    return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', hour12: false });
-                };
-
-                // Emite 1 alert por família de cheat conhecido
-                for (const g of cheatGroups.values()) {
-                    const procs = Array.from(g.processes).join(', ') || '?';
-                    const ev = `${g.totalInstalls}× install · ${g.totalRemoves}× remove${g.totalUpdates ? ` · ${g.totalUpdates}× update` : ''} · process: ${procs}`;
-                    const matchStr = Array.from(g.matches).join(', ');
-                    const sample = g.pids[0].length > 40 ? g.pids[0].substring(0, 40) + '…' : g.pids[0];
-                    const variantLine = g.pids.length > 1
-                        ? `${g.pids.length} variantes · ex: ${sample}`
-                        : sample;
-                    // Timeline com datas formatadas (v4.4.15)
-                    const timeline = [];
-                    if (g.firstInstall) timeline.push(`1ª instalação: ${_fmtDate(g.firstInstall)}`);
-                    if (g.lastInstall && g.lastInstall !== g.firstInstall) timeline.push(`Última instalação: ${_fmtDate(g.lastInstall)}`);
-                    if (g.lastRemove) timeline.push(`Última remoção: ${_fmtDate(g.lastRemove)}`);
-                    const tlStr = timeline.length > 0 ? ` · ${timeline.join(' · ')}` : '';
-                    (g.casino ? warn : alertF)(`[${g.sev}] ${g.casino ? 'PROXY/CASSINO? — revisar' : 'CHEAT IDENTIFICADO'} → ${g.name}: ${variantLine}`,
-                        `${g.desc} · IOC match: ${matchStr} · ${ev}${tlStr}`);
-                }
-
-                // Emite individualmente os profiles NÃO-identificados (sem família conhecida)
-                for (const [pid, entry] of unidentified) {
                     const iCount = entry.installs.length;
                     const rCount = entry.removes.length;
                     const uCount = entry.updates.length;
                     const procs = Array.from(entry.processes).join(', ') || '?';
                     const lastSeenStr = entry.lastSeen ? new Date(entry.lastSeen).toISOString() : '(sem ts)';
                     const eventsLine = `${iCount}× install · ${rCount}× remove${uCount ? ` · ${uCount}× update` : ''} · process: ${procs}`;
-                    const shortPid = pid.length > 60 ? pid.substring(0, 60) + '…' : pid;
-
-                    if (iCount > 0 && rCount > 0) {
-                        alertF(`[CRITICAL] Profile UUID opaco INSTALADO+REMOVIDO: ${shortPid}`,
-                            `${eventsLine} · lastSeen: ${lastSeenStr} — Cheat panel? (instalado pra jogar, removido pra esconder)`);
-                    } else if (iCount >= 2) {
-                        alertF(`[CRITICAL] Profile UUID instalado ${iCount}x: ${shortPid}`,
-                            `${eventsLine} · lastSeen: ${lastSeenStr}`);
-                    } else if (iCount > 0) {
-                        alertF(`[HIGH] Profile UUID opaco instalado: ${shortPid}`,
-                            `${eventsLine} · lastSeen: ${lastSeenStr} · profile sem owner aparente (reseller DNS/proxy/cheat?)`);
-                    } else if (rCount > 0) {
-                        warn(`[HIGH] Profile removido (sem install no log): ${shortPid}`,
-                            `${eventsLine} · lastSeen: ${lastSeenStr} — log truncated ou removido pré-export`);
-                    } else {
-                        warn(`[MEDIUM] Profile UUID detectado: ${shortPid} (${eventsLine})`);
-                    }
+                    const hidePattern = (iCount > 0 && rCount > 0)
+                        ? ' — install+remove (panel instalado pra jogar e removido pra esconder?)' : '';
+                    // v4.4.74: NÃO alerta aqui — só COLETA no Set unificado + guarda a
+                    // timeline forense p/ o detalhe. A classificação é feita 1× depois.
+                    UNIFIED_PROFILES.add(pid);
+                    PROFILE_DETAIL.set(pid, `${eventsLine} · lastSeen: ${lastSeenStr}${hidePattern}`);
+                    if (!PROFILE_SRC.has(pid)) PROFILE_SRC.set(pid, 'MCProfileEvents');
                 }
             }
 
@@ -7808,6 +7954,64 @@ async function _doHandleSysdiagnose(filesList, opts) {
                     console.debug(`[a4ther] MCProfileEvents tags: <key>×${keyTags} <dict>×${dictTags} · ${stringPool.length} strings · isXml=${isXmlPlist} isBplist=${isBplist}`);
                 }
             }
+    }
+
+    // ═══════════════ v4.4.74: AVALIAÇÃO UNIFICADA (1 perfil = 1 veredito) ═══════════════
+    // Roda UMA vez sobre o Set unificado (MCSettingsEvents + MCProfileEvents já
+    // deduplicados). Loop mutuamente exclusivo: cada `continue` fecha o caminho —
+    // um perfil CRÍTICO jamais alcança o ramo MEDIUM (acaba o double-dipping:
+    // mesmo hash em CRITICAL e MEDIUM ao mesmo tempo).
+    {
+        const PROFILE_BLACKLIST = /\b(khoindvn|khodivn|happymod|skibidi|esign|feather|ksign|gbox|scarlet|trollstore|sideload|iosgods|filza|dopamine|palera1n|unc0ver|sileo|cydia|zebra|altstore|appcake|appdb|tutuapp|ignition|buildstore|geranium|frida|cycript|substrate|ffh4x|aimbot|wallhack|cheat|hack|mod[._-]?menu|injector|cracked|holograma|hologram)\b/i;
+        const UUID_RE    = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+        const NAME_UUID  = /-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+        const HEX_CONT   = /^[0-9A-Fa-f]{32,}$/;             // hash contínuo (sem hífen)
+        const CARRIER_RE = /(carrier|telephony|coretelephony|com\.apple\.(cmas|carrier|coretelephony))/i;
+        const REV_DNS    = /^[A-Za-z][A-Za-z0-9._-]*\.[A-Za-z0-9._-]+/;  // com.x.y / x.profile
+
+        let mdmCrit = 0, mdmMed = 0;
+        for (const id of UNIFIED_PROFILES) {
+            const sid = String(id || '').trim();
+            if (!sid) continue;
+            const shortId = sid.length > 60 ? sid.slice(0, 60) + '…' : sid;
+            const srcSuffix    = PROFILE_SRC.has(id)    ? ` · origem: ${PROFILE_SRC.get(id)}` : '';
+            const detailSuffix = PROFILE_DETAIL.has(id) ? ` · ${PROFILE_DETAIL.get(id)}`      : '';
+
+            // R1) BLACKLIST de cheat/sideload ⇒ CRÍTICO mesmo COM hífen (ex.: HappyMod-481B…).
+            //     `continue` garante que NUNCA caia no ramo MEDIUM abaixo.
+            if (PROFILE_BLACKLIST.test(sid)) {
+                alertF(`[CRITICAL] Perfil Malicioso Detectado (cheat/sideload): ${shortId}`,
+                       `Profile MDM · nome bate na blacklist de cheat/sideloader${srcSuffix}${detailSuffix}`);
+                mdmCrit++; continue;
+            }
+            // R4a) com.apple.* ⇒ interno iOS, ignora por completo.
+            if (sid.startsWith('com.apple.')) continue;
+            // R4b) operadora de chip (carrier/telephony) ⇒ AVISO (legítimo, não cheat).
+            if (CARRIER_RE.test(sid)) {
+                warn(`[MEDIUM] Perfil de operadora/telefonia: ${shortId}`,
+                     `Profile de carrier/telephony — provável legítimo${srcSuffix}${detailSuffix}`);
+                mdmMed++; continue;
+            }
+            // Só classifica o que REALMENTE parece id de perfil (UUID / Nome-UUID /
+            // hash contínuo / reverse-DNS). Lixo solto é ignorado.
+            if (!(UUID_RE.test(sid) || NAME_UUID.test(sid) || HEX_CONT.test(sid) || REV_DNS.test(sid))) continue;
+
+            // ─── REGRA DO TRAÇO (única, mutuamente exclusiva) ───
+            if (sid.indexOf('-') === -1) {
+                // SEM "-" ⇒ CRÍTICO. Conta no painel "Perfis MDM" (msg contém "Perfil").
+                alertF(`[CRITICAL] Perfil Malicioso Detectado (UUID Anômalo): ${shortId}`,
+                       `Profile MDM · identificador sem "-" (hash/UUID contínuo ⇒ injeção manual ofuscada)${srcSuffix}${detailSuffix}`);
+                mdmCrit++;
+            } else {
+                // COM "-" ⇒ APENAS MEDIUM. Impossível chegar aqui se já era crítico (continue acima).
+                warn(`[MEDIUM] Perfil de Configuração Suspeito/Existente: ${shortId}`,
+                     `Profile MDM · formato UUID padrão Apple / Nome-UUID / operadora (com "-")${srcSuffix}${detailSuffix}`);
+                mdmMed++;
+            }
+        }
+        if (UNIFIED_PROFILES.size > 0) {
+            ok(`Avaliação unificada de perfis: ${UNIFIED_PROFILES.size} id(s) único(s) → ${mdmCrit} crítico(s) (Perfis MDM) · ${mdmMed} médio(s) · 0 double-dip`);
+        }
     }
 
     // ─── SCAN PASS 2.6: HASH FORENSE DE PROFILE ASSETS (v4.4.52) ───
@@ -8502,45 +8706,22 @@ async function _doHandleSysdiagnose(filesList, opts) {
     // individualmente.
     if (foundProfiles.size > 0) {
         ok(`◆ ${foundProfiles.size} profile identifiers encontrados via grep recursivo`);
-        const cheatGroups = new Map();
-        const others = [];
+        // v4.4.73: profiles do MCState NÃO passam pelo motor Cassino/Zeex — classificados
+        // pela REGRA DO TRAÇO (classifyMcstateProfile), igual aos passes MCSettings/
+        // MCProfileEvents. Dedup com o que aqueles passes já emitiram (mesmo hash).
         for (const [pid, sources] of foundProfiles) {
-            const cheatId = identifyCheatProfile(pid);
-            if (cheatId) {
-                if (!cheatGroups.has(cheatId.name)) {
-                    cheatGroups.set(cheatId.name, {
-                        name: cheatId.name, sev: cheatId.sev, desc: cheatId.desc, casino: cheatId.casino,
-                        pids: [], sources: new Set(), matches: new Set(),
-                    });
-                }
-                const g = cheatGroups.get(cheatId.name);
-                g.pids.push(pid);
-                for (const s of sources) g.sources.add(s);
-                g.matches.add(cheatId.match);
-            } else {
-                others.push([pid, sources]);
-            }
-        }
-        // 1 alert por família de cheat conhecido
-        for (const g of cheatGroups.values()) {
-            const srcArr = Array.from(g.sources);
+            if (String(pid).startsWith('com.apple.')) continue;          // interno iOS
+            const shortPid = pid.length > 60 ? pid.substring(0, 60) + '…' : pid;
+            const dedupKey = String(pid).slice(0, 40);
+            if (alerts.some(a => a.msg && a.msg.includes(dedupKey)) ||
+                warnings.some(a => a.msg && a.msg.includes(dedupKey))) continue;
+            const srcArr = Array.from(sources);
             const srcStr = `fontes: ${srcArr.slice(0,3).join(', ')}${srcArr.length>3 ? ` +${srcArr.length-3}` : ''}`;
-            const matchStr = Array.from(g.matches).join(', ');
-            const sample = g.pids[0].length > 40 ? g.pids[0].substring(0, 40) + '…' : g.pids[0];
-            const variantLine = g.pids.length > 1
-                ? `${g.pids.length} variantes · ex: ${sample}`
-                : sample;
-            (g.casino ? warn : alertF)(`[${g.sev}] ${g.casino ? 'PROXY/CASSINO? — revisar' : 'CHEAT IDENTIFICADO'} → ${g.name}: ${variantLine}`,
-                `${g.desc} · IOC match: ${matchStr} · ${srcStr}`);
-        }
-        // Profiles não-identificados: 1 alert por pid (não tem família pra agrupar)
-        for (const [pid, sources] of others) {
-            const c = classifyBundle(pid);
-            const srcStr = `fontes: ${sources.slice(0,3).join(', ')}${sources.length>3 ? ` +${sources.length-3}` : ''}`;
-            if (c) {
-                alertF(`[${c.sev}] PROFILE: ${pid}`, `${c.desc} · ${srcStr}`);
-            } else if (!pid.startsWith('com.apple.')) {
-                warn(`[MEDIUM] Profile não-catalogado: ${pid}`, srcStr);
+            const cls = classifyMcstateProfile(pid);
+            if (cls.critical) {
+                alertF(`[CRITICAL] ${cls.label}: ${shortPid}`, `Profile MDM · ${cls.why} · ${srcStr}`);
+            } else {
+                warn(`[MEDIUM] ${cls.label}: ${shortPid}`, `Profile MDM · ${cls.why} · ${srcStr}`);
             }
         }
     }

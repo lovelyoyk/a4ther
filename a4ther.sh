@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.70 | LS Aluguel
+#  A4ther Systems v4.4.74 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.70"
+VERSION="4.4.74"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -45,6 +45,11 @@ for D in /storage/emulated/0/Download /sdcard/Download "$HOME/storage/shared/Dow
 done
 [ -z "$REPORT" ] && REPORT="/dev/null"
 
+# v4.4.69 (performance): raiz ÚNICA do armazenamento. /sdcard e /storage/emulated/0
+# são a MESMA árvore (symlink), então varrer as duas no `find` duplicava o trabalho
+# em todo o cartão. Escolhe uma só — corta pela metade os scans de storage inteiro.
+SDCARD=/sdcard; [ -d "$SDCARD" ] || SDCARD=/storage/emulated/0
+
 ALERTS=0
 WARNINGS=0
 CLEAN=0
@@ -73,6 +78,14 @@ gp()     { getprop "$1" 2>/dev/null; }
 exists() { [ -e "$1" ]; }
 pkg_installed() {
     have pm && pm path "$1" 2>/dev/null | grep -q '^package:'
+}
+# v4.4.70: KB → tamanho legível (GB/MB/KB). Usado no cálculo do tamanho REAL do FF
+# (APK + OBB + Data somados).
+human_kb() {
+    _k=${1:-0}; case "$_k" in ''|*[!0-9]*) _k=0 ;; esac
+    if   [ "$_k" -ge 1048576 ]; then awk -v k="$_k" 'BEGIN{printf "%.2f GB", k/1048576}'
+    elif [ "$_k" -ge 1024 ];    then awk -v k="$_k" 'BEGIN{printf "%.0f MB", k/1024}'
+    else printf '%s KB' "$_k"; fi
 }
 
 # v4.4.32: SELF_PID + SELF_FILTER pra evitar que o próprio scanner caia no
@@ -1204,14 +1217,34 @@ for PKG in $FF_PKGS; do
                 done
             fi
         fi
-        # tamanho APK
-        if [ -f "$APK_PATH" ]; then
-            APK_SZ=$(stat -c '%s' "$APK_PATH" 2>/dev/null)
-            [ -n "$APK_SZ" ] && info "  tamanho APK: $APK_SZ bytes"
-            # APK do Free Fire normalmente > 700MB
-            if [ -n "$APK_SZ" ] && [ "$APK_SZ" -lt 500000000 ] 2>/dev/null; then
-                warn "  APK menor que 500MB - pode ser mod"
-            fi
+        # tamanho TOTAL real do jogo (v4.4.70): APK dir + OBB + Data somados.
+        # ANTES media só o base.apk (~400MB) → reportava <500MB enquanto o Android
+        # (App Info) mostra 3.75GB, porque ignorava o OBB (pacote de expansão) e o
+        # Data (assets baixados pós-instalação). Agora soma os 3 diretórios.
+        FF_APK_DIR=$(dirname "$APK_PATH" 2>/dev/null)
+        FF_OBB_DIR="/sdcard/Android/obb/$PKG";   [ -d "$FF_OBB_DIR" ]  || FF_OBB_DIR="/storage/emulated/0/Android/obb/$PKG"
+        FF_DATA_DIR="/sdcard/Android/data/$PKG"; [ -d "$FF_DATA_DIR" ] || FF_DATA_DIR="/storage/emulated/0/Android/data/$PKG"
+        APK_KB=0; OBB_KB=0; DATA_KB=0
+        if have du; then
+            case "$FF_APK_DIR" in /data/app/*|/system/*) APK_KB=$(du -sk "$FF_APK_DIR" 2>/dev/null | awk '{print $1}') ;; esac
+            [ -d "$FF_OBB_DIR" ]  && OBB_KB=$(du -sk "$FF_OBB_DIR"  2>/dev/null | awk '{print $1}')
+            [ -d "$FF_DATA_DIR" ] && DATA_KB=$(du -sk "$FF_DATA_DIR" 2>/dev/null | awk '{print $1}')
+        fi
+        case "$APK_KB"  in ''|*[!0-9]*) APK_KB=0 ;;  esac
+        case "$OBB_KB"  in ''|*[!0-9]*) OBB_KB=0 ;;  esac
+        case "$DATA_KB" in ''|*[!0-9]*) DATA_KB=0 ;; esac
+        # fallback: se o du não pegou o dir do APK, usa o stat do base.apk em KB
+        if [ "$APK_KB" -eq 0 ] && [ -f "$APK_PATH" ]; then
+            _b=$(stat -c '%s' "$APK_PATH" 2>/dev/null); case "$_b" in ''|*[!0-9]*) _b=0 ;; esac
+            APK_KB=$((_b / 1024))
+        fi
+        TOTAL_KB=$((APK_KB + OBB_KB + DATA_KB))
+        info "  tamanho TOTAL (APK+OBB+Data): $(human_kb "$TOTAL_KB")"
+        info "    APK: $(human_kb "$APK_KB")  |  OBB: $(human_kb "$OBB_KB")  |  Data: $(human_kb "$DATA_KB")"
+        # FF completo ~3-5GB. Total muito baixo = OBB/Data ausente (repack/mod ou
+        # download incompleto). É AVISO (não veredito sozinho), pra não gerar WO injusto.
+        if [ "$TOTAL_KB" -gt 0 ] && [ "$TOTAL_KB" -lt 1572864 ] 2>/dev/null; then
+            warn "  Instalação do FF pequena ($(human_kb "$TOTAL_KB")) — OBB/Data ausente? Possível repack/mod ou download incompleto."
         fi
     fi
 done
@@ -1419,7 +1452,11 @@ if [ -n "$HOLO_PATHS" ] && have find; then
 
     # 1) HASH check — qualquer arquivo .js/.txt/.html/.md ≤ 100KB
     if have md5sum && have sha256sum; then
+        # v4.4.70: self-exclusion — NÃO vasculha os próprios arquivos do a4ther
+        # (o script vive em /sdcard/Download/a4ther.sh e contém as strings IOC; os
+        # relatórios scan_*/A4THER_UPLOAD_SITE_* também). Senão o scanner se flagra.
         HOLO_CANDIDATES=$(find $HOLO_PATHS 2>/dev/null -maxdepth 6 -type f \
+            ! -name 'a4ther*' ! -name 'A4THER*' ! -name 'scan_*' ! -path '*/a4ther_audits/*' \
             \( -iname '*.js' -o -iname '*.txt' -o -iname '*.html' -o -iname '*.md' \
                -o -iname '*.json' -o -iname '*.lua' \) -size -100k 2>/dev/null | head -200)
         if [ -n "$HOLO_CANDIDATES" ]; then
@@ -1440,7 +1477,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
     # 2) STRING patterns — funções únicas do script
     if have grep; then
         # createHologram + updateHolograms + getEnemies juntos no mesmo arquivo
-        STR_MATCH=$(grep -rlE 'createHologram[[:space:]]*\(' $HOLO_PATHS 2>/dev/null | head -20)
+        STR_MATCH=$(grep -rlE --exclude='a4ther*' --exclude='A4THER*' --exclude='scan_*.txt' --exclude-dir='a4ther_audits' 'createHologram[[:space:]]*\(' $HOLO_PATHS 2>/dev/null | head -20)
         if [ -n "$STR_MATCH" ]; then
             echo "$STR_MATCH" | while IFS= read -r F; do
                 [ -z "$F" ] || [ ! -r "$F" ] && continue
@@ -1457,7 +1494,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
         fi
 
         # Pattern crítico: BoxGeometry(1, 2, 1) + cor 0xff0000 = silhueta humanoide vermelha
-        BOX_MATCH=$(grep -rlE 'BoxGeometry[[:space:]]*\([[:space:]]*1[[:space:]]*,[[:space:]]*2[[:space:]]*,[[:space:]]*1[[:space:]]*\)' $HOLO_PATHS 2>/dev/null | head -10)
+        BOX_MATCH=$(grep -rlE --exclude='a4ther*' --exclude='A4THER*' --exclude='scan_*.txt' --exclude-dir='a4ther_audits' 'BoxGeometry[[:space:]]*\([[:space:]]*1[[:space:]]*,[[:space:]]*2[[:space:]]*,[[:space:]]*1[[:space:]]*\)' $HOLO_PATHS 2>/dev/null | head -10)
         if [ -n "$BOX_MATCH" ]; then
             echo "$BOX_MATCH" | while IFS= read -r F; do
                 [ -z "$F" ] && continue
@@ -1472,6 +1509,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
 
     # 3) Three.js library dentro de pasta do FF (não tem motivo legítimo)
     THREE_JS=$(find $HOLO_PATHS 2>/dev/null -maxdepth 5 -type f \
+        ! -name 'a4ther*' ! -name 'A4THER*' ! -path '*/a4ther_audits/*' \
         \( -iname 'three.min.js' -o -iname 'three.js' -o -iname 'three.module.js' \) 2>/dev/null | head -5)
     if [ -n "$THREE_JS" ]; then
         echo "$THREE_JS" | while IFS= read -r F; do
@@ -1485,7 +1523,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
         for WV in "/data/data/$FFPKG/app_webview" "/data/data/$FFPKG/app_chromium" \
                   "/data/data/$FFPKG/cache/WebView"; do
             [ -d "$WV" ] || continue
-            WV_HIT=$(grep -rliE 'createHologram|updateHolograms|hologram-.{1,5}enemy' "$WV" 2>/dev/null | head -3)
+            WV_HIT=$(grep -rliE --exclude='a4ther*' --exclude='A4THER*' --exclude-dir='a4ther_audits' 'createHologram|updateHolograms|hologram-.{1,5}enemy' "$WV" 2>/dev/null | head -3)
             if [ -n "$WV_HIT" ]; then
                 echo "$WV_HIT" | while IFS= read -r F; do
                     [ -n "$F" ] && alert "WebView do FF contém script Holograma: $F"
@@ -1796,7 +1834,7 @@ done
 # OBB ESCONDIDA fora da pasta padrão (vetor recém-descoberto)
 # Cheats escondem em /sdcard/MIUI/sound_recorder/fm_rec/ e outras pastas
 if have find; then
-    HIDDEN_OBB=$(find /sdcard /storage/emulated/0 2>/dev/null \
+    HIDDEN_OBB=$(find "$SDCARD" 2>/dev/null \
         -maxdepth 6 -type f -name '*.obb' \
         ! -path '*/Android/obb/*' 2>/dev/null | head -n 30)
     if [ -n "$HIDDEN_OBB" ]; then
@@ -1834,7 +1872,7 @@ fi
 header "APKs SUSPEITOS em /sdcard"
 
 if have find; then
-    APK_LIST=$(find /sdcard /storage/emulated/0 2>/dev/null -maxdepth 5 -type f -name '*.apk' 2>/dev/null | head -n 50)
+    APK_LIST=$(find "$SDCARD" 2>/dev/null -maxdepth 5 -type f -name '*.apk' 2>/dev/null | head -n 50)
     if [ -n "$APK_LIST" ]; then
         echo "$APK_LIST" | while IFS= read -r APK; do
             [ -z "$APK" ] && continue
@@ -2647,7 +2685,7 @@ DEL_HITS=0
 # 1) Tag .trashed-* (Android 11+ MediaStore.createDeleteRequest)
 #    Quando o usuário apaga via API moderna, o arquivo vira .trashed-<timestamp>-<name>
 if have find; then
-    TRASHED=$(find /sdcard /storage/emulated/0 2>/dev/null -maxdepth 5 -name '.trashed-*' 2>/dev/null | head -n 40)
+    TRASHED=$(find "$SDCARD" 2>/dev/null -maxdepth 5 -name '.trashed-*' 2>/dev/null | head -n 40)
     if [ -n "$TRASHED" ]; then
         info "Arquivos .trashed-* (apagados via Android 11+ MediaStore):"
         echo "$TRASHED" | while IFS= read -r F; do
@@ -2749,13 +2787,24 @@ for H in /data/system/notification_history.xml \
     }
 done
 
-# 5) Activity de delete via dumpsys activity recents (apps que estavam abertos)
+# 5) Apps recentes via dumpsys activity recents (apps que estavam abertos)
+# v4.4.70 (FIX falso-positivo): o parser antigo greppava o DUMP INTEIRO, então
+# 'mod' batia em "RESIZE_MODE_RESIZEABLE"/"taskDescription" e cuspia propriedades
+# do Window Manager como "app suspeito". Agora extrai SÓ o PACOTE das linhas
+# realActivity=/baseIntent= e compara com a blacklist (tokens específicos de
+# cheat — sem 'mod'/'menu' soltos que batem em palavras do SO).
 if have dumpsys; then
-    RECENT_TASKS=$(dumpsys activity recents 2>/dev/null | grep -iE 'cheat|hack|mod|ffh4x|aimbot|menu|injector|frida|magisk|virtualapp|lulubox|luckypatcher|brevent' | head -n 20)
+    RECENT_PKGS=$(dumpsys activity recents 2>/dev/null \
+        | grep -iE 'realActivity=|baseIntent=' \
+        | grep -oE '[a-zA-Z][a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)+/' \
+        | sed 's:/$::' | sort -u)
+    RECENT_TASKS=$(printf '%s\n' "$RECENT_PKGS" \
+        | grep -iE 'cheat|hack|ffh4x|aimbot|injector|frida|magisk|virtualapp|lulubox|luckypatcher|brevent|gameguardian|holograma|hologram|modmenu|mod\.menu|\.mod\.|panel\.ff|h4x' \
+        | head -n 10)
     if [ -n "$RECENT_TASKS" ]; then
-        alert "Apps suspeitos em activity recents (foram abertos recentemente):"
-        echo "$RECENT_TASKS" | head -n 10 | while IFS= read -r L; do
-            [ -n "$L" ] && alert "  $(echo "$L" | head -c 180)"
+        alert "Apps suspeitos em activity recents (abertos recentemente):"
+        printf '%s\n' "$RECENT_TASKS" | while IFS= read -r L; do
+            [ -n "$L" ] && alert "  $L"
         done
     fi
 fi
@@ -3116,10 +3165,31 @@ if [ -d /data/tombstones ]; then
             MT=$(stat -c '%y' "$FULL" 2>/dev/null)
             info "  $FULL ($MT)"
             if [ -r "$FULL" ]; then
-                CHEAT_HIT=$(grep -iE 'freefire|frida|magisk|xposed|cheat|injector|hack|libsubstrate|substitute|libhooker' "$FULL" 2>/dev/null | head -n 3)
-                [ -n "$CHEAT_HIT" ] && echo "$CHEAT_HIT" | while IFS= read -r L; do
-                    [ -n "$L" ] && alert "    Tombstone contém: $(echo "$L" | head -c 140)"
-                done
+                # v4.4.70 (FIX falso-positivo): identifica o PROCESSO dono do tombstone.
+                # Só analisa se for o JOGO auditado OU se houver assinatura CLARA de
+                # injeção. ANTES greppava termos genéricos e flaggava crash de app
+                # aleatório (ex: br.gov.caixa.tem / libmcrypt.so) como injeção.
+                TOMB_PROC=$(grep -m1 -E '>>> .+ <<<|Cmdline:|name: ' "$FULL" 2>/dev/null | head -c 200)
+                # libs de hook/injeção INEQUÍVOCAS (não inclui libil2cpp — é runtime
+                # NORMAL do FF/Unity; flaggar isso reprovaria todo crash legítimo).
+                INJ_RE='libfrida|frida-gadget|frida-server|gum-js|libsubstrate|substrate|libdobby|libxhook|libwhale|libsandhook|libhooker|libepic|injector\.so|libinjector'
+                if printf '%s' "$TOMB_PROC" | grep -qiE 'com\.dts\.freefire(th|max)?'; then
+                    # crash NO Free Fire → procura libs de injeção
+                    FF_INJ=$(grep -iE "$INJ_RE" "$FULL" 2>/dev/null | head -n 3)
+                    if [ -n "$FF_INJ" ]; then
+                        alert "Tombstone do Free Fire com lib de INJEÇÃO:"
+                        echo "$FF_INJ" | while IFS= read -r L; do
+                            [ -n "$L" ] && alert "    $(echo "$L" | head -c 140)"
+                        done
+                    else
+                        info "  Tombstone do Free Fire (crash sem assinatura de cheat)"
+                    fi
+                else
+                    # NÃO é o jogo (ex: app de banco) → só sinaliza se tiver lib de hook
+                    # conhecida; senão IGNORA (não é problema do FF).
+                    OTHER_INJ=$(grep -iE "$INJ_RE" "$FULL" 2>/dev/null | head -n 2)
+                    [ -n "$OTHER_INJ" ] && warn "  Tombstone de outro app com lib de hook (revisar contexto): $FULL"
+                fi
             fi
         done
     fi
