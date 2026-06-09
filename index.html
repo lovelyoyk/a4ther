@@ -18,7 +18,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@700;800;900&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@700;800;900&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
 <!-- Lenis smooth scroll (npm CDN — content-type correto, não bloqueado por nosniff) -->
 <script src="https://cdn.jsdelivr.net/npm/lenis@1.1.20/dist/lenis.min.js"></script>
@@ -2355,6 +2355,7 @@ footer a:hover {
     --panel-hi: rgba(26,20,42,.96);
     --line:     rgba(179,136,255,.18);
     --line-hi:  rgba(179,136,255,.45);
+    --display:  'Space Grotesk', 'Inter', system-ui, sans-serif;
 }
 
 /* ── camadas de fundo (atrás de tudo) ── */
@@ -2539,6 +2540,12 @@ body{ padding-top:30px; }
 .item:hover{ background:var(--panel-hi); transform:translateX(4px); border-color:var(--line-hi); box-shadow:0 10px 26px rgba(122,78,255,.16); }
 .item-detail{ border-left-color:var(--line); }
 .severity-tag.critical{ box-shadow:0 0 16px var(--red-glow); }
+/* tipografia dos achados: título em Space Grotesk, detalhe em sans, código/tag em mono */
+.item{ font-family:var(--display); font-size:1rem; font-weight:600; letter-spacing:-.003em; line-height:1.5; }
+.item-detail{ font-family:var(--sans); font-weight:400; font-size:.86rem; }
+.item code, .item .mono{ font-family:var(--mono); font-weight:600; font-size:.84em; }
+.severity-tag{ font-family:var(--mono); }
+.verdict-subtitle, .device-hero-model{ font-family:var(--display); }
 
 /* stats / device / status: opacos (mata o banding sobre o fundo vivo) */
 .stat{ background:var(--panel) !important; backdrop-filter:none !important; -webkit-backdrop-filter:none !important; border:1px solid var(--line); }
@@ -2620,7 +2627,7 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.83</span>
+        <span id="version">v4.4.84</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -3077,7 +3084,7 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.83";
+const VERSION = "4.4.84";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5092,7 +5099,7 @@ async function _bugreportToReport(txt) {
     };
     const first = (...keys) => { for (const k of keys) { const v = prop(k); if (v) return v; } return ''; };
 
-    L.push('A4ther bugreport parser v4.4.83');
+    L.push('A4ther bugreport parser v4.4.84');
 
     // ── INFO DO SISTEMA ──
     H('INFO DO SISTEMA (bugreport)');
