@@ -2344,9 +2344,194 @@ footer a:hover {
 @media (prefers-reduced-motion: reduce) {
     [data-reveal] { opacity: 1; transform: none; transition: none; }
 }
+/* ════════════════════════════════════════════════════════════════════
+   v4.4.81 · A4THER FORENSE — UI de perícia digital / inteligência
+   Painéis OPACOS (sem banding de backdrop), HUD tático, mira por máscara
+   (crisp), fundo vivo (aurora + grid + varredura + scanlines + grão).
+   Animações em transform/opacity (GPU). Guarda prefers-reduced-motion.
+   ════════════════════════════════════════════════════════════════════ */
+:root{
+    --panel:    rgba(19,15,31,.93);
+    --panel-hi: rgba(26,20,42,.96);
+    --line:     rgba(179,136,255,.18);
+    --line-hi:  rgba(179,136,255,.45);
+}
+
+/* ── camadas de fundo (atrás de tudo) ── */
+.fx-layer{ position:fixed; inset:0; pointer-events:none; z-index:0; will-change:transform,opacity; }
+.fx-aurora{
+    background:
+        radial-gradient(36% 30% at 15% 8%,  rgba(149,117,255,.22), transparent 60%),
+        radial-gradient(32% 28% at 85% 14%, rgba(122,78,255,.16),  transparent 60%),
+        radial-gradient(46% 40% at 50% 114%,rgba(179,136,255,.15), transparent 62%);
+    filter:blur(20px) saturate(120%);
+    animation:aurora-drift 28s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift{ 0%{transform:translate3d(-1.5%,-1%,0) scale(1.05)} 100%{transform:translate3d(1.5%,2%,0) scale(1.1)} }
+.fx-grid{
+    background-image:
+        linear-gradient(rgba(179,136,255,.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(179,136,255,.05) 1px, transparent 1px);
+    background-size:52px 52px;
+    -webkit-mask-image:radial-gradient(125% 80% at 50% -8%, #000 0%, transparent 62%);
+            mask-image:radial-gradient(125% 80% at 50% -8%, #000 0%, transparent 62%);
+    opacity:.55;
+}
+/* linha de varredura horizontal descendo a tela (radar) */
+.fx-beam{
+    inset:auto 0 auto 0; top:-170px; height:150px;
+    background:linear-gradient(180deg, transparent, rgba(179,136,255,.05) 46%, rgba(179,136,255,.10) 50%, rgba(179,136,255,.05) 54%, transparent);
+    animation:scan-down 8s linear infinite;
+}
+@keyframes scan-down{ 0%{transform:translateY(0)} 100%{transform:translateY(118vh)} }
+.fx-scanlines{ background:repeating-linear-gradient(180deg, transparent 0 2px, rgba(0,0,0,.16) 2px 3px); opacity:.3; mix-blend-mode:multiply; }
+.fx-grain{
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity:.03; mix-blend-mode:overlay;
+}
+.fx-vignette{ background:radial-gradient(120% 100% at 50% 26%, transparent 52%, rgba(2,1,8,.62) 100%); }
+
+/* ── moldura forense: faixa de classificação no topo ── */
+body{ padding-top:30px; }
+.hud-classbar{
+    position:fixed; top:0; left:0; right:0; z-index:6; height:30px;
+    display:flex; align-items:center; justify-content:center; gap:.65rem;
+    background:linear-gradient(180deg, #0a0812 0%, rgba(10,8,18,.82) 100%);
+    border-bottom:1px solid var(--line);
+    font-family:var(--mono); font-size:.6rem; letter-spacing:.34em; text-transform:uppercase;
+    pointer-events:none; user-select:none; overflow:hidden;
+}
+.hud-classbar::before{
+    content:''; position:absolute; inset:0; width:42%;
+    background:linear-gradient(90deg, transparent, rgba(179,136,255,.10), transparent);
+    animation:classbar-sweep 6.5s linear infinite;
+}
+@keyframes classbar-sweep{ 0%{transform:translateX(-120%)} 100%{transform:translateX(340%)} }
+.hud-classbar-text{ color:var(--text-dim); white-space:nowrap; }
+.hud-tick{ width:11px; height:11px; color:var(--line-hi); flex:none; }
+
+/* ── colchetes de mira nos cantos da viewport ── */
+.hud-corner{ position:fixed; width:24px; height:24px; z-index:5; pointer-events:none; border:2px solid var(--line-hi); opacity:.45; }
+.hud-corner.tl{ top:40px; left:14px; border-right:0; border-bottom:0; }
+.hud-corner.tr{ top:40px; right:14px; border-left:0; border-bottom:0; }
+.hud-corner.bl{ bottom:14px; left:14px; border-right:0; border-top:0; }
+.hud-corner.br{ bottom:14px; right:14px; border-left:0; border-top:0; }
+.hud-watermark{
+    position:fixed; right:-4px; top:50%; transform:translateY(-50%) rotate(90deg); transform-origin:center;
+    font-family:var(--mono); font-size:.66rem; letter-spacing:.5em; color:rgba(179,136,255,.11);
+    z-index:1; pointer-events:none; user-select:none;
+}
+
+/* ── hero: respiro + brilho vivo ── */
+.hero{ padding:1.25rem 0 1.75rem; margin-bottom:1rem; }
+.glitch-wrap::after{
+    content:''; position:absolute; inset:-28% -8%; z-index:-1; pointer-events:none;
+    background:radial-gradient(50% 60% at 50% 50%, rgba(179,136,255,.2), transparent 70%);
+    filter:blur(26px); animation:logo-breathe 6s ease-in-out infinite;
+}
+@keyframes logo-breathe{ 0%,100%{opacity:.5; transform:scale(1)} 50%{opacity:.95; transform:scale(1.06)} }
+.hero-divider{ margin-top:1.6rem; }
+
+/* ── trust badges → chips de console ── */
+.hero-badges{ gap:.6rem; margin-top:1.4rem; }
+.trust-badge{
+    padding:.5rem .95rem; background:var(--panel); border:1px solid var(--line); border-radius:999px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 6px 18px rgba(0,0,0,.3);
+    font-size:.78rem; font-weight:600; transition:var(--transition);
+}
+.trust-badge:hover{ border-color:var(--line-hi); transform:translateY(-2px); box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 10px 24px rgba(122,78,255,.22); }
+.live-dot{ width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 0 0 var(--green-glow); animation:live-pulse 1.9s ease-out infinite; }
+@keyframes live-pulse{ 0%{box-shadow:0 0 0 0 rgba(74,222,128,.5)} 70%{box-shadow:0 0 0 9px rgba(74,222,128,0)} 100%{box-shadow:0 0 0 0 rgba(74,222,128,0)} }
+
+/* ── label da seção → HUD com colchetes ── */
+.dropdown-label{ position:relative; display:inline-flex; align-items:center; gap:.5rem; padding-left:.2rem; }
+.dropdown-label::before, .dropdown-label::after{ content:''; width:13px; height:8px; opacity:.6; border:1px solid var(--purple); border-radius:2px; }
+.dropdown-label::before{ border-right:none; }
+.dropdown-label::after { border-left:none; }
+
+/* ── painéis OPACOS (dropdown / dropzone / help-box) — sem backdrop = sem banding ── */
+.dropdown{ background:var(--panel); border:1px solid var(--line); backdrop-filter:none; -webkit-backdrop-filter:none; box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 16px 40px rgba(0,0,0,.45); }
+.dropdown:hover{ transform:translateY(-2px); border-color:var(--line-hi); }
+.dropdown.open{ border-color:var(--line-hi); }
+.dropdown-menu{ background:var(--panel-hi); backdrop-filter:none; -webkit-backdrop-filter:none; }
+
+.tab-panel .dropzone{
+    display:block;  /* FIX: <label> é inline por padrão → pseudos (mira/scanline) colapsavam num sliver à esquerda */
+    background:var(--panel); border:1px solid var(--line); border-radius:20px; outline:none;
+    backdrop-filter:none; -webkit-backdrop-filter:none;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 18px 48px rgba(0,0,0,.45);
+}
+.tab-panel .dropzone:hover, .tab-panel .dropzone.dragging{
+    transform:translateY(-3px); border-color:var(--line-hi);
+    box-shadow:inset 0 0 0 1px rgba(179,136,255,.16), 0 22px 60px rgba(122,78,255,.26);
+}
+/* mira (4 colchetes) via máscara de cantos — crisp, cor sólida, sem banding */
+.tab-panel .dropzone::before{
+    content:''; position:absolute; inset:12px; border:1.5px solid var(--line-hi); border-radius:13px;
+    opacity:.5; pointer-events:none; transition:inset .3s var(--ease), opacity .3s var(--ease);
+    -webkit-mask:linear-gradient(#000,#000) top left/30px 30px no-repeat, linear-gradient(#000,#000) top right/30px 30px no-repeat, linear-gradient(#000,#000) bottom left/30px 30px no-repeat, linear-gradient(#000,#000) bottom right/30px 30px no-repeat;
+            mask:linear-gradient(#000,#000) top left/30px 30px no-repeat, linear-gradient(#000,#000) top right/30px 30px no-repeat, linear-gradient(#000,#000) bottom left/30px 30px no-repeat, linear-gradient(#000,#000) bottom right/30px 30px no-repeat;
+}
+.tab-panel .dropzone:hover::before, .tab-panel .dropzone.dragging::before{ inset:8px; opacity:1; }
+/* linha de varredura (laser de scanner) — fina, com leve glow, descendo a zona */
+.tab-panel .dropzone::after{
+    content:''; position:absolute; left:18px; right:18px; top:0; height:2px; pointer-events:none;
+    background:linear-gradient(90deg, transparent, rgba(179,136,255,.95) 22%, rgba(214,189,255,1) 50%, rgba(179,136,255,.95) 78%, transparent);
+    box-shadow:0 0 12px 1px rgba(179,136,255,.55);
+    animation:dz-scan 3.2s ease-in-out infinite;
+}
+@keyframes dz-scan{ 0%{ top:7%; opacity:0 } 12%{ opacity:.95 } 88%{ opacity:.95 } 100%{ top:93%; opacity:0 } }
+
+/* anel de ping de radar no ícone */
+.dropzone-icon{ position:relative; }
+.dropzone-icon::after{ content:''; position:absolute; inset:-5px; border-radius:20px; border:1.5px solid rgba(179,136,255,.4); pointer-events:none; animation:ping-ring 2.6s ease-out infinite; }
+@keyframes ping-ring{ 0%{transform:scale(.92); opacity:.85} 100%{transform:scale(1.34); opacity:0} }
+
+/* help-box: painel opaco + accent limpo (sem glow gordo) */
+.help-box{ background:var(--panel); border:1px solid var(--line); backdrop-filter:none; -webkit-backdrop-filter:none; }
+.help-box::before{ box-shadow:none; opacity:.55; width:2px; }
+.ico-warn{ color:var(--orange); vertical-align:-2px; }
+
+/* ── scrollbar + seleção + foco ── */
+::selection{ background:rgba(179,136,255,.32); color:#fff; }
+*{ scrollbar-color:var(--line-hi) transparent; scrollbar-width:thin; }
+body::-webkit-scrollbar{ width:11px; }
+body::-webkit-scrollbar-track{ background:transparent; }
+body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-soft), var(--purple-deep)); border-radius:99px; border:3px solid #07060d; }
+:focus-visible{ outline:2px solid var(--purple); outline-offset:3px; border-radius:6px; }
+
+@media (max-width:640px){
+    .hud-corner, .hud-watermark{ display:none; }
+    .hud-classbar{ font-size:.5rem; letter-spacing:.18em; }
+    .hud-classbar-text{ overflow:hidden; text-overflow:ellipsis; max-width:86vw; }
+}
+@media (prefers-reduced-motion: reduce){
+    .fx-aurora, .fx-beam, .fx-scanlines, .glitch-wrap::after, .hud-classbar::before,
+    .dropzone::after, .dropzone-icon, .dropzone-icon::after, .live-dot{ animation:none !important; }
+}
 </style>
 </head>
 <body>
+
+<!-- ═══ v4.4.81 — camadas de fundo (aurora + grid + radar + grão + scanlines + vinheta) ═══ -->
+<div class="fx-layer fx-aurora" aria-hidden="true"></div>
+<div class="fx-layer fx-grid" aria-hidden="true"></div>
+<div class="fx-layer fx-beam" aria-hidden="true"></div>
+<div class="fx-layer fx-scanlines" aria-hidden="true"></div>
+<div class="fx-layer fx-grain" aria-hidden="true"></div>
+<div class="fx-layer fx-vignette" aria-hidden="true"></div>
+
+<!-- ═══ moldura forense (HUD tático / dossiê classificado) ═══ -->
+<div class="hud-classbar" aria-hidden="true">
+    <svg class="hud-tick" viewBox="0 0 12 12" fill="none"><path d="M11 1H1v10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+    <span class="hud-classbar-text">A4THER&nbsp;·&nbsp;NÚCLEO DE PERÍCIA DIGITAL&nbsp;—&nbsp;ANÁLISE FORENSE ANTI-CHEAT&nbsp;·&nbsp;USO RESTRITO</span>
+    <svg class="hud-tick" viewBox="0 0 12 12" fill="none"><path d="M1 11h10V1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+</div>
+<div class="hud-corner tl" aria-hidden="true"></div>
+<div class="hud-corner tr" aria-hidden="true"></div>
+<div class="hud-corner bl" aria-hidden="true"></div>
+<div class="hud-corner br" aria-hidden="true"></div>
+<div class="hud-watermark" aria-hidden="true">CONFIDENCIAL</div>
 
 <div class="container">
 
@@ -2381,7 +2566,7 @@ footer a:hover {
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.80</span>
+        <span id="version">v4.4.81</span>
         <span class="sep">·</span>
         <span class="accent">LS Aluguel</span>
     </div>
@@ -2392,6 +2577,10 @@ footer a:hover {
 
     <!-- Trust badges (v4.4.19, simplificado v4.4.24) -->
     <div class="hero-badges">
+        <span class="trust-badge tb-live">
+            <span class="live-dot" aria-hidden="true"></span>
+            Sistema armado
+        </span>
         <span class="trust-badge">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
             Análise 100% local
@@ -2507,7 +2696,7 @@ footer a:hover {
                 <li>Faça upload do <code>.tar.gz</code> aqui — <strong>não precisa descompactar</strong>, o scanner extrai direto no navegador</li>
             </ol>
             <p style="margin-top:0.8rem;font-size:0.85rem;opacity:0.8;">
-                ⚠ <strong>Arquivo grande (&gt;150MB) no iPhone?</strong>
+                <svg class="ico-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <strong>Arquivo grande (&gt;150MB) no iPhone?</strong>
                 Use o modo <strong>"iOS · sysdiagnose (pasta extraída)"</strong> no menu acima — evita
                 "Um problema ocorreu repetidamente" causado por falta de RAM no Safari.
             </p>
@@ -2604,7 +2793,7 @@ footer a:hover {
                 <li>Faça upload do <code>.zip</code> aqui — <strong>não precisa extrair</strong>, o scanner descompacta e extrai HWID (Serial, Android ID, Widevine, MAC) + IOCs de cheat direto no navegador</li>
             </ol>
             <p style="margin-top:0.8rem;font-size:0.85rem;opacity:0.8;">
-                ⚠ Gere o bugreport no modo <strong>FULL</strong> (o <code>adb bugreport</code> padrão), não o "mini/interactive" —
+                <svg class="ico-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Gere o bugreport no modo <strong>FULL</strong> (o <code>adb bugreport</code> padrão), não o "mini/interactive" —
                 senão o dump do <code>getprop</code> com o Serial não vem completo. Arquivos muito grandes (&gt;400 MB) podem travar o navegador.
             </p>
         </div>
@@ -2850,7 +3039,7 @@ footer a:hover {
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.80";
+const VERSION = "4.4.81";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -4855,7 +5044,7 @@ async function _bugreportToReport(txt) {
     };
     const first = (...keys) => { for (const k of keys) { const v = prop(k); if (v) return v; } return ''; };
 
-    L.push('A4ther bugreport parser v4.4.80');
+    L.push('A4ther bugreport parser v4.4.81');
 
     // ── INFO DO SISTEMA ──
     H('INFO DO SISTEMA (bugreport)');
