@@ -2546,6 +2546,9 @@ body{ padding-top:30px; }
 .item code, .item .mono{ font-family:var(--mono); font-weight:600; font-size:.84em; }
 .severity-tag{ font-family:var(--mono); }
 .verdict-subtitle, .device-hero-model{ font-family:var(--display); }
+/* botões de ação com ícone SVG */
+.btn{ display:inline-flex; align-items:center; justify-content:center; gap:.5rem; font-family:var(--display); font-weight:600; }
+.btn svg{ width:16px; height:16px; flex:none; }
 
 /* stats / device / status: opacos (mata o banding sobre o fundo vivo) */
 .stat{ background:var(--panel) !important; backdrop-filter:none !important; -webkit-backdrop-filter:none !important; border:1px solid var(--line); }
@@ -2627,14 +2630,8 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.84</span>
-        <span class="sep">·</span>
-        <span class="accent">LS Aluguel</span>
+        <span id="version">v4.4.85</span>
     </div>
-    <p class="subtitle">
-        Free Fire Anti-Cheat Scanner
-        <span class="pill">iOS · Android</span>
-    </p>
 
     <div class="hero-divider"></div>
 </header>
@@ -3064,17 +3061,15 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
 
 <!-- ─── ACTIONS ─── -->
 <div class="actions hidden" id="actions">
-    <button class="btn" id="btn-back">← Nova análise</button>
-    <button class="btn" id="btn-export">Exportar relatório TXT</button>
-    <button class="btn primary" id="btn-share">Compartilhar</button>
+    <button class="btn" id="btn-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Nova análise</button>
+    <button class="btn" id="btn-export"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar relatório TXT</button>
+    <button class="btn primary" id="btn-share"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Compartilhar</button>
 </div>
 
 <!-- ─── FOOTER ─── -->
 <footer>
     <p>
         <span class="footer-brand">A4THER SYSTEMS</span>
-        <span class="sep">·</span>
-        <strong>LS Aluguel</strong>
     </p>
 </footer>
 
@@ -3084,7 +3079,7 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.84";
+const VERSION = "4.4.85";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5099,7 +5094,7 @@ async function _bugreportToReport(txt) {
     };
     const first = (...keys) => { for (const k of keys) { const v = prop(k); if (v) return v; } return ''; };
 
-    L.push('A4ther bugreport parser v4.4.84');
+    L.push('A4ther bugreport parser v4.4.85');
 
     // ── INFO DO SISTEMA ──
     H('INFO DO SISTEMA (bugreport)');
