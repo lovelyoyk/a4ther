@@ -2630,7 +2630,7 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.85</span>
+        <span id="version">v4.4.86</span>
     </div>
 
     <div class="hero-divider"></div>
@@ -3079,7 +3079,7 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.85";
+const VERSION = "4.4.86";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -4203,11 +4203,19 @@ function renderItem(item, color) {
     // Highlight bundle IDs
     body = body.replace(/\b([a-zA-Z][a-zA-Z0-9_-]+\.[a-zA-Z0-9_.-]+)\b/g,
         (full, id) => id.split('.').length >= 3 ? `<code>${id}</code>` : full);
-    // Severity tag
-    if (sev) {
-        body = body.replace(/^\[(CRITICAL|HIGH|MEDIUM|LOW)\]\s*/i,
-            `<span class="severity-tag ${sev}">${sev.toUpperCase()}</span>`);
-    }
+    // v4.4.86: QUALQUER tag entre colchetes no início vira badge. [CHEAT],
+    // [JAILBREAK], [SIDELOAD], [ROOT], [BAN], [RCE] ganham o MESMO estilo do
+    // CRITICAL (pílula vermelha); [HIGH]/[MEDIUM]/[LOW] mantêm seus estilos.
+    body = body.replace(/^\[([A-Z0-9_-]+)\]\s*/i, (m, raw) => {
+        const t = raw.toUpperCase();
+        let cls;
+        if (['CRITICAL','CHEAT','JAILBREAK','SIDELOAD','ROOT','BAN','RCE','CERT'].includes(t)) cls = 'critical';
+        else if (t === 'HIGH') cls = 'high';
+        else if (t === 'MEDIUM') cls = 'medium';
+        else if (t === 'LOW' || t === 'INFO') cls = 'low';
+        else cls = (color === 'red') ? 'critical' : (color === 'orange') ? 'high' : 'low';
+        return `<span class="severity-tag ${cls}">${t}</span>`;
+    });
     const detailHTML = detail ? `<div class="item-detail">${escapeHTML(detail)}</div>` : '';
     return `<div class="item ${color}">${body}${detailHTML}</div>`;
 }
@@ -5094,7 +5102,7 @@ async function _bugreportToReport(txt) {
     };
     const first = (...keys) => { for (const k of keys) { const v = prop(k); if (v) return v; } return ''; };
 
-    L.push('A4ther bugreport parser v4.4.85');
+    L.push('A4ther bugreport parser v4.4.86');
 
     // ── INFO DO SISTEMA ──
     H('INFO DO SISTEMA (bugreport)');

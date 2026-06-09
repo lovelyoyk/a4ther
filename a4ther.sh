@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.85 | LS Aluguel
+#  A4ther Systems v4.4.86 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.85"
+VERSION="4.4.86"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -341,7 +341,7 @@ elif [ "$_IS_SHELL" = "1" ]; then
 elif [ -n "$SKIP_WIFI_PROMPT" ]; then
     info "SKIP_WIFI_PROMPT=1 — pulando setup de depuração WiFi"
 else
-    # v4.4.85: instruções verbosas de pareamento WiFi REMOVIDAS (o usuário já
+    # v4.4.86: instruções verbosas de pareamento WiFi REMOVIDAS (o usuário já
     # roda via ADB). Aviso de uma linha, sem passo-a-passo nem pausa interativa.
     warn "Sem privilégio elevado (UID $_CUR_UID) — serial/dumpsys/tombstones podem faltar. Rode via 'adb shell sh ...' p/ acesso completo."
 fi
@@ -2011,7 +2011,7 @@ hologram(_|ff|mod|cheat)?
 holo.?(ff|mod|cheat|hack|panel)
 SIGS
 )
-    # v4.4.85: ESCOPO RESTRITO — só Download + Android/data + Android/obb, e só
+    # v4.4.86: ESCOPO RESTRITO — só Download + Android/data + Android/obb, e só
     # extensões críticas (.apk/.sh/.so/.lua/.zip). Mídia/DCIM ficam de fora por
     # construção. Self-exclude do próprio scanner. Erros nativos → /dev/null.
     SMART_ROOTS="/storage/emulated/0/Download /storage/emulated/0/Android/data /storage/emulated/0/Android/obb"
@@ -2449,7 +2449,7 @@ if [ -n "$ALL_PKGS" ]; then
     done
 fi
 
-# v4.4.85: checagem direta do diretório de CAs de usuário (Mitmproxy/Burp/injeção).
+# v4.4.86: checagem direta do diretório de CAs de usuário (Mitmproxy/Burp/injeção).
 CERT_DIR="/data/misc/user/0/cacerts-added/"
 if [ "$(ls -A "$CERT_DIR" 2>/dev/null)" ]; then
     alert "[CRÍTICO] Certificado CA de Usuário detectado (Possível Mitmproxy/Injeção de Rede)."
@@ -5345,7 +5345,7 @@ EOF
 fi
 
 # ============================================================
-#  v4.4.85: análise profunda movida pro verificador web (BugReport nativo).
+#  v4.4.86: análise profunda movida pro verificador web (BugReport nativo).
 #  Instruções verbosas de pareamento WiFi/bugreport REMOVIDAS — usuário já em ADB.
 # ============================================================
 if [ "$PLATFORM" = "android" ]; then
