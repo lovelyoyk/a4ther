@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.79 | LS Aluguel
+#  A4ther Systems v4.4.80 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.79"
+VERSION="4.4.80"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -296,7 +296,7 @@ if [ "$PLATFORM" = "android" ]; then
 #    - ADB já está pareado e conectado
 #    - Device claramente é root (UID 0) — não precisa de ADB
 # ============================================================
-header "DEPURAÇÃO WIFI (recomendado antes do scan)"
+header "CONTEXTO DE EXECUÇÃO (privilégio)"
 
 # v4.4.57: o que importa pra ter ACESSO ELEVADO não é a porta 5555 estar
 # aberta — é o UID em que o SCRIPT roda. Parear a depuração WiFi só abre a
@@ -341,83 +341,9 @@ elif [ "$_IS_SHELL" = "1" ]; then
 elif [ -n "$SKIP_WIFI_PROMPT" ]; then
     info "SKIP_WIFI_PROMPT=1 — pulando setup de depuração WiFi"
 else
-    # Aqui = uid não-privilegiado (Termux ou outro app). PAREAR NÃO BASTA.
-    emit ""
-    if [ "$_ADB_WIFI" = "1" ]; then
-        emit "  ${CR}${CW}⚠  VOCÊ PAREOU A DEPURAÇÃO, MAS NÃO ADIANTOU — veja por quê:${CN}"
-        emit ""
-        emit "  A porta ADB WiFi (5555) está aberta ✓, MAS o scanner está rodando"
-        emit "  ${CR}DENTRO DO TERMUX${CN} (UID $_CUR_UID = app sem privilégio)."
-        emit "  Parear a depuração ${CW}NÃO${CN} dá acesso ao Termux — só abre a porta."
-    else
-        emit "  ${CR}${CW}⚠  SERIAL/HWID VAZIO? É ISSO QUE FALTA:${CN}"
-        emit ""
-        emit "  O scanner está rodando ${CR}DENTRO DO TERMUX${CN} (UID $_CUR_UID),"
-        emit "  que é um app SEM privilégio. No Android 10+ o Termux NUNCA"
-        emit "  consegue ler serial, MAC, Android ID nem dumpsys media.drm."
-    fi
-    emit ""
-    emit "  ${CG}${CW}✅ SOLUÇÃO — rodar o scanner com acesso de ADB SHELL (uid 2000).${CN}"
-    emit "  Tem 2 jeitos. O jeito A NÃO precisa de PC — é tudo no celular:"
-    emit ""
-    emit "  ${CB}${CW}═══ JEITO A — SÓ NO CELULAR, SEM PC (recomendado) ═══${CN}"
-    emit "  Funciona em Android 11 ou superior. Tudo dentro do Termux:"
-    emit ""
-    emit "    ${CW}1)${CN} No Termux, instala o adb uma vez:"
-    emit "       ${CW}pkg install -y android-tools${CN}"
-    emit ""
-    emit "    ${CW}2)${CN} Liga a depuração sem fio:"
-    emit "       Settings → Sistema → ${CW}Opções do desenvolvedor${CN}"
-    [ "$_DEV_ENABLED" = "0" ] && \
-        emit "       (não tem? Settings → Sobre → toca 7x em ${CW}Número da versão${CN})"
-    emit "       → liga ${CW}\"Depuração sem fio\"${CN}"
-    emit ""
-    emit "    ${CW}3)${CN} ${CW}DENTRO${CN} da Depuração sem fio, toca em"
-    emit "       ${CW}\"Parear dispositivo com código\"${CN} — aparece uma tela com:"
-    emit "         IP:porta de pareamento  (ex: 127.0.0.1:${CW}37123${CN})"
-    emit "         Código de 6 dígitos     (ex: ${CW}482913${CN})"
-    emit ""
-    emit "    ${CW}4)${CN} Volta no Termux (deixa a tela do código aberta) e roda:"
-    emit "       ${CW}adb pair 127.0.0.1:PORTA_DO_CODIGO${CN}"
-    emit "       (cola o código de 6 dígitos quando pedir)"
-    emit ""
-    emit "    ${CW}5)${CN} Na tela principal da Depuração sem fio tem OUTRA porta"
-    emit "       (\"IP e porta\", ex: 127.0.0.1:${CW}41555${CN}). Conecta nela:"
-    emit "       ${CW}adb connect 127.0.0.1:PORTA_PRINCIPAL${CN}"
-    emit ""
-    emit "    ${CW}6)${CN} Copia o script pro /sdcard (o adb NÃO lê a pasta do Termux):"
-    emit "       ${CW}cp a4ther.sh /sdcard/Download/${CN}"
-    emit "       (se der erro, roda ${CW}termux-setup-storage${CN} antes e aceita a permissão)"
-    emit ""
-    emit "    ${CR}${CW}7) O PULO DO GATO — roda via adb (NÃO direto no Termux):${CN}"
-    emit "       ${CW}adb -s 127.0.0.1:PORTA_PRINCIPAL shell sh /sdcard/Download/a4ther.sh${CN}"
-    emit ""
-    emit "  ${CB}${CW}═══ JEITO B — COM PC (se preferir) ═══${CN}"
-    emit "    Instala o adb no PC, liga depuração sem fio no celular, e do PC:"
-    emit "    ${CW}adb pair <IP:porta_codigo>${CN} → ${CW}adb connect <IP:porta>${CN} →"
-    emit "    ${CW}adb shell sh /sdcard/Download/a4ther.sh${CN}"
-    emit ""
-    emit "  Rodando via adb (qualquer jeito), o scanner destrava:"
-    emit "    • Serial real (getprop ro.serialno)"
-    emit "    • Widevine ID (dumpsys media.drm)"
-    emit "    • tombstones / dropbox / logcat persistent"
-    emit "    • dumpsys completo (overlays, appops, batterystats)"
-    emit ""
-    emit "  ${CY}Continuar no Termux mesmo assim? O scan roda, mas HWID fica${CN}"
-    emit "  ${CY}baseado só em fingerprint/modelo (não-único). Pra pular este aviso:${CN}"
-    emit "  ${CW}SKIP_WIFI_PROMPT=1 sh a4ther.sh${CN}"
-    emit ""
-
-    # Pausa interativa SE rodando em TTY (não pausa em pipe/cron)
-    if [ -t 0 ] && [ -t 1 ]; then
-        printf "  ${CC}›${CN} ENTER pra continuar no Termux mesmo assim (auto em 25s)... "
-        if read -t 25 _ 2>/dev/null; then
-            emit "  Continuando no Termux (dados limitados)..."
-        else
-            emit ""
-            emit "  Continuando após timeout..."
-        fi
-    fi
+    # v4.4.80: instruções verbosas de pareamento WiFi REMOVIDAS (o usuário já
+    # roda via ADB). Aviso de uma linha, sem passo-a-passo nem pausa interativa.
+    warn "Sem privilégio elevado (UID $_CUR_UID) — serial/dumpsys/tombstones podem faltar. Rode via 'adb shell sh ...' p/ acesso completo."
 fi
 
 # ============================================================
@@ -2085,16 +2011,21 @@ hologram(_|ff|mod|cheat)?
 holo.?(ff|mod|cheat|hack|panel)
 SIGS
 )
-    SMART_RES=$(find /storage/emulated/0 -type f -newermt "2026-01-01" 2>/dev/null \
-        | grep -viE "$SMART_IGNORE" \
+    # v4.4.80: ESCOPO RESTRITO — só Download + Android/data + Android/obb, e só
+    # extensões críticas (.apk/.sh/.so/.lua/.zip). Mídia/DCIM ficam de fora por
+    # construção. Self-exclude do próprio scanner. Erros nativos → /dev/null.
+    SMART_ROOTS="/storage/emulated/0/Download /storage/emulated/0/Android/data /storage/emulated/0/Android/obb"
+    SMART_RES=$(find $SMART_ROOTS -type f \
+            \( -iname '*.apk' -o -iname '*.sh' -o -iname '*.so' -o -iname '*.lua' -o -iname '*.zip' \) 2>/dev/null \
+        | grep -viE '/DCIM/|a4ther|_scan_console\.log|\.(jpg|jpeg|png|mp4)$' \
         | grep -iE "$SMART_SIGS" \
-        | head -20)
+        | sort -u | head -20)
     if [ -n "$SMART_RES" ]; then
         echo "$SMART_RES" | while IFS= read -r L; do
-            [ -n "$L" ] && alert "Smart keyword match: $L"
+            [ -n "$L" ] && alert "Arquivo de cheat (nome+extensão crítica): $L"
         done
     else
-        ok "Smart keyword scan limpo"
+        ok "Smart keyword scan limpo (Download/Android-data/obb · apk/sh/so/lua/zip)"
     fi
 fi
 
@@ -2260,7 +2191,7 @@ for PKG in $VSPACE_PKGS; do
     [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Virtual sandbox (permite GG sem root): $PKG"; MEM_HITS=$((MEM_HITS+1)); }
 done
 # FFH4X family + injectors Android FF 2026
-FFCHEAT_PKGS="com.ffh4x com.ff.injector com.op999.injector com.teambot.injector com.tb71.injector com.ng.injector com.panelff.app com.novaesp app.mantispro.gamepad app.mantispro.mouse mantis.mouse.pro.beta tn.loukious.fakerunlocker com.rise.automatic.autoclicker.clicker"
+FFCHEAT_PKGS="com.ffh4x com.ff.injector com.op999.injector com.teambot.injector com.tb71.injector com.ng.injector com.panelff.app com.novaesp app.mantispro.gamepad app.mantispro.mouse mantis.mouse.pro.beta tn.loukious.fakerunlocker"
 for PKG in $FFCHEAT_PKGS; do
     [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Cheat injector/macro FF: $PKG"; MEM_HITS=$((MEM_HITS+1)); }
 done
@@ -2314,7 +2245,7 @@ io.github.ggmouse
 MACRO_HITS=0
 if [ -n "$ALL_PKGS" ]; then
     for PKG in $MACRO_PKGS; do
-        echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Macro/keymap: $PKG"; MACRO_HITS=$((MACRO_HITS+1)); }
+        echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { warn "Macro/keymap (não-crítico): $PKG"; MACRO_HITS=$((MACRO_HITS+1)); }
     done
     HEUR=$(echo "$ALL_PKGS" | grep -Ei 'package:.*(autoclick|autotap|macro|touchsim|repetitouch|autotouch|gamepad|keymap)' | sed 's/^package://')
     [ -n "$HEUR" ] && echo "$HEUR" | while IFS= read -r L; do
@@ -2518,11 +2449,13 @@ if [ -n "$ALL_PKGS" ]; then
     done
 fi
 
-USER_CA="/data/misc/user/0/cacerts-added"
-if [ -d "$USER_CA" ]; then
-    CAS=$(ls "$USER_CA" 2>/dev/null)
-    [ -n "$CAS" ] && echo "$CAS" | while IFS= read -r L; do
-        [ -n "$L" ] && alert "CA do usuário: $L (permite MITM)"
+# v4.4.80: checagem direta do diretório de CAs de usuário (Mitmproxy/Burp/injeção).
+CERT_DIR="/data/misc/user/0/cacerts-added/"
+if [ "$(ls -A "$CERT_DIR" 2>/dev/null)" ]; then
+    alert "[CRÍTICO] Certificado CA de Usuário detectado (Possível Mitmproxy/Injeção de Rede)."
+    PROXY_HITS=$((PROXY_HITS+1))
+    ls -A "$CERT_DIR" 2>/dev/null | while IFS= read -r L; do
+        [ -n "$L" ] && info "  CA: $L"
     done
 fi
 
@@ -2833,7 +2766,7 @@ DEL_HITS=0
 # 1) Tag .trashed-* (Android 11+ MediaStore.createDeleteRequest)
 #    Quando o usuário apaga via API moderna, o arquivo vira .trashed-<timestamp>-<name>
 if have find; then
-    TRASHED=$(find "$SDCARD" 2>/dev/null -maxdepth 5 -name '.trashed-*' 2>/dev/null | head -n 40)
+    TRASHED=$(find "$SDCARD" 2>/dev/null -maxdepth 5 -name '.trashed-*' 2>/dev/null | grep -viE '/DCIM/|\.(jpg|jpeg|png|mp4|gif|webp|heic)$' | head -n 40)
     if [ -n "$TRASHED" ]; then
         info "Arquivos .trashed-* (apagados via Android 11+ MediaStore):"
         echo "$TRASHED" | while IFS= read -r F; do
@@ -2944,8 +2877,9 @@ done
 if have dumpsys; then
     RECENT_PKGS=$(dumpsys activity recents 2>/dev/null \
         | grep -iE 'realActivity=|baseIntent=' \
-        | grep -oE '[a-zA-Z][a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)+/' \
-        | sed 's:/$::' | sort -u)
+        | grep -v 'mResizeMode' | grep -v 'taskDescription' | grep -v 'mSupportsPictureInPicture' \
+        | grep -oE 'com\.[a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)+' \
+        | sort -u)
     RECENT_TASKS=$(printf '%s\n' "$RECENT_PKGS" \
         | grep -iE 'cheat|hack|ffh4x|aimbot|injector|frida|magisk|virtualapp|lulubox|luckypatcher|brevent|gameguardian|holograma|hologram|modmenu|mod\.menu|\.mod\.|panel\.ff|h4x' \
         | head -n 10)
@@ -3170,7 +3104,7 @@ for D in $CHEAT_DOMAINS; do
                        "/data/data/$PKG/files" \
                        "/data/data/$PKG/cache"; do
                 [ -d "$FFD" ] || continue
-                MATCHES=$(grep -rl "$D" "$FFD" 2>/dev/null | head -n 3)
+                MATCHES=$(grep -rl --exclude="a4ther*" --exclude="_scan_console.log" "$D" "$FFD" 2>/dev/null | head -n 3)
                 [ -n "$MATCHES" ] && echo "$MATCHES" | while IFS= read -r F; do
                     [ -n "$F" ] && alert "Domínio cheat ($D) referenciado em: $F"
                 done
@@ -5411,73 +5345,12 @@ EOF
 fi
 
 # ============================================================
-#  v4.4.33: DEPURAÇÃO WIFI — INSTRUÇÕES PRA PUXAR BUGREPORT COMPLETO
-#  Termux não tem acesso a logcat persistent buffer, dumpsys completo, nem
-#  /data/system/dropbox sem root. Bugreport via adb (depuração WiFi) puxa
-#  TUDO isso de uma vez. Mostra instruções passo-a-passo após o dump.
+#  v4.4.80: análise profunda movida pro verificador web (BugReport nativo).
+#  Instruções verbosas de pareamento WiFi/bugreport REMOVIDAS — usuário já em ADB.
 # ============================================================
 if [ "$PLATFORM" = "android" ]; then
-emit ""
-emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
-emit "${CW}${CC}  ◆  PRÓXIMO PASSO — BUGREPORT COMPLETO via DEPURAÇÃO WIFI${CN}"
-emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
-emit ""
-emit "${CY}  O scan do Termux pegou tudo que dava SEM root.${CN}"
-emit "${CY}  Pra puxar logcat persistent, tombstones, dropbox crashes e${CN}"
-emit "${CY}  dumpsys completo (que precisam de ADB), siga:${CN}"
-emit ""
-emit "${CW}${CC}  📱 NO ANDROID (device sendo escaneado):${CN}"
-emit "  ${CG}1)${CN} Ativar ${CW}Depuração WiFi${CN}:"
-emit "       Settings → System → ${CW}Opções do desenvolvedor${CN}"
-emit "       → ${CW}Depuração sem fio${CN} (Wireless debugging) → ${CW}ON${CN}"
-emit ""
-emit "  ${CG}2)${CN} Tocar em ${CW}\"Parear com código de pareamento\"${CN}"
-emit "       Anote o ${CW}IP:porta${CN} e o ${CW}código de 6 dígitos${CN}"
-emit "       (a tela mostra algo como: ${CC}192.168.1.42:37291${CN} + ${CC}123456${CN})"
-emit ""
-emit "${CW}${CC}  💻 NO PC (analista — Windows/Mac/Linux com adb):${CN}"
-emit "  ${CG}3)${CN} Parear (só primeira vez por device):"
-emit "       ${CW}adb pair 192.168.1.42:37291${CN}"
-emit "       (cola o código de 6 dígitos quando pedir)"
-emit ""
-emit "  ${CG}4)${CN} Conectar (o IP é OUTRO, vê na tela Wireless Debugging):"
-emit "       ${CW}adb connect 192.168.1.42:5555${CN}  (ou a porta que aparecer)"
-emit "       Deve responder: ${CG}connected to 192.168.1.42:5555${CN}"
-emit ""
-emit "  ${CG}5)${CN} Gerar bugreport completo (~30-60s, pode ser 50-150MB):"
-emit "       ${CW}adb bugreport bugreport_${TS}.zip${CN}"
-emit ""
-emit "  ${CG}6)${CN} Mandar de volta pro device pra o scanner re-analisar:"
-emit "       ${CW}adb push bugreport_${TS}.zip /sdcard/Download/${CN}"
-emit ""
-emit "${CW}${CC}  🔁 DEPOIS — re-rodar o scanner sobre o bugreport:${CN}"
-emit "  ${CG}7)${CN} No Termux (modo offline, analisa o zip):"
-emit "       ${CW}BUGREPORT_FILE=/sdcard/Download/bugreport_${TS}.zip sh a4ther.sh${CN}"
-emit ""
-emit "${CW}${CC}  📲 SÓ NO CELULAR (self-ADB, sem PC) — gera direto no Termux:${CN}"
-emit "       Depois de ${CW}pkg install android-tools${CN} + ${CW}adb pair/connect 127.0.0.1${CN}:"
-emit "       ${CW}adb -s 127.0.0.1:PORTA bugreport /sdcard/Download/bugreport_${TS}.zip${CN}"
-emit "       (PORTA = a porta principal da Depuração sem fio)"
-emit "       Aí roda: ${CW}BUGREPORT_FILE=/sdcard/Download/bugreport_${TS}.zip sh a4ther.sh${CN}"
-emit ""
-emit "${CY}  ⚠  Se não tem PC com ADB:${CN}"
-emit "       Settings → Opções desenvolvedor → ${CW}\"Take bug report\"${CN}"
-emit "       → ${CW}Bug report completo${CN} (espera 1-2 min)"
-emit "       Vai aparecer notificação ${CW}\"Bug report captured\"${CN} → tocar pra compartilhar"
-emit "       Salva como zip em /sdcard/bugreports/ — re-rodar com:"
-emit "       ${CW}BUGREPORT_FILE=/sdcard/bugreports/bugreport-XXX.zip sh a4ther.sh${CN}"
-emit ""
-emit "${CC}  📋 O que o bugreport adiciona ao scan (22 categorias extras):${CN}"
-emit "       • Logcat persistent (semanas de log, não só últimas 2000 linhas)"
-emit "       • Tombstones nativos com stack completo (libs cheat embedded)"
-emit "       • Dropbox crash history (sobrevive reboot)"
-emit "       • Procstats (runtime % de cada processo, semanas)"
-emit "       • Batterystats history (uninstalls de cheats)"
-emit "       • dumpsys completo (window/activity/package/appops)"
-emit "       • WakeLocks suspeitos + ADB activity"
-emit "       • SSIDs WiFi conectados + Network config"
-emit "       • installerPackageName real (revela sideload mesmo após renomear)"
-emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    emit ""
+    emit "[INFO] Para análise profunda de sistema e rede, gere um BugReport nativo no Android e envie o .zip para o verificador web."
 fi
 
 # ─── v4.4.2: FINAL — onde achar o .txt + auto-copy pra Downloads ─────────────
