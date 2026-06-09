@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.74 | LS Aluguel
+#  A4ther Systems v4.4.79 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.74"
+VERSION="4.4.79"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -97,6 +97,14 @@ human_kb() {
 SELF_PID=$$
 SELF_PPID=$(cat /proc/$$/stat 2>/dev/null | awk '{print $4}')
 SELF_SCRIPT="a4ther"
+# v4.4.79 (A3): caminho/nome ABSOLUTO do próprio script, pra self-exclusion por PATH
+# (não por glob de nome). Antes excluía 'a4ther*'/'A4THER*'/'scan_*' por NOME — um
+# cheat nomeado a4ther_x.lua / scan_evil.js escapava do scan de holograma. Agora só
+# o arquivo REAL do script (qualquer nome que ele tenha) + a pasta a4ther_audits +
+# o relatório master do coletor ADB são excluídos.
+SELF_PATH=$0
+case "$SELF_PATH" in /*) ;; *) SELF_PATH="$(pwd 2>/dev/null)/$SELF_PATH" ;; esac
+SELF_BASE=$(basename "$SELF_PATH" 2>/dev/null); [ -n "$SELF_BASE" ] || SELF_BASE="a4ther.sh"
 # clean_procs: remove linhas que sejam o próprio script (pid/ppid/nome).
 # Uso: PROCS=$(ps -A 2>/dev/null | clean_procs)
 clean_procs() {
@@ -1217,38 +1225,158 @@ for PKG in $FF_PKGS; do
                 done
             fi
         fi
-        # tamanho TOTAL real do jogo (v4.4.70): APK dir + OBB + Data somados.
-        # ANTES media só o base.apk (~400MB) → reportava <500MB enquanto o Android
-        # (App Info) mostra 3.75GB, porque ignorava o OBB (pacote de expansão) e o
-        # Data (assets baixados pós-instalação). Agora soma os 3 diretórios.
+        # tamanho TOTAL real do jogo (v4.4.75): o FF usa App Bundle (SPLIT APKs), então
+        # o base.apk tem só ~12-60MB — medir SÓ ele dava falso "APK pequeno/mod". Agora
+        # SOMA todos os APKs fracionados que o `pm path` lista (base + split_config.*) +
+        # OBB + Data. Remove o alerta de "<500MB" baseado em base.apk.
         FF_APK_DIR=$(dirname "$APK_PATH" 2>/dev/null)
         FF_OBB_DIR="/sdcard/Android/obb/$PKG";   [ -d "$FF_OBB_DIR" ]  || FF_OBB_DIR="/storage/emulated/0/Android/obb/$PKG"
         FF_DATA_DIR="/sdcard/Android/data/$PKG"; [ -d "$FF_DATA_DIR" ] || FF_DATA_DIR="/storage/emulated/0/Android/data/$PKG"
-        APK_KB=0; OBB_KB=0; DATA_KB=0
+        APK_KB=0; OBB_KB=0; DATA_KB=0; SPLIT_N=0
+        # soma cada APK fracionado (base + split_config.arm64/.xxhdpi/.pt etc.)
+        for _apk in $(pm path "$PKG" 2>/dev/null | sed 's|^package:||'); do
+            [ -f "$_apk" ] || continue
+            _sz=$(stat -c '%s' "$_apk" 2>/dev/null); case "$_sz" in ''|*[!0-9]*) _sz=0 ;; esac
+            APK_KB=$((APK_KB + _sz / 1024)); SPLIT_N=$((SPLIT_N + 1))
+        done
         if have du; then
-            case "$FF_APK_DIR" in /data/app/*|/system/*) APK_KB=$(du -sk "$FF_APK_DIR" 2>/dev/null | awk '{print $1}') ;; esac
             [ -d "$FF_OBB_DIR" ]  && OBB_KB=$(du -sk "$FF_OBB_DIR"  2>/dev/null | awk '{print $1}')
             [ -d "$FF_DATA_DIR" ] && DATA_KB=$(du -sk "$FF_DATA_DIR" 2>/dev/null | awk '{print $1}')
         fi
         case "$APK_KB"  in ''|*[!0-9]*) APK_KB=0 ;;  esac
         case "$OBB_KB"  in ''|*[!0-9]*) OBB_KB=0 ;;  esac
         case "$DATA_KB" in ''|*[!0-9]*) DATA_KB=0 ;; esac
-        # fallback: se o du não pegou o dir do APK, usa o stat do base.apk em KB
-        if [ "$APK_KB" -eq 0 ] && [ -f "$APK_PATH" ]; then
-            _b=$(stat -c '%s' "$APK_PATH" 2>/dev/null); case "$_b" in ''|*[!0-9]*) _b=0 ;; esac
-            APK_KB=$((_b / 1024))
-        fi
         TOTAL_KB=$((APK_KB + OBB_KB + DATA_KB))
-        info "  tamanho TOTAL (APK+OBB+Data): $(human_kb "$TOTAL_KB")"
-        info "    APK: $(human_kb "$APK_KB")  |  OBB: $(human_kb "$OBB_KB")  |  Data: $(human_kb "$DATA_KB")"
-        # FF completo ~3-5GB. Total muito baixo = OBB/Data ausente (repack/mod ou
-        # download incompleto). É AVISO (não veredito sozinho), pra não gerar WO injusto.
-        if [ "$TOTAL_KB" -gt 0 ] && [ "$TOTAL_KB" -lt 1572864 ] 2>/dev/null; then
-            warn "  Instalação do FF pequena ($(human_kb "$TOTAL_KB")) — OBB/Data ausente? Possível repack/mod ou download incompleto."
+        info "  tamanho TOTAL (APKs+OBB+Data): $(human_kb "$TOTAL_KB")  ·  ${SPLIT_N} APK(s) fracionado(s)"
+        info "    APKs(base+splits): $(human_kb "$APK_KB")  |  OBB: $(human_kb "$OBB_KB")  |  Data: $(human_kb "$DATA_KB")"
+        # SÓ avisa se conseguiu medir o OBB (onde está o bulk real) e mesmo assim ficou
+        # minúsculo — nunca alerta por base.apk pequeno nem quando OBB/Data não puderam
+        # ser lidos (sem root), pra não gerar falso "mod".
+        if [ "$OBB_KB" -gt 0 ] && [ "$TOTAL_KB" -gt 0 ] && [ "$TOTAL_KB" -lt 1048576 ] 2>/dev/null; then
+            warn "  Instalação do FF pequena ($(human_kb "$TOTAL_KB")) mesmo com OBB lido — possível repack/mod."
+        fi
+        # ── v4.4.75: AUDITORIA DE METADATA DA LIB (regra de 1981) — repack/mod detect ──
+        # APK oficial: o ZIP do Android grava os .so da pasta lib com o epoch mínimo do
+        # formato ZIP (1981-01-01). Se o mtime divergir e estiver RECENTE, o APK foi
+        # descompactado, adulterado e recompilado (repack de cheat).
+        # v4.4.75 (anti-FP): nem todo Android preserva o epoch 1981 na extração (alguns
+        # usam wall-clock → TODA lib fica com data recente, inclusive de apps oficiais).
+        # Antes de cravar repack, CALIBRA contra um app oficial garantido (Play Services/
+        # Store): se a lib DELE é 1981, este device preserva o epoch → FF recente = repack;
+        # se a lib dele também é recente, a regra não vale aqui → sem veredito (evita falso CRÍTICO).
+        FF_LIB_DIR="$FF_APK_DIR/lib"
+        if [ -d "$FF_LIB_DIR" ]; then
+            _newest_so=$(find "$FF_LIB_DIR" -type f -name '*.so' 2>/dev/null | head -1)
+            _ref_y=$(stat -c '%y' "${_newest_so:-$FF_LIB_DIR}" 2>/dev/null | cut -d' ' -f1)
+            case "$_ref_y" in
+                1981-*|1980-*|1979-*) ok "  lib metadata OK (epoch ZIP padrão $_ref_y — não repackado)" ;;
+                "")                   info "  lib: sem leitura de mtime dos .so (sem root?)" ;;
+                *)
+                    # CALIBRAÇÃO: este device preserva o epoch 1981 na extração das libs?
+                    _dev_1981=0; _calib_y=""
+                    for _cand in com.google.android.gms com.android.vending com.google.android.gsf com.google.android.webview; do
+                        _cp=$(pm path "$_cand" 2>/dev/null | head -1 | sed 's|^package:||')
+                        [ -n "$_cp" ] || continue
+                        _cl="$(dirname "$_cp")/lib"; [ -d "$_cl" ] || continue
+                        _cs=$(find "$_cl" -type f -name '*.so' 2>/dev/null | head -1)
+                        [ -n "$_cs" ] || continue
+                        _calib_y=$(stat -c '%y' "$_cs" 2>/dev/null | cut -d' ' -f1)
+                        case "$_calib_y" in 1981-*|1980-*|1979-*) _dev_1981=1 ;; esac
+                        break
+                    done
+                    if [ "$_dev_1981" = "1" ]; then
+                        alert "  Metadata da lib adulterada (Repack/Mod Detectado) - Data: $_ref_y (apps oficiais neste device mantêm 1981; o FF não → repack)"
+                    elif [ -n "$_calib_y" ]; then
+                        info "  lib do FF com data recente ($_ref_y), mas apps oficiais deste device também ($_calib_y → extração wall-clock) — regra de 1981 não aplicável, sem veredito"
+                    else
+                        warn "  lib do FF com data recente ($_ref_y) e sem app oficial p/ calibrar — revisar (possível repack, não confirmado)"
+                    fi ;;
+            esac
+        else
+            warn "  Diretório lib do FF ausente ($FF_LIB_DIR) — libs nativas não extraídas (repack/split incompleto?)"
         fi
     fi
 done
 [ "$FF_FOUND" = "0" ] && warn "Free Fire NÃO encontrado"
+
+# ============================================================
+#  8a-ter. FREE FIRE — INSTÂNCIAS SECUNDÁRIAS / CLONE (v4.4.79, A6)
+#  Os checks específicos do FF miram user 0 (/data/data/com.dts.freefireth). FF rodando
+#  em work-profile, 2º usuário, ou app de clonagem (parallel/dual space) escapa e serve
+#  de bypass de ban por device. Aqui pegamos essas instâncias extras.
+# ============================================================
+header "FREE FIRE — INSTÂNCIAS SECUNDÁRIAS / CLONE"
+_FF_EXTRA=0
+# 1) usuários secundários (work profile / multi-user / clone via user 999)
+if have pm; then
+    for _u in $(pm list users 2>/dev/null | grep -oE '\{[0-9]+:' | grep -oE '[0-9]+'); do
+        [ "$_u" = "0" ] && continue
+        for _fp in $FF_PKGS; do
+            if pm list packages --user "$_u" 2>/dev/null | grep -q "^package:${_fp}$"; then
+                alert "Free Fire ($_fp) no usuário secundário $_u (work profile / multi-user / clone) — forense do user 0 não cobre"
+                _FF_EXTRA=$((_FF_EXTRA+1))
+            fi
+        done
+    done
+fi
+# 2) dados do FF dentro de apps de clonagem (parallel/dual space) ou /data/user/N (precisa root)
+if have find; then
+    for _root in /data/user/[0-9]* /data/data/com.lbe.parallel* /data/data/com.ludashi.dualspace \
+                 /data/data/com.excelliance.dualaid /data/data/io.virtualapp /data/data/com.parallel.space* \
+                 /data/data/com.icecold.gomultiple /data/data/com.cloneapp* /sdcard/Android/data/com.lbe.parallel*; do
+        [ -e "$_root" ] || continue
+        _CLONE_FF=$(find "$_root" 2>/dev/null -maxdepth 6 -type d -name 'com.dts.freefire*' 2>/dev/null | head -3)
+        [ -n "$_CLONE_FF" ] && printf '%s\n' "$_CLONE_FF" | while IFS= read -r H; do
+            [ -n "$H" ] && alert "Dados do Free Fire em espaço clonado/secundário: $H — instância paralela (provável bypass de ban por device)"
+        done
+    done
+fi
+[ "$_FF_EXTRA" = "0" ] && ok "Sem instância do FF em usuário secundário (user 0 apenas)"
+
+# ============================================================
+#  8a-bis. SIDELOAD GLOBAL — apps de TERCEIROS fora das lojas oficiais
+#  (v4.4.75) `pm list packages -i -3`: lista pacote + installer, só apps de
+#  terceiro (-3 exclui system). Flagga painéis/cheats disfarçados de app comum
+#  instalados via packageinstaller / Chrome / gerenciador de arquivos / null.
+# ============================================================
+# v4.4.79 (fix portabilidade): a classificação do installer MORA nesta função —
+# o `case` fica FORA de qualquer $(). `case` dentro de $(...) quebra o parser do
+# bash < 4 (bug clássico: o ")" do padrão do case é confundido com o ")" que
+# fecha o $()). Android (/system/bin/sh = mksh) e bash 5 rodam, mas extraindo
+# pra função o script parseia em TODO shell (mksh, dash, bash 3.2, bash 5).
+_sl_classify() {  # $1=pacote  $2=installer  → ecoa "pacote|installer" se for sideload
+    case "$2" in
+        # lojas oficiais (Play + OEMs) = legítimo, ignora
+        com.android.vending|com.google.android.feedback|com.amazon.venezia|\
+        com.sec.android.app.samsungapps|com.huawei.appmarket|com.xiaomi.mipicks|\
+        com.heytap.market|com.oppo.market|com.vivo.appstore|com.bbk.appstore|com.transsion.phoenix) ;;
+        # null / instaladores manuais / browser / file managers = SIDELOAD
+        null|""|com.google.android.packageinstaller|com.android.packageinstaller|\
+        com.android.chrome|com.google.android.gm|bin.mt.plus|\
+        *filemanager*|*fileexplorer*|*zarchiver*|*documentsui*|*apps.nbu.files*|*mixplorer*)
+            echo "$1|${2:-null}" ;;
+        # qualquer outra origem não-loja também é suspeita
+        *) echo "$1|$2" ;;
+    esac
+}
+header "SIDELOAD GLOBAL (origem dos apps de terceiros)"
+if have pm; then
+    SIDELOADED=$(pm list packages -i -3 2>/dev/null | while IFS= read -r LINE; do
+        APP=$(echo "$LINE"  | sed -n 's/^package:\([^ ]*\).*/\1/p')
+        INST=$(echo "$LINE" | sed -n 's/.*installer=\([^ ]*\).*/\1/p')
+        [ -z "$APP" ] && continue
+        _sl_classify "$APP" "$INST"
+    done | sort -u)
+    if [ -n "$SIDELOADED" ]; then
+        printf '%s\n' "$SIDELOADED" | while IFS='|' read -r APP INST; do
+            [ -n "$APP" ] && warn "[SUSPEITO] App instalado via Sideload (Fora da Loja): $APP (installer: $INST)"
+        done
+    else
+        ok "Nenhum app de terceiro com origem suspeita (todos via loja oficial)"
+    fi
+else
+    info "pm indisponível — sideload global não verificado"
+fi
 
 # ============================================================
 #  8b. FREE FIRE - HISTÓRICO DE INSTALAÇÃO / DESINSTALAÇÃO
@@ -1321,10 +1449,12 @@ fi
 
 # 3) Eventos package_added / package_removed no logcat events buffer
 if have logcat; then
-    PKG_EVENTS=$(logcat -b events -d 2>/dev/null | grep -iE 'pkg_install|pkg_uninstall|package_added|package_removed|installer' | head -n 30)
+    # v4.4.75: sort -u dedupa eventos idênticos repetidos no buffer (o logcat events
+    # repete a mesma linha de pkg/job em loop) — antes floodava a saída.
+    PKG_EVENTS=$(logcat -b events -d 2>/dev/null | grep -iE 'pkg_install|pkg_uninstall|package_added|package_removed|installer' | sort -u | head -n 30)
     if [ -n "$PKG_EVENTS" ]; then
         # filtrar FF e cheats
-        FF_LOGEV=$(echo "$PKG_EVENTS" | grep -iE 'freefire|dts\.freefire|garena|cheat|hack|mod|aimbot|esp|frida|magisk|holograma|hologram')
+        FF_LOGEV=$(echo "$PKG_EVENTS" | grep -iE 'freefire|dts\.freefire|garena|cheat|hack|mod|aimbot|esp|frida|magisk|holograma|hologram' | sort -u)
         if [ -n "$FF_LOGEV" ]; then
             alert "Eventos de pkg no logcat (FF/cheat relacionados):"
             echo "$FF_LOGEV" | head -n 10 | while IFS= read -r L; do
@@ -1456,7 +1586,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
         # (o script vive em /sdcard/Download/a4ther.sh e contém as strings IOC; os
         # relatórios scan_*/A4THER_UPLOAD_SITE_* também). Senão o scanner se flagra.
         HOLO_CANDIDATES=$(find $HOLO_PATHS 2>/dev/null -maxdepth 6 -type f \
-            ! -name 'a4ther*' ! -name 'A4THER*' ! -name 'scan_*' ! -path '*/a4ther_audits/*' \
+            ! -path "$SELF_PATH" ! -path '*/a4ther_audits/*' ! -name 'A4THER_UPLOAD_SITE_*' \
             \( -iname '*.js' -o -iname '*.txt' -o -iname '*.html' -o -iname '*.md' \
                -o -iname '*.json' -o -iname '*.lua' \) -size -100k 2>/dev/null | head -200)
         if [ -n "$HOLO_CANDIDATES" ]; then
@@ -1477,7 +1607,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
     # 2) STRING patterns — funções únicas do script
     if have grep; then
         # createHologram + updateHolograms + getEnemies juntos no mesmo arquivo
-        STR_MATCH=$(grep -rlE --exclude='a4ther*' --exclude='A4THER*' --exclude='scan_*.txt' --exclude-dir='a4ther_audits' 'createHologram[[:space:]]*\(' $HOLO_PATHS 2>/dev/null | head -20)
+        STR_MATCH=$(grep -rlE --exclude="$SELF_BASE" --exclude='A4THER_UPLOAD_SITE_*' --exclude-dir='a4ther_audits' 'createHologram[[:space:]]*\(' $HOLO_PATHS 2>/dev/null | head -20)
         if [ -n "$STR_MATCH" ]; then
             echo "$STR_MATCH" | while IFS= read -r F; do
                 [ -z "$F" ] || [ ! -r "$F" ] && continue
@@ -1494,7 +1624,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
         fi
 
         # Pattern crítico: BoxGeometry(1, 2, 1) + cor 0xff0000 = silhueta humanoide vermelha
-        BOX_MATCH=$(grep -rlE --exclude='a4ther*' --exclude='A4THER*' --exclude='scan_*.txt' --exclude-dir='a4ther_audits' 'BoxGeometry[[:space:]]*\([[:space:]]*1[[:space:]]*,[[:space:]]*2[[:space:]]*,[[:space:]]*1[[:space:]]*\)' $HOLO_PATHS 2>/dev/null | head -10)
+        BOX_MATCH=$(grep -rlE --exclude="$SELF_BASE" --exclude='A4THER_UPLOAD_SITE_*' --exclude-dir='a4ther_audits' 'BoxGeometry[[:space:]]*\([[:space:]]*1[[:space:]]*,[[:space:]]*2[[:space:]]*,[[:space:]]*1[[:space:]]*\)' $HOLO_PATHS 2>/dev/null | head -10)
         if [ -n "$BOX_MATCH" ]; then
             echo "$BOX_MATCH" | while IFS= read -r F; do
                 [ -z "$F" ] && continue
@@ -1509,7 +1639,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
 
     # 3) Three.js library dentro de pasta do FF (não tem motivo legítimo)
     THREE_JS=$(find $HOLO_PATHS 2>/dev/null -maxdepth 5 -type f \
-        ! -name 'a4ther*' ! -name 'A4THER*' ! -path '*/a4ther_audits/*' \
+        ! -path "$SELF_PATH" ! -path '*/a4ther_audits/*' ! -name 'A4THER_UPLOAD_SITE_*' \
         \( -iname 'three.min.js' -o -iname 'three.js' -o -iname 'three.module.js' \) 2>/dev/null | head -5)
     if [ -n "$THREE_JS" ]; then
         echo "$THREE_JS" | while IFS= read -r F; do
@@ -1523,7 +1653,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
         for WV in "/data/data/$FFPKG/app_webview" "/data/data/$FFPKG/app_chromium" \
                   "/data/data/$FFPKG/cache/WebView"; do
             [ -d "$WV" ] || continue
-            WV_HIT=$(grep -rliE --exclude='a4ther*' --exclude='A4THER*' --exclude-dir='a4ther_audits' 'createHologram|updateHolograms|hologram-.{1,5}enemy' "$WV" 2>/dev/null | head -3)
+            WV_HIT=$(grep -rliE --exclude="$SELF_BASE" --exclude='A4THER_UPLOAD_SITE_*' --exclude-dir='a4ther_audits' 'createHologram|updateHolograms|hologram-.{1,5}enemy' "$WV" 2>/dev/null | head -3)
             if [ -n "$WV_HIT" ]; then
                 echo "$WV_HIT" | while IFS= read -r F; do
                     [ -n "$F" ] && alert "WebView do FF contém script Holograma: $F"
@@ -1670,43 +1800,42 @@ for PKG in $FF_PKGS; do
     fi
     if have find; then
         BINS=$(find "$RDIR" 2>/dev/null -maxdepth 2 -type f -name '*.bin' 2>/dev/null)
-        [ -n "$BINS" ] && echo "$BINS" | while IFS= read -r B; do
-            [ -z "$B" ] && continue
-            SZ=$(stat -c '%s' "$B" 2>/dev/null)
-            ACC=$(stat -c '%X' "$B" 2>/dev/null)
-            MOD=$(stat -c '%Y' "$B" 2>/dev/null)
-            CHG=$(stat -c '%Z' "$B" 2>/dev/null)
-            MTHUMAN=$(stat -c '%y' "$B" 2>/dev/null)
-            info "  $B ($SZ b, mod=$MTHUMAN)"
-            # v4.4.32: Access > Modify NÃO é mais alert. Isso acontece NORMAL
-            # quando o usuário assiste o replay (atime atualiza, mtime fica).
-            # Só vira aviso se o delta é > 7 dias (suspeito de touch -d antigo).
-            if [ -n "$ACC" ] && [ -n "$MOD" ] && [ "$ACC" -gt "$MOD" ] 2>/dev/null; then
-                ACC_DELTA=$((ACC - MOD))
-                if [ "$ACC_DELTA" -gt 604800 ] 2>/dev/null; then
-                    warn "  Access > Modify (delta ${ACC_DELTA}s, >7d) — possível touch bypass"
+        if [ -n "$BINS" ]; then
+            # v4.4.75: DEDUP/RESUMO — antes saía 1 linha (info + warn) POR arquivo .bin
+            # (flood de dezenas no cache de replays). Agora percorre tudo emitindo um TAG
+            # por anomalia e imprime só CONTAGENS agregadas. (O while roda em subshell, então
+            # agregamos via grep -c na saída de tags, não com variáveis de loop.)
+            _RFIND=$(echo "$BINS" | while IFS= read -r B; do
+                [ -z "$B" ] && continue
+                ACC=$(stat -c '%X' "$B" 2>/dev/null); MOD=$(stat -c '%Y' "$B" 2>/dev/null)
+                CHG=$(stat -c '%Z' "$B" 2>/dev/null); MTHUMAN=$(stat -c '%y' "$B" 2>/dev/null)
+                # Access > Modify > 7d = touch -d antigo (assistir replay atualiza atime: normal só se <7d)
+                if [ -n "$ACC" ] && [ -n "$MOD" ] && [ "$ACC" -gt "$MOD" ] 2>/dev/null; then
+                    [ "$((ACC - MOD))" -gt 604800 ] 2>/dev/null && echo "ACCGTMOD"
                 fi
-            fi
-            # Modify == Change (Change deveria ser >= Modify; igual em fs com ns = OK)
-            if [ -n "$MOD" ] && [ -n "$CHG" ] && [ "$MOD" -eq "$CHG" ] 2>/dev/null && [ "$ACC" -eq "$MOD" ] 2>/dev/null; then
-                # Só warn em fs com nanos (em FAT isso é trivial)
-                fs_has_nanos "$B" && warn "  Access=Modify=Change (timestamps idênticos = touch bypass)"
-            fi
-            # v4.4.32: nanos zerados só conta se o fs suporta nanos.
-            if fs_has_nanos "$B"; then
-                case "$MTHUMAN" in
-                    *\.000000000*) alert "  Nanossegundos zerados em mtime ($MTHUMAN)" ;;
-                esac
-            fi
-            # 4) JSON companion vs BIN
-            JSON="${B%.bin}.json"
-            if [ -f "$JSON" ]; then
-                JMOD=$(stat -c '%Y' "$JSON" 2>/dev/null)
-                if [ -n "$JMOD" ] && [ -n "$MOD" ] && [ "$JMOD" -lt "$MOD" ] 2>/dev/null; then
-                    alert "  JSON ($JSON) modificado ANTES do BIN (anomalia)"
+                # Access=Modify=Change (só em fs com nanos) = touch bypass
+                if [ -n "$MOD" ] && [ -n "$CHG" ] && [ "$MOD" -eq "$CHG" ] 2>/dev/null && [ "$ACC" -eq "$MOD" ] 2>/dev/null; then
+                    fs_has_nanos "$B" && echo "TOUCHBYPASS"
                 fi
-            fi
-        done
+                # v4.4.79 (fix portab.): era `case` inline DENTRO do $() do _RFIND —
+                # o ")" do padrão quebra o parser do bash<4. Troca por expansão de
+                # parâmetro (POSIX puro, idêntico): detecta ".000000000" em qualquer lugar.
+                if fs_has_nanos "$B" && [ "$MTHUMAN" != "${MTHUMAN%%.000000000*}" ]; then echo "NANOZERO"; fi
+                JSON="${B%.bin}.json"
+                if [ -f "$JSON" ]; then
+                    JMOD=$(stat -c '%Y' "$JSON" 2>/dev/null)
+                    [ -n "$JMOD" ] && [ -n "$MOD" ] && [ "$JMOD" -lt "$MOD" ] 2>/dev/null && echo "JSONBEFORE"
+                fi
+            done)
+            _C_TOUCH=$(printf '%s\n' "$_RFIND" | grep -c '^TOUCHBYPASS$' 2>/dev/null)
+            _C_ACC=$(printf '%s\n'   "$_RFIND" | grep -c '^ACCGTMOD$'    2>/dev/null)
+            _C_NANO=$(printf '%s\n'  "$_RFIND" | grep -c '^NANOZERO$'    2>/dev/null)
+            _C_JSON=$(printf '%s\n'  "$_RFIND" | grep -c '^JSONBEFORE$'  2>/dev/null)
+            [ "${_C_TOUCH:-0}" -gt 0 ] 2>/dev/null && { warn "  ${_C_TOUCH} arquivo(s) de replay com touch bypass (Access=Modify=Change)"; REPLAY_HITS=$((REPLAY_HITS+1)); }
+            [ "${_C_ACC:-0}" -gt 0 ]   2>/dev/null && { warn "  ${_C_ACC} arquivo(s) de replay com Access > Modify >7d (possível touch -d antigo)"; REPLAY_HITS=$((REPLAY_HITS+1)); }
+            [ "${_C_NANO:-0}" -gt 0 ]  2>/dev/null && { alert "  ${_C_NANO} arquivo(s) de replay com nanossegundos zerados em mtime (touch)"; REPLAY_HITS=$((REPLAY_HITS+1)); }
+            [ "${_C_JSON:-0}" -gt 0 ]  2>/dev/null && { alert "  ${_C_JSON} replay(s) com JSON modificado ANTES do BIN (anomalia)"; REPLAY_HITS=$((REPLAY_HITS+1)); }
+        fi
         # arquivos não-.bin/.json na pasta de replay
         ODD=$(find "$RDIR" -type f ! -name '*.bin' ! -name '*.json' 2>/dev/null)
         [ -n "$ODD" ] && echo "$ODD" | while IFS= read -r L; do
@@ -2573,6 +2702,25 @@ if have find; then
         [ -n "$L" ] && alert "Arquivo .esp: $L"
     done
 fi
+# v4.4.79 (A7): heurística COMPORTAMENTAL (independe de nome na blacklist) — app de
+# terceiro com overlay (SYSTEM_ALERT_WINDOW) E serviço de acessibilidade ligado AO MESMO
+# TEMPO = perfil clássico de PAINEL de cheat (desenha por cima + lê/clica a tela).
+if have dumpsys && have settings; then
+    _OVL_PKGS=$(dumpsys appops 2>/dev/null | grep -B100 'SYSTEM_ALERT_WINDOW: allow' \
+        | grep -E '^[a-zA-Z0-9_.]+[[:space:]]*:[[:space:]]*\(uid=' | awk '{print $1}' | sort -u)
+    _ACC_PKGS=$(setting_get secure enabled_accessibility_services | tr ':' '\n' | sed 's:/.*::' | grep -E '^[a-zA-Z]' | sort -u)
+    if [ -n "$_OVL_PKGS" ] && [ -n "$_ACC_PKGS" ]; then
+        printf '%s\n' "$_OVL_PKGS" | while IFS= read -r P; do
+            [ -z "$P" ] && continue
+            case "$P" in
+                com.android.*|com.google.android.*|android|com.samsung.*|com.sec.*|com.miui.*|com.xiaomi.*|\
+                com.coloros.*|com.oppo.*|com.oneplus.*|com.realme.*|com.vivo.*|com.heytap.*|com.huawei.*) continue ;;
+            esac
+            printf '%s\n' "$_ACC_PKGS" | grep -qxF "$P" && \
+                warn "[SUSPEITO] App com perfil de PAINEL (overlay + accessibility): $P — comportamento de cheat-panel; revisar mesmo sem nome conhecido"
+        done
+    fi
+fi
 [ "$ESP_HITS" = "0" ] && ok "Sem ESP/overlay óbvio"
 
 # ============================================================
@@ -2967,7 +3115,9 @@ if have pidof; then
         info "FF rodando ($PKG, PID $FF_PID)"
         for NTCP in /proc/$FF_PID/net/tcp /proc/$FF_PID/net/tcp6; do
             [ -r "$NTCP" ] || continue
-            CONNS=$(awk 'NR>1 && $4=="01" {print $3}' "$NTCP" 2>/dev/null | head -n 30)
+            # v4.4.75: sort -u dedupa o MESMO endpoint repetido (antes o FF→LOCALHOST
+            # 127.0.0.1:porta saía dezenas de vezes — 1 linha por socket). Agora 1×/endpoint.
+            CONNS=$(awk 'NR>1 && $4=="01" {print $3}' "$NTCP" 2>/dev/null | sort -u | head -n 30)
             [ -z "$CONNS" ] && continue
             echo "$CONNS" | while IFS= read -r RHEX; do
                 [ -z "$RHEX" ] && continue
