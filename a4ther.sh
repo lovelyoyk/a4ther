@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.86 | LS Aluguel
+#  A4ther Systems v4.4.87 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.86"
+VERSION="4.4.87"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -54,15 +54,42 @@ ALERTS=0
 WARNINGS=0
 CLEAN=0
 
+# v4.4.87: TERMINAL SILENCIOSO + LOG VERBOSO.
+#   QUIET=1 (default, run direto no Termux): a TELA recebe só progresso por seção
+#   + o painel final (críticos/suspeitos). TODO o detalhe bruto vai pro $REPORT —
+#   acaba com o estouro de scrollback do Termux.
+#   QUIET=0 (A4_VERBOSE=1, setado pelo coletor ADB): imprime tudo no stdout. O
+#   wrapper captura num arquivo e renderiza UM painel só (sem duplicação).
+QUIET=1; [ "${A4_VERBOSE:-0}" = "1" ] && QUIET=0
+
+# v4.4.87: acumuladores de críticos/suspeitos em ARQUIVO — sobrevivem a subshells
+# (um `... | while` roda em subshell e perderia variáveis de contador). O painel
+# final lê DAQUI, então sai UMA vez e com a contagem REAL.
+A4_TMPD=$(pwd 2>/dev/null); [ -n "$A4_TMPD" ] || A4_TMPD=/tmp
+for _d in "${TMPDIR:-}" /data/local/tmp "$HOME" /tmp; do
+    [ -n "$_d" ] && [ -d "$_d" ] && [ -w "$_d" ] && { A4_TMPD="$_d"; break; }
+done
+A4_CRIT_FILE="$A4_TMPD/.a4_crit_$$"
+A4_WARN_FILE="$A4_TMPD/.a4_warn_$$"
+: > "$A4_CRIT_FILE" 2>/dev/null; : > "$A4_WARN_FILE" 2>/dev/null
+trap 'rm -f "$A4_CRIT_FILE" "$A4_WARN_FILE" 2>/dev/null' EXIT INT TERM
+
 strip_color() { sed -E 's/\x1B\[[0-9;]*[mK]//g' 2>/dev/null; }
+
+# emit = canal de DETALHE → sempre no $REPORT; no stdout só em modo verboso.
 emit() {
-    printf '%s\n' "$*"
-    if [ "$REPORT" != "/dev/null" ]; then
-        printf '%s\n' "$*" | strip_color >> "$REPORT" 2>/dev/null
-    fi
+    [ "$QUIET" = "0" ] && printf '%s\n' "$*"
+    [ "$REPORT" != "/dev/null" ] && printf '%s\n' "$*" | strip_color >> "$REPORT" 2>/dev/null
+    return 0
 }
-alert()  { emit "  ${CR}●  ALERTA  ${CN}$*"; ALERTS=$((ALERTS+1));     }
-warn()   { emit "  ${CY}●  AVISO   ${CN}$*"; WARNINGS=$((WARNINGS+1)); }
+# screen = canal de TELA (progresso/painel) → stdout só em modo silencioso (em
+# verboso o emit já cobre o stdout; evita linha duplicada).
+screen() { [ "$QUIET" = "1" ] && printf '%s\n' "$*"; return 0; }
+# show = pertence à TELA e ao ARQUIVO, exatamente uma vez no stdout.
+show()   { screen "$*"; emit "$*"; }
+
+alert()  { emit "  ${CR}●  ALERTA  ${CN}$*"; printf '%s\n' "$*" | strip_color >> "$A4_CRIT_FILE" 2>/dev/null; ALERTS=$((ALERTS+1));     }
+warn()   { emit "  ${CY}●  AVISO   ${CN}$*"; printf '%s\n' "$*" | strip_color >> "$A4_WARN_FILE" 2>/dev/null; WARNINGS=$((WARNINGS+1)); }
 ok()     { emit "  ${CG}●  OK      ${CN}$*"; CLEAN=$((CLEAN+1));       }
 info()   { emit "  ${CC}○  info    ${CN}$*"; }
 header() {
@@ -70,6 +97,7 @@ header() {
     emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
     emit "${CW}${CB} ◆  $*${CN}"
     emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    screen "  ${CC}▸${CN} $*"
 }
 
 # ---------- Helpers ----------
@@ -176,31 +204,34 @@ setting_get() {
 }
 
 # ---------- Banner ----------
-emit ""
-emit "${CW}${CC}    ╭──────────────────────────────────────────────────────╮${CN}"
-emit "${CW}${CC}    │                                                      │${CN}"
-emit "${CW}${CC}    │    █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗   │${CN}"
-emit "${CW}${CC}    │   ██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗  │${CN}"
-emit "${CW}${CC}    │   ███████║███████║   ██║   ███████║█████╗  ██████╔╝  │${CN}"
-emit "${CW}${CC}    │   ██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗  │${CN}"
-emit "${CW}${CC}    │   ██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║  │${CN}"
-emit "${CW}${CC}    │   ╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝  │${CN}"
-emit "${CW}${CC}    │                                                      │${CN}"
-emit "${CW}${CC}    │${CN}      ${CW}S Y S T E M S${CN}  ${CY}▪${CN}  ${CW}v${VERSION}${CN}  ${CY}▪${CN}  ${CW}LS Aluguel${CN}         ${CW}${CC}│${CN}"
-emit "${CW}${CC}    │${CN}      ${CC}Free Fire Anti-Cheat Scanner${CN}                    ${CW}${CC}│${CN}"
-emit "${CW}${CC}    │                                                      │${CN}"
-emit "${CW}${CC}    ╰──────────────────────────────────────────────────────╯${CN}"
-emit ""
-emit "  ${CC}›${CN} Relatório: $REPORT"
+show ""
+show "${CW}${CC}    ╭──────────────────────────────────────────────────────╮${CN}"
+show "${CW}${CC}    │                                                      │${CN}"
+show "${CW}${CC}    │    █████╗ ██╗  ██╗████████╗██╗  ██╗███████╗██████╗   │${CN}"
+show "${CW}${CC}    │   ██╔══██╗██║  ██║╚══██╔══╝██║  ██║██╔════╝██╔══██╗  │${CN}"
+show "${CW}${CC}    │   ███████║███████║   ██║   ███████║█████╗  ██████╔╝  │${CN}"
+show "${CW}${CC}    │   ██╔══██║╚════██║   ██║   ██╔══██║██╔══╝  ██╔══██╗  │${CN}"
+show "${CW}${CC}    │   ██║  ██║     ██║   ██║   ██║  ██║███████╗██║  ██║  │${CN}"
+show "${CW}${CC}    │   ╚═╝  ╚═╝     ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝  │${CN}"
+show "${CW}${CC}    │                                                      │${CN}"
+show "${CW}${CC}    │${CN}      ${CW}S Y S T E M S${CN}  ${CY}▪${CN}  ${CW}v${VERSION}${CN}  ${CY}▪${CN}  ${CW}LS Aluguel${CN}         ${CW}${CC}│${CN}"
+show "${CW}${CC}    │${CN}      ${CC}Free Fire Anti-Cheat Scanner${CN}                    ${CW}${CC}│${CN}"
+show "${CW}${CC}    │                                                      │${CN}"
+show "${CW}${CC}    ╰──────────────────────────────────────────────────────╯${CN}"
+show ""
+show "  ${CC}›${CN} Relatório: $REPORT"
+# v4.4.87: em modo silencioso a TELA mostra só progresso + painel final; o detalhe
+# completo do scan vai pro arquivo acima. Use-o pra perícia profunda.
+[ "$QUIET" = "1" ] && show "  ${CC}›${CN} ${CW}Tela = resumo${CN}; detalhe completo no .txt acima."
 # v4.4.2: avisa se caiu pra /dev/null (nenhum dir writable encontrado)
 if [ "$REPORT" = "/dev/null" ]; then
-    emit "  ${CR}!${CN} ATENÇÃO: nenhum diretório writable encontrado pro relatório."
-    emit "  ${CY}›${CN} Tentados: $REPORT_DIR_TRIED"
-    emit "  ${CY}›${CN} No Termux moderno (Android 11+) rode antes:"
-    emit "      ${CW}termux-setup-storage${CN}  (vai pedir permissão de armazenamento)"
-    emit "  ${CY}›${CN} Depois rode o a4ther.sh de novo — o .txt vai pra /sdcard/a4ther/"
+    show "  ${CR}!${CN} ATENÇÃO: nenhum diretório writable encontrado pro relatório."
+    show "  ${CY}›${CN} Tentados: $REPORT_DIR_TRIED"
+    show "  ${CY}›${CN} No Termux moderno (Android 11+) rode antes:"
+    show "      ${CW}termux-setup-storage${CN}  (vai pedir permissão de armazenamento)"
+    show "  ${CY}›${CN} Depois rode o a4ther.sh de novo — o .txt vai pra /sdcard/a4ther/"
 fi
-emit ""
+show ""
 
 # Pre-cache: lista de pacotes (usado por várias seções)
 ALL_PKGS=""
@@ -1271,18 +1302,25 @@ fi
 # fecha o $()). Android (/system/bin/sh = mksh) e bash 5 rodam, mas extraindo
 # pra função o script parseia em TODO shell (mksh, dash, bash 3.2, bash 5).
 _sl_classify() {  # $1=pacote  $2=installer  → ecoa "pacote|installer" se for sideload
+    # v4.4.87: ALLOWLIST OEM. Antes o catch-all `*)` acusava QUALQUER installer
+    # fora da lista — incluindo apps de sistema Xiaomi/Samsung cujo installer é
+    # um pacote OEM próprio (não-Play) → falso positivo em massa. Agora só acusa
+    # origem EXPLICITAMENTE de sideload (null / installer manual / browser / file
+    # manager / adb / loja de terceiros). Installer OEM desconhecido = NÃO acusa.
     case "$2" in
-        # lojas oficiais (Play + OEMs) = legítimo, ignora
+        # ── Allowlist: lojas oficiais (Play + OEMs) = legítimo, ignora ──
         com.android.vending|com.google.android.feedback|com.amazon.venezia|\
         com.sec.android.app.samsungapps|com.huawei.appmarket|com.xiaomi.mipicks|\
         com.heytap.market|com.oppo.market|com.vivo.appstore|com.bbk.appstore|com.transsion.phoenix) ;;
-        # null / instaladores manuais / browser / file managers = SIDELOAD
+        # ── Sideload EXPLÍCITO: null / instalador manual / browser / file manager
+        #    / adb shell / loja de terceiro = SUSPEITO ──
         null|""|com.google.android.packageinstaller|com.android.packageinstaller|\
-        com.android.chrome|com.google.android.gm|bin.mt.plus|\
+        com.android.chrome|*chrome*|com.google.android.gm|bin.mt.plus|\
+        *com.android.shell*|*adb*|*apkpure*|*aptoide*|*uptodown*|*aurora*|*xapk*|\
         *filemanager*|*fileexplorer*|*zarchiver*|*documentsui*|*apps.nbu.files*|*mixplorer*)
             echo "$1|${2:-null}" ;;
-        # qualquer outra origem não-loja também é suspeita
-        *) echo "$1|$2" ;;
+        # ── Installer desconhecido (OEM-específico, etc.): NÃO acusa (mata FP) ──
+        *) ;;
     esac
 }
 header "SIDELOAD GLOBAL (origem dos apps de terceiros)"
@@ -1739,9 +1777,19 @@ for PKG in $FF_PKGS; do
                 if [ -n "$ACC" ] && [ -n "$MOD" ] && [ "$ACC" -gt "$MOD" ] 2>/dev/null; then
                     [ "$((ACC - MOD))" -gt 604800 ] 2>/dev/null && echo "ACCGTMOD"
                 fi
-                # Access=Modify=Change (só em fs com nanos) = touch bypass
-                if [ -n "$MOD" ] && [ -n "$CHG" ] && [ "$MOD" -eq "$CHG" ] 2>/dev/null && [ "$ACC" -eq "$MOD" ] 2>/dev/null; then
-                    fs_has_nanos "$B" && echo "TOUCHBYPASS"
+                # v4.4.87: equality Access=Modify=Change REMOVIDA — era FALSO
+                # POSITIVO da sincronização nativa da engine do jogo nos .bin de
+                # replay (disparava "touch bypass" em todo replay legítimo).
+                # Touch bypass REAL agora = (a) flag de imutabilidade (chattr +i)
+                # ou (b) timestamp explicitamente anômalo (ano < 1981 ou > 2030).
+                lsattr "$B" 2>/dev/null | grep -qi -- '-i-' && echo "IMMUTABLE"
+                # NOTA: SEM `case` aqui — estamos DENTRO do $() do _RFIND, e o ")"
+                # do padrão de case quebra o parser do bash<4 (mesma armadilha do
+                # comentário v4.4.79 acima). Usa só `[ ] 2>/dev/null` (POSIX puro).
+                if [ -n "$MOD" ]; then
+                    if [ "$MOD" -lt 347155200 ] 2>/dev/null || [ "$MOD" -gt 1893456000 ] 2>/dev/null; then
+                        echo "TSANOMALY"
+                    fi
                 fi
                 # v4.4.79 (fix portab.): era `case` inline DENTRO do $() do _RFIND —
                 # o ")" do padrão quebra o parser do bash<4. Troca por expansão de
@@ -1753,11 +1801,13 @@ for PKG in $FF_PKGS; do
                     [ -n "$JMOD" ] && [ -n "$MOD" ] && [ "$JMOD" -lt "$MOD" ] 2>/dev/null && echo "JSONBEFORE"
                 fi
             done)
-            _C_TOUCH=$(printf '%s\n' "$_RFIND" | grep -c '^TOUCHBYPASS$' 2>/dev/null)
+            _C_IMM=$(printf '%s\n'   "$_RFIND" | grep -c '^IMMUTABLE$'   2>/dev/null)
+            _C_TS=$(printf '%s\n'    "$_RFIND" | grep -c '^TSANOMALY$'   2>/dev/null)
             _C_ACC=$(printf '%s\n'   "$_RFIND" | grep -c '^ACCGTMOD$'    2>/dev/null)
             _C_NANO=$(printf '%s\n'  "$_RFIND" | grep -c '^NANOZERO$'    2>/dev/null)
             _C_JSON=$(printf '%s\n'  "$_RFIND" | grep -c '^JSONBEFORE$'  2>/dev/null)
-            [ "${_C_TOUCH:-0}" -gt 0 ] 2>/dev/null && { warn "  ${_C_TOUCH} arquivo(s) de replay com touch bypass (Access=Modify=Change)"; REPLAY_HITS=$((REPLAY_HITS+1)); }
+            [ "${_C_IMM:-0}" -gt 0 ]  2>/dev/null && { alert "  ${_C_IMM} replay(s) .bin com flag de IMUTABILIDADE (chattr +i) — touch bypass real"; REPLAY_HITS=$((REPLAY_HITS+1)); }
+            [ "${_C_TS:-0}" -gt 0 ]   2>/dev/null && { alert "  ${_C_TS} replay(s) .bin com timestamp ANÔMALO (ano <1981 ou >2030) — touch bypass"; REPLAY_HITS=$((REPLAY_HITS+1)); }
             [ "${_C_ACC:-0}" -gt 0 ]   2>/dev/null && { warn "  ${_C_ACC} arquivo(s) de replay com Access > Modify >7d (possível touch -d antigo)"; REPLAY_HITS=$((REPLAY_HITS+1)); }
             [ "${_C_NANO:-0}" -gt 0 ]  2>/dev/null && { alert "  ${_C_NANO} arquivo(s) de replay com nanossegundos zerados em mtime (touch)"; REPLAY_HITS=$((REPLAY_HITS+1)); }
             [ "${_C_JSON:-0}" -gt 0 ]  2>/dev/null && { alert "  ${_C_JSON} replay(s) com JSON modificado ANTES do BIN (anomalia)"; REPLAY_HITS=$((REPLAY_HITS+1)); }
@@ -5156,39 +5206,61 @@ fi  # ===== fim do bloco iOS =====
 #  RESUMO
 # ============================================================
 header "RESUMO"
-emit ""
-emit "    ${CR}●${CN}  Alertas: ${CW}${CR}${ALERTS}${CN}"
-emit "    ${CY}●${CN}  Avisos:  ${CW}${CY}${WARNINGS}${CN}"
-emit "    ${CG}●${CN}  OKs:     ${CW}${CG}${CLEAN}${CN}"
-emit ""
+# v4.4.87: contagem REAL a partir dos acumuladores (os contadores ALERTS/WARNINGS
+# são incrementados dentro de subshells `... | while` e por isso subnotificam).
+_NA=$(grep -c . "$A4_CRIT_FILE" 2>/dev/null); case "$_NA" in ''|*[!0-9]*) _NA=0 ;; esac
+_NW=$(grep -c . "$A4_WARN_FILE" 2>/dev/null); case "$_NW" in ''|*[!0-9]*) _NW=0 ;; esac
+[ "$_NA" -gt "$ALERTS" ]   2>/dev/null && ALERTS=$_NA
+[ "$_NW" -gt "$WARNINGS" ] 2>/dev/null && WARNINGS=$_NW
+
+show ""
+show "    ${CR}●${CN}  Alertas: ${CW}${CR}${ALERTS}${CN}"
+show "    ${CY}●${CN}  Avisos:  ${CW}${CY}${WARNINGS}${CN}"
+show "    ${CG}●${CN}  OKs:     ${CW}${CG}${CLEAN}${CN}"
+show ""
+
+# v4.4.87: PAINEL FINAL — lista críticos/suspeitos na TELA, UMA vez (screen-only:
+# em modo verboso/ADB fica suprimido pra não duplicar nem poluir o arquivo de
+# upload — lá o wrapper renderiza o painel dele).
 if [ "$ALERTS" -gt 0 ]; then
-    emit ""
-    emit "${CR}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
-    emit ""
-    emit "${CR}${CW}         ✗   S U S P E I T O   ▪   ${ALERTS} alertas${CN}"
-    emit ""
-    emit "${CR}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    screen "  ${CR}${CW}CRÍTICOS (${ALERTS}):${CN}"
+    while IFS= read -r _l; do [ -n "$_l" ] && screen "    ${CR}✗${CN} $_l"; done < "$A4_CRIT_FILE"
+    screen ""
+fi
+if [ "$WARNINGS" -gt 0 ]; then
+    screen "  ${CY}${CW}SUSPEITOS (${WARNINGS}):${CN}"
+    while IFS= read -r _l; do [ -n "$_l" ] && screen "    ${CY}•${CN} $_l"; done < "$A4_WARN_FILE"
+    screen ""
+fi
+
+if [ "$ALERTS" -gt 0 ]; then
+    show ""
+    show "${CR}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    show ""
+    show "${CR}${CW}         ✗   S U S P E I T O   ▪   ${ALERTS} alertas${CN}"
+    show ""
+    show "${CR}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
     RC=2
 elif [ "$WARNINGS" -gt 0 ]; then
-    emit ""
-    emit "${CY}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
-    emit ""
-    emit "${CY}${CW}         ⚠   R E V I S A R   ▪   ${WARNINGS} avisos${CN}"
-    emit ""
-    emit "${CY}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    show ""
+    show "${CY}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    show ""
+    show "${CY}${CW}         ⚠   R E V I S A R   ▪   ${WARNINGS} avisos${CN}"
+    show ""
+    show "${CY}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
     RC=1
 else
-    emit ""
-    emit "${CG}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
-    emit ""
-    emit "${CG}${CW}         ✓   L I M P O   ▪   device aprovado${CN}"
-    emit ""
-    emit "${CG}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    show ""
+    show "${CG}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    show ""
+    show "${CG}${CW}         ✓   L I M P O   ▪   device aprovado${CN}"
+    show ""
+    show "${CG}${CW}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
     RC=0
 fi
-emit ""
-emit "  ${CC}›${CN} Relatório salvo em: ${CW}$REPORT${CN}"
-emit ""
+show ""
+show "  ${CC}›${CN} Relatório salvo em: ${CW}$REPORT${CN}"
+show ""
 
 # ============================================================
 #  COLETA DE DUMP COMPLETO (estilo KellerDump — 62+ arquivos raw)
@@ -5200,7 +5272,7 @@ if [ "$REPORT" != "/dev/null" ]; then
     DUMP_TAR="$REPORT_DIR/a4ther_dump_${TS}.tar.gz"
 
     if mkdir -p "$DUMP_DIR" 2>/dev/null; then
-        emit "${CC}›${CN} Coletando dump completo (logs+dumpsys+settings)…"
+        show "${CC}›${CN} Coletando dump completo (logs+dumpsys+settings)…"
 
         # ─ Device info + sistema ─
         cat > "$DUMP_DIR/device_info.txt" <<EOF
@@ -5334,12 +5406,12 @@ EOF
         if [ -f "$DUMP_TAR" ]; then
             DUMP_SIZE=$(du -h "$DUMP_TAR" 2>/dev/null | awk '{print $1}')
             DUMP_COUNT=$(tar -tzf "$DUMP_TAR" 2>/dev/null | wc -l)
-            emit "  ${CG}›${CN} Dump completo: ${CW}$DUMP_TAR${CN} (${DUMP_SIZE}, $DUMP_COUNT arquivos)"
-            emit "  ${CC}›${CN} Pra enviar pro analista:"
-            emit "      ${CW}cp \"$DUMP_TAR\" /sdcard/Download/${CN}"
-            emit "      depois abra Files no Android → /sdcard/Download/ → compartilhar"
+            show "  ${CG}›${CN} Dump completo: ${CW}$DUMP_TAR${CN} (${DUMP_SIZE}, $DUMP_COUNT arquivos)"
+            show "  ${CC}›${CN} Pra enviar pro analista:"
+            show "      ${CW}cp \"$DUMP_TAR\" /sdcard/Download/${CN}"
+            show "      depois abra Files no Android → /sdcard/Download/ → compartilhar"
         else
-            emit "  ${CY}›${CN} Dump tar.gz falhou (sem espaço/permissão?), pasta: $DUMP_DIR"
+            show "  ${CY}›${CN} Dump tar.gz falhou (sem espaço/permissão?), pasta: $DUMP_DIR"
         fi
     fi
 fi
@@ -5356,14 +5428,14 @@ fi
 # ─── v4.4.2: FINAL — onde achar o .txt + auto-copy pra Downloads ─────────────
 # Mostra o caminho com tamanho real do .txt, e tenta copiar pro /sdcard/Download/
 # (gerenciador de arquivos do Android) pra o user não precisar abrir o Termux.
-emit ""
+show ""
 if [ "$REPORT" != "/dev/null" ] && [ -f "$REPORT" ]; then
     REPORT_SIZE=$(du -h "$REPORT" 2>/dev/null | awk '{print $1}')
     REPORT_LINES=$(wc -l < "$REPORT" 2>/dev/null | tr -d ' ')
-    emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
-    emit "${CG}  ✓ Relatório salvo:${CN}"
-    emit "    ${CW}$REPORT${CN}"
-    emit "    ${CC}(${REPORT_SIZE:-?}, ${REPORT_LINES:-?} linhas)${CN}"
+    show "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    show "${CG}  ✓ Relatório salvo (perícia profunda):${CN}"
+    show "    ${CW}$REPORT${CN}"
+    show "    ${CC}(${REPORT_SIZE:-?}, ${REPORT_LINES:-?} linhas)${CN}"
 
     # Tenta copiar pra Downloads (acessível pelo gerenciador de arquivos)
     COPIED=""
@@ -5376,22 +5448,22 @@ if [ "$REPORT" != "/dev/null" ] && [ -f "$REPORT" ]; then
         fi
     done
     if [ -n "$COPIED" ]; then
-        emit ""
-        emit "${CG}  ✓ Cópia em Downloads (gerenciador de arquivos):${CN}"
-        emit "    ${CW}$COPIED${CN}"
-        emit "    ${CC}Abra o app Arquivos → Downloads → a4ther_scan_${TS}.txt${CN}"
+        show ""
+        show "${CG}  ✓ Cópia em Downloads (gerenciador de arquivos):${CN}"
+        show "    ${CW}$COPIED${CN}"
+        show "    ${CC}Abra o app Arquivos → Downloads → a4ther_scan_${TS}.txt${CN}"
     else
-        emit ""
-        emit "${CY}  !${CN} Não consegui copiar pra Downloads. Pra mandar pro analista:"
-        emit "    ${CW}cp \"$REPORT\" /sdcard/Download/${CN}"
-        emit "    (se falhar: ${CW}termux-setup-storage${CN} antes)"
+        show ""
+        show "${CY}  !${CN} Não consegui copiar pra Downloads. Pra mandar pro analista:"
+        show "    ${CW}cp \"$REPORT\" /sdcard/Download/${CN}"
+        show "    (se falhar: ${CW}termux-setup-storage${CN} antes)"
     fi
-    emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
+    show "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
 else
-    emit "${CR}  ✗ Relatório NÃO foi gerado (REPORT=$REPORT).${CN}"
-    emit "${CY}  ›${CN} Provável causa: sem permissão de armazenamento no Termux."
-    emit "${CY}  ›${CN} Solução: ${CW}termux-setup-storage${CN} + rodar de novo."
+    show "${CR}  ✗ Relatório NÃO foi gerado (REPORT=$REPORT).${CN}"
+    show "${CY}  ›${CN} Provável causa: sem permissão de armazenamento no Termux."
+    show "${CY}  ›${CN} Solução: ${CW}termux-setup-storage${CN} + rodar de novo."
 fi
 
-emit ""
+show ""
 exit "$RC"

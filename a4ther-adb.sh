@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/env bash
 # ============================================================
 #  a4ther — Auditoria de integridade Free Fire via ADB Wi-Fi
-#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.86
+#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.87
 #
 #  Assistente passo a passo para auditoria CONSENTIDA de um
 #  dispositivo Android (o dono precisa habilitar a Depuração
@@ -67,7 +67,7 @@ banner() {
   / __ | / // /_/ __/ _ \/ -_) __/
  /_/ |_|/_//_/(_)__/_//_/\__/_/    AUDIT · ADB Wi-Fi
 EOF
-  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.86${NC}"
+  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.87${NC}"
   hr
 }
 
@@ -375,10 +375,24 @@ step_scan() {
   # 3) Roda VIA adb shell (uid 2000 → acesso elevado). Sem -t = não-interativo,
   #    o a4ther.sh detecta e pula as pausas. SKIP_WIFI_PROMPT por segurança.
   info "Rodando o scan com acesso elevado (adb shell, uid 2000)…"
-  info "Leva de 1 a 3 minutos — não feche o Termux. (resultados aparecem abaixo)"
+  info "Leva de 1 a 3 minutos — não feche o Termux."
   hr
-  adb -s "$ADB_TARGET" shell "SKIP_WIFI_PROMPT=1 sh ${REMOTE_A4}" 2>&1 \
-    | tee "$LOG_FILE"
+  # v4.4.87: A4_VERBOSE=1 faz o a4ther.sh despejar TUDO no stdout; capturamos no
+  # LOG_FILE (>"$LOG_FILE") em vez de `tee` — assim o flood NÃO vai pra tela (fim
+  # do estouro de buffer) e o painel de críticos/suspeitos é renderizado UMA vez
+  # só por show_resumo (sem duplicar com o painel do próprio a4ther.sh, que agora
+  # fica só dentro do arquivo). Spinner mostra que está vivo durante o scan.
+  ( adb -s "$ADB_TARGET" shell "A4_VERBOSE=1 SKIP_WIFI_PROMPT=1 sh ${REMOTE_A4}" >"$LOG_FILE" 2>&1 ) &
+  _scan_pid=$!
+  _spin='|/-\'; _e=0
+  while kill -0 "$_scan_pid" 2>/dev/null; do
+    _c=$(printf '%s' "$_spin" | cut -c $(( (_e % 4) + 1 )))
+    printf '\r   %s  escaneando o device… %ss ' "$_c" "$_e" >&2
+    _e=$((_e + 1)); sleep 1
+  done
+  wait "$_scan_pid" 2>/dev/null
+  printf '\r\033[K' >&2
+  ok "Scan concluído ($(wc -l <"$LOG_FILE" 2>/dev/null | tr -d ' ') linhas capturadas no log)."
   hr
 
   # 4) RESUMO consolidado de críticos/suspeitos NA TELA (lido do log local —
@@ -497,7 +511,7 @@ build_master() {
   {
     echo "============================================================"
     echo " A4THER SYSTEMS — RELATORIO UNICO DE AUDITORIA"
-    echo " Gerado por a4ther v4.4.86 (coletor ADB Wi-Fi)"
+    echo " Gerado por a4ther v4.4.87 (coletor ADB Wi-Fi)"
     echo " >>> Envie SOMENTE este arquivo .txt ao site verificador <<<"
     echo "============================================================"
     echo "data         : $(date '+%Y-%m-%d %H:%M:%S')"
@@ -528,7 +542,7 @@ build_master() {
     else echo "(sem hashes — artefatos inacessiveis)"; fi
     echo ""
     echo "============================================================"
-    echo " FIM DO RELATORIO - A4ther v4.4.86"
+    echo " FIM DO RELATORIO - A4ther v4.4.87"
     echo "============================================================"
   } > "$MASTER_TXT" 2>/dev/null
 }
@@ -577,7 +591,7 @@ finalize() {
       printf '%s\n' "$SHA_MANIFEST" | awk 'NF>=2{ $1=""; sub(/^[ \t]+/,""); print }' \
         > "${AUDIT_DIR}/_filelist.txt" 2>/dev/null
       {
-        echo "A4ther Audit · v4.4.86"
+        echo "A4ther Audit · v4.4.87"
         echo "data        : $(date '+%Y-%m-%d %H:%M:%S')"
         echo "alvo        : ${PKG_LABEL} (${PKG})"
         echo "device      : ${ADB_TARGET}"
