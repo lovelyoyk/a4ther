@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.87 | LS Aluguel
+#  A4ther Systems v4.4.88 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.87"
+VERSION="4.4.88"
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -54,7 +54,7 @@ ALERTS=0
 WARNINGS=0
 CLEAN=0
 
-# v4.4.87: TERMINAL SILENCIOSO + LOG VERBOSO.
+# v4.4.88: TERMINAL SILENCIOSO + LOG VERBOSO.
 #   QUIET=1 (default, run direto no Termux): a TELA recebe só progresso por seção
 #   + o painel final (críticos/suspeitos). TODO o detalhe bruto vai pro $REPORT —
 #   acaba com o estouro de scrollback do Termux.
@@ -62,7 +62,7 @@ CLEAN=0
 #   wrapper captura num arquivo e renderiza UM painel só (sem duplicação).
 QUIET=1; [ "${A4_VERBOSE:-0}" = "1" ] && QUIET=0
 
-# v4.4.87: acumuladores de críticos/suspeitos em ARQUIVO — sobrevivem a subshells
+# v4.4.88: acumuladores de críticos/suspeitos em ARQUIVO — sobrevivem a subshells
 # (um `... | while` roda em subshell e perderia variáveis de contador). O painel
 # final lê DAQUI, então sai UMA vez e com a contagem REAL.
 A4_TMPD=$(pwd 2>/dev/null); [ -n "$A4_TMPD" ] || A4_TMPD=/tmp
@@ -220,7 +220,7 @@ show "${CW}${CC}    │                                                      │
 show "${CW}${CC}    ╰──────────────────────────────────────────────────────╯${CN}"
 show ""
 show "  ${CC}›${CN} Relatório: $REPORT"
-# v4.4.87: em modo silencioso a TELA mostra só progresso + painel final; o detalhe
+# v4.4.88: em modo silencioso a TELA mostra só progresso + painel final; o detalhe
 # completo do scan vai pro arquivo acima. Use-o pra perícia profunda.
 [ "$QUIET" = "1" ] && show "  ${CC}›${CN} ${CW}Tela = resumo${CN}; detalhe completo no .txt acima."
 # v4.4.2: avisa se caiu pra /dev/null (nenhum dir writable encontrado)
@@ -1302,7 +1302,7 @@ fi
 # fecha o $()). Android (/system/bin/sh = mksh) e bash 5 rodam, mas extraindo
 # pra função o script parseia em TODO shell (mksh, dash, bash 3.2, bash 5).
 _sl_classify() {  # $1=pacote  $2=installer  → ecoa "pacote|installer" se for sideload
-    # v4.4.87: ALLOWLIST OEM. Antes o catch-all `*)` acusava QUALQUER installer
+    # v4.4.88: ALLOWLIST OEM. Antes o catch-all `*)` acusava QUALQUER installer
     # fora da lista — incluindo apps de sistema Xiaomi/Samsung cujo installer é
     # um pacote OEM próprio (não-Play) → falso positivo em massa. Agora só acusa
     # origem EXPLICITAMENTE de sideload (null / installer manual / browser / file
@@ -1777,7 +1777,7 @@ for PKG in $FF_PKGS; do
                 if [ -n "$ACC" ] && [ -n "$MOD" ] && [ "$ACC" -gt "$MOD" ] 2>/dev/null; then
                     [ "$((ACC - MOD))" -gt 604800 ] 2>/dev/null && echo "ACCGTMOD"
                 fi
-                # v4.4.87: equality Access=Modify=Change REMOVIDA — era FALSO
+                # v4.4.88: equality Access=Modify=Change REMOVIDA — era FALSO
                 # POSITIVO da sincronização nativa da engine do jogo nos .bin de
                 # replay (disparava "touch bypass" em todo replay legítimo).
                 # Touch bypass REAL agora = (a) flag de imutabilidade (chattr +i)
@@ -5206,7 +5206,7 @@ fi  # ===== fim do bloco iOS =====
 #  RESUMO
 # ============================================================
 header "RESUMO"
-# v4.4.87: contagem REAL a partir dos acumuladores (os contadores ALERTS/WARNINGS
+# v4.4.88: contagem REAL a partir dos acumuladores (os contadores ALERTS/WARNINGS
 # são incrementados dentro de subshells `... | while` e por isso subnotificam).
 _NA=$(grep -c . "$A4_CRIT_FILE" 2>/dev/null); case "$_NA" in ''|*[!0-9]*) _NA=0 ;; esac
 _NW=$(grep -c . "$A4_WARN_FILE" 2>/dev/null); case "$_NW" in ''|*[!0-9]*) _NW=0 ;; esac
@@ -5219,7 +5219,7 @@ show "    ${CY}●${CN}  Avisos:  ${CW}${CY}${WARNINGS}${CN}"
 show "    ${CG}●${CN}  OKs:     ${CW}${CG}${CLEAN}${CN}"
 show ""
 
-# v4.4.87: PAINEL FINAL — lista críticos/suspeitos na TELA, UMA vez (screen-only:
+# v4.4.88: PAINEL FINAL — lista críticos/suspeitos na TELA, UMA vez (screen-only:
 # em modo verboso/ADB fica suprimido pra não duplicar nem poluir o arquivo de
 # upload — lá o wrapper renderiza o painel dele).
 if [ "$ALERTS" -gt 0 ]; then

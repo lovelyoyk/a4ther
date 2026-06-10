@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/env bash
 # ============================================================
 #  a4ther — Auditoria de integridade Free Fire via ADB Wi-Fi
-#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.87
+#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.88
 #
 #  Assistente passo a passo para auditoria CONSENTIDA de um
 #  dispositivo Android (o dono precisa habilitar a Depuração
@@ -67,7 +67,7 @@ banner() {
   / __ | / // /_/ __/ _ \/ -_) __/
  /_/ |_|/_//_/(_)__/_//_/\__/_/    AUDIT · ADB Wi-Fi
 EOF
-  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.87${NC}"
+  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.88${NC}"
   hr
 }
 
@@ -377,7 +377,7 @@ step_scan() {
   info "Rodando o scan com acesso elevado (adb shell, uid 2000)…"
   info "Leva de 1 a 3 minutos — não feche o Termux."
   hr
-  # v4.4.87: A4_VERBOSE=1 faz o a4ther.sh despejar TUDO no stdout; capturamos no
+  # v4.4.88: A4_VERBOSE=1 faz o a4ther.sh despejar TUDO no stdout; capturamos no
   # LOG_FILE (>"$LOG_FILE") em vez de `tee` — assim o flood NÃO vai pra tela (fim
   # do estouro de buffer) e o painel de críticos/suspeitos é renderizado UMA vez
   # só por show_resumo (sem duplicar com o painel do próprio a4ther.sh, que agora
@@ -511,7 +511,7 @@ build_master() {
   {
     echo "============================================================"
     echo " A4THER SYSTEMS — RELATORIO UNICO DE AUDITORIA"
-    echo " Gerado por a4ther v4.4.87 (coletor ADB Wi-Fi)"
+    echo " Gerado por a4ther v4.4.88 (coletor ADB Wi-Fi)"
     echo " >>> Envie SOMENTE este arquivo .txt ao site verificador <<<"
     echo "============================================================"
     echo "data         : $(date '+%Y-%m-%d %H:%M:%S')"
@@ -542,7 +542,7 @@ build_master() {
     else echo "(sem hashes — artefatos inacessiveis)"; fi
     echo ""
     echo "============================================================"
-    echo " FIM DO RELATORIO - A4ther v4.4.87"
+    echo " FIM DO RELATORIO - A4ther v4.4.88"
     echo "============================================================"
   } > "$MASTER_TXT" 2>/dev/null
 }
@@ -591,7 +591,7 @@ finalize() {
       printf '%s\n' "$SHA_MANIFEST" | awk 'NF>=2{ $1=""; sub(/^[ \t]+/,""); print }' \
         > "${AUDIT_DIR}/_filelist.txt" 2>/dev/null
       {
-        echo "A4ther Audit · v4.4.87"
+        echo "A4ther Audit · v4.4.88"
         echo "data        : $(date '+%Y-%m-%d %H:%M:%S')"
         echo "alvo        : ${PKG_LABEL} (${PKG})"
         echo "device      : ${ADB_TARGET}"

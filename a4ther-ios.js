@@ -1,5 +1,5 @@
 // ============================================================
-//  A4ther Systems v4.4.87 | LS Aluguel
+//  A4ther Systems v4.4.88 | LS Aluguel
 //  iOS Free Fire Anti-Cheat Scanner (Scriptable)
 //  Roda em iPhone SEM jailbreak via app Scriptable (gratuito App Store).
 //
@@ -13,7 +13,7 @@
 //    6. Vê o resultado
 // ============================================================
 
-const VERSION = "4.4.87";
+const VERSION = "4.4.88";
 
 // ============================================================
 //  DATA — bundles, domínios, IPs, TLDs, ASNs (109+ entries)
