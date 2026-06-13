@@ -962,8 +962,9 @@ body.is-loading { overflow: hidden; }
     50%      { opacity: 1; }
 }
 
-/* Esconde o spinner triple-ring antigo quando o jarvis tá em uso */
+/* barra horizontal: orb (jarvis) e triple-ring antigo escondidos */
 .loading-card .spinner-glow,
+.loading-card .jarvis-spinner,
 .loading-card .spinner { display: none !important; }
 
 /* Triple-ring spinner com glow (antigo, mantido por compat — não usado mais) */
@@ -1639,26 +1640,55 @@ body.is-loading { overflow: hidden; }
 
 /* Progress bar pra uploads grandes (tar.gz) */
 .loading-progress {
-    margin: 1.5rem auto 0;
-    max-width: 420px;
+    margin: 1.4rem auto 0;
+    max-width: 460px;
     width: 100%;
     padding: 0 1rem;
 }
+/* BARRA horizontal = visual principal do loading */
 .loading-bar {
+    position: relative;
     width: 100%;
-    height: 6px;
-    background: rgba(179, 136, 255, 0.12);
+    height: 12px;
+    background: rgba(179, 136, 255, 0.10);
+    border: 1px solid rgba(179, 136, 255, 0.18);
     border-radius: 999px;
     overflow: hidden;
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.75rem;
+    box-shadow: inset 0 1px 6px rgba(0, 0, 0, 0.45), 0 0 26px rgba(179, 136, 255, 0.22);
 }
 .loading-bar-fill {
+    position: relative;
     height: 100%;
     width: 0%;
     background: linear-gradient(90deg, var(--purple-soft), var(--purple));
     border-radius: inherit;
     box-shadow: 0 0 12px var(--purple-glow);
-    transition: width 200ms ease-out;
+    transition: width 350ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.loading-bar-fill::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+    transform: translateX(-100%);
+    animation: loadbar-sheen 1.6s ease-in-out infinite;
+}
+/* sem % conhecido → chunk deslizando (indeterminado); !important vence o override premium */
+.loading-bar.indeterminate .loading-bar-fill {
+    width: 36% !important;
+    background: linear-gradient(90deg, transparent, var(--scan), #e8d4ff, var(--purple), transparent) !important;
+    animation: loadbar-indet 1.25s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    transition: none;
+}
+.loading-bar.indeterminate .loading-bar-fill::after { display: none; }
+@keyframes loadbar-indet {
+    0%   { transform: translateX(-130%); }
+    100% { transform: translateX(360%); }
+}
+@keyframes loadbar-sheen {
+    0%   { transform: translateX(-100%); }
+    60%, 100% { transform: translateX(220%); }
 }
 .loading-meta {
     display: flex;
@@ -2758,7 +2788,7 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.88</span>
+        <span id="version">v4.4.89</span>
     </div>
 
     <div class="hero-divider"></div>
@@ -3169,23 +3199,23 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
             </svg>
         </div>
         <div class="loading-text" id="loadingText">Analisando</div>
-        <div class="loading-hint">A4ther Systems · Free Fire Anti-Cheat</div>
+        <div class="loading-progress" id="loadingProgress">
+            <div class="loading-bar indeterminate" id="loadingBar"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
+            <div class="loading-meta">
+                <span id="loadingPercent"></span>
+                <span class="sep" id="loadingSep1" hidden>·</span>
+                <span id="loadingSize"></span>
+                <span class="sep" id="loadingSep2" hidden>·</span>
+                <span id="loadingETA"></span>
+            </div>
+            <div class="loading-warn" id="loadingWarn" hidden></div>
+        </div>
         <div class="loading-activity" aria-hidden="true">
             <svg class="la-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
             <span id="loadingActivityText">inicializando varredura</span>
             <span class="la-caret"></span>
         </div>
-        <div class="loading-progress" id="loadingProgress" hidden>
-            <div class="loading-bar"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
-            <div class="loading-meta">
-                <span id="loadingPercent">0%</span>
-                <span class="sep">·</span>
-                <span id="loadingSize">0 MB</span>
-                <span class="sep">·</span>
-                <span id="loadingETA">…</span>
-            </div>
-            <div class="loading-warn" id="loadingWarn" hidden></div>
-        </div>
+        <div class="loading-hint">A4ther Systems · Free Fire Anti-Cheat</div>
     </div>
 </div>
 
@@ -3212,7 +3242,7 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.88";
+const VERSION = "4.4.89";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -4359,11 +4389,25 @@ function showLoading(text) {
     $('#loading').classList.remove('hidden');
     document.body.classList.add('is-loading');
     $('#loadingText').textContent = text || 'Analisando…';
-    // Mantém estado anterior dos sub-elementos (progress/warn) se já configurados
-    if (!$('#loadingProgress').hidden && $('#loadingProgress').hasAttribute('data-keep')) {
-        // não toca em loadingProgress
-    } else {
-        $('#loadingProgress').hidden = true;
+    // barra = visual principal, sempre visível. "(NN%)" no texto (ex.: "Pass 8: 678/716 (95%)")
+    // → barra DETERMINADA enche até NN%; senão INDETERMINADA (chunk deslizando).
+    const prog = $('#loadingProgress');
+    prog.hidden = false;
+    if (!prog.hasAttribute('data-keep')) {
+        const m = (text || '').match(/\((\d{1,3})%\)/);
+        const bar = $('#loadingBar');
+        if (m) {
+            bar.classList.remove('indeterminate');
+            $('#loadingBarFill').style.width = m[1] + '%';
+            $('#loadingPercent').textContent = m[1] + '%';
+        } else {
+            bar.classList.add('indeterminate');
+            $('#loadingPercent').textContent = '';
+        }
+        $('#loadingSize').textContent = '';
+        $('#loadingETA').textContent = '';
+        $('#loadingSep1').hidden = true;
+        $('#loadingSep2').hidden = true;
         $('#loadingWarn').hidden = true;
     }
     $('#results').classList.add('hidden');
@@ -4399,10 +4443,13 @@ function startProgress(totalBytes, warnText) {
     _progressState.startMs   = Date.now();
     _progressState.totalBytes = totalBytes;
     $('#loadingProgress').hidden = false;
+    $('#loadingBar').classList.remove('indeterminate');   // upload = determinado (por bytes)
     $('#loadingBarFill').style.width = '0%';
     $('#loadingPercent').textContent = '0%';
     $('#loadingSize').textContent = `${(totalBytes / (1024*1024)).toFixed(1)} MB`;
     $('#loadingETA').textContent = 'calculando…';
+    $('#loadingSep1').hidden = false;
+    $('#loadingSep2').hidden = false;
     if (warnText) {
         $('#loadingWarn').hidden = false;
         $('#loadingWarn').textContent = warnText;
@@ -5276,7 +5323,7 @@ async function _bugreportToReport(txt) {
     };
     const first = (...keys) => { for (const k of keys) { const v = prop(k); if (v) return v; } return ''; };
 
-    L.push('A4ther bugreport parser v4.4.88');
+    L.push('A4ther bugreport parser v4.4.89');
 
     // ── INFO DO SISTEMA ──
     H('INFO DO SISTEMA (bugreport)');

@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.88 | LS Aluguel
+#  A4ther Systems v4.4.89 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,13 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.88"
+VERSION="4.4.89"
+
+# ── Versões ESPERADAS do Free Fire (ajuste manual a cada nova OB) ──────────────
+# v4.4.89: comparação EXATA contra estas strings (antes validava ranges de OB
+# antigas como "ok"). Atualize aqui quando a Garena lançar nova OB.
+EXPECTED_FF_VER="1.123.18"      # com.dts.freefireth
+EXPECTED_FFMAX_VER="2.123.18"   # com.dts.freefiremax
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -1148,12 +1154,21 @@ for PKG in $FF_PKGS; do
             [ -n "$FIRST" ] && info "  install:   $FIRST"
             [ -n "$UPD" ]   && info "  update:    $UPD"
             [ -n "$INST" ]  && info "  installer: $INST"
-            # DG7 SS: versão FF Max esperada (ajustar conforme nova OB)
-            if [ "$PKG" = "com.dts.freefiremax" ] && [ -n "$VER" ]; then
-                case "$VER" in
-                    1.120.*|1.121.*|1.122.*) ok "  versão FF Max no range esperado (OB ativo)" ;;
-                    *) warn "  versão FF Max FORA do range esperado (esperado 1.120-1.122, encontrado $VER) — verificar oficial Garena" ;;
+            # v4.4.89: versão EXATA esperada (FF e FF Max). Diferente = jogo
+            # desatualizado OU modificado → não passa mais como "ok".
+            if [ -n "$VER" ]; then
+                _EXP=""
+                case "$PKG" in
+                    com.dts.freefiremax) _EXP="$EXPECTED_FFMAX_VER" ;;
+                    com.dts.freefireth)  _EXP="$EXPECTED_FF_VER" ;;
                 esac
+                if [ -n "$_EXP" ]; then
+                    if [ "$VER" = "$_EXP" ]; then
+                        ok "  versão $VER == esperada ($_EXP) — OB atual"
+                    else
+                        warn "  versão $VER ≠ esperada ($_EXP) — FF desatualizado ou modificado (conferir Garena)"
+                    fi
+                fi
             fi
             # Verificação crítica: Free Fire deve vir da Play Store (com.android.vending)
             case "$INST" in
@@ -1182,35 +1197,34 @@ for PKG in $FF_PKGS; do
                 done
             fi
         fi
-        # tamanho TOTAL real do jogo (v4.4.75): o FF usa App Bundle (SPLIT APKs), então
-        # o base.apk tem só ~12-60MB — medir SÓ ele dava falso "APK pequeno/mod". Agora
-        # SOMA todos os APKs fracionados que o `pm path` lista (base + split_config.*) +
-        # OBB + Data. Remove o alerta de "<500MB" baseado em base.apk.
+        # tamanho real (v4.4.89): FF é App Bundle (SPLIT APKs) — base.apk tem só ~12-60MB.
+        # SOMA todos os APKs do `pm path` (base + split_config.*) em BYTES (stat -c %s) +
+        # a pasta OBB. SÓ acusa repack se Base+Splits+OBB < 1 GB (instalação real é multi-GB;
+        # medir só o base.apk dava o falso "804MB = mod").
         FF_APK_DIR=$(dirname "$APK_PATH" 2>/dev/null)
         FF_OBB_DIR="/sdcard/Android/obb/$PKG";   [ -d "$FF_OBB_DIR" ]  || FF_OBB_DIR="/storage/emulated/0/Android/obb/$PKG"
         FF_DATA_DIR="/sdcard/Android/data/$PKG"; [ -d "$FF_DATA_DIR" ] || FF_DATA_DIR="/storage/emulated/0/Android/data/$PKG"
-        APK_KB=0; OBB_KB=0; DATA_KB=0; SPLIT_N=0
-        # soma cada APK fracionado (base + split_config.arm64/.xxhdpi/.pt etc.)
+        APK_BYTES=0; SPLIT_N=0
         for _apk in $(pm path "$PKG" 2>/dev/null | sed 's|^package:||'); do
             [ -f "$_apk" ] || continue
             _sz=$(stat -c '%s' "$_apk" 2>/dev/null); case "$_sz" in ''|*[!0-9]*) _sz=0 ;; esac
-            APK_KB=$((APK_KB + _sz / 1024)); SPLIT_N=$((SPLIT_N + 1))
+            APK_BYTES=$((APK_BYTES + _sz)); SPLIT_N=$((SPLIT_N + 1))
         done
+        OBB_KB=0; DATA_KB=0
         if have du; then
-            [ -d "$FF_OBB_DIR" ]  && OBB_KB=$(du -sk "$FF_OBB_DIR"  2>/dev/null | awk '{print $1}')
-            [ -d "$FF_DATA_DIR" ] && DATA_KB=$(du -sk "$FF_DATA_DIR" 2>/dev/null | awk '{print $1}')
+            [ -d "$FF_OBB_DIR" ]  && OBB_KB=$(du -sk "$FF_OBB_DIR"  2>/dev/null | awk '{print $1+0}')
+            [ -d "$FF_DATA_DIR" ] && DATA_KB=$(du -sk "$FF_DATA_DIR" 2>/dev/null | awk '{print $1+0}')
         fi
-        case "$APK_KB"  in ''|*[!0-9]*) APK_KB=0 ;;  esac
         case "$OBB_KB"  in ''|*[!0-9]*) OBB_KB=0 ;;  esac
         case "$DATA_KB" in ''|*[!0-9]*) DATA_KB=0 ;; esac
-        TOTAL_KB=$((APK_KB + OBB_KB + DATA_KB))
-        info "  tamanho TOTAL (APKs+OBB+Data): $(human_kb "$TOTAL_KB")  ·  ${SPLIT_N} APK(s) fracionado(s)"
+        APK_KB=$((APK_BYTES / 1024))
+        CORE_KB=$((APK_KB + OBB_KB))           # Base+Splits+OBB = critério do flag
+        info "  tamanho: Base+Splits+OBB = $(human_kb "$CORE_KB")  (+Data $(human_kb "$DATA_KB"))  ·  ${SPLIT_N} APK(s)"
         info "    APKs(base+splits): $(human_kb "$APK_KB")  |  OBB: $(human_kb "$OBB_KB")  |  Data: $(human_kb "$DATA_KB")"
-        # SÓ avisa se conseguiu medir o OBB (onde está o bulk real) e mesmo assim ficou
-        # minúsculo — nunca alerta por base.apk pequeno nem quando OBB/Data não puderam
-        # ser lidos (sem root), pra não gerar falso "mod".
-        if [ "$OBB_KB" -gt 0 ] && [ "$TOTAL_KB" -gt 0 ] && [ "$TOTAL_KB" -lt 1048576 ] 2>/dev/null; then
-            warn "  Instalação do FF pequena ($(human_kb "$TOTAL_KB")) mesmo com OBB lido — possível repack/mod."
+        # Só acusa se mediu o OBB (onde está o bulk) E Base+Splits+OBB < 1GB. Nunca flagga
+        # por base.apk pequeno nem quando o OBB não pôde ser lido (scoped storage sem root).
+        if [ "$OBB_KB" -gt 0 ] && [ "$CORE_KB" -gt 0 ] && [ "$CORE_KB" -lt 1048576 ] 2>/dev/null; then
+            warn "  Instalação do FF pequena (Base+Splits+OBB = $(human_kb "$CORE_KB") < 1GB) — possível repack/mod."
         fi
         # ── v4.4.75: AUDITORIA DE METADATA DA LIB (regra de 1981) — repack/mod detect ──
         # APK oficial: o ZIP do Android grava os .so da pasta lib com o epoch mínimo do
@@ -1571,7 +1585,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
     # 2) STRING patterns — funções únicas do script
     if have grep; then
         # createHologram + updateHolograms + getEnemies juntos no mesmo arquivo
-        STR_MATCH=$(grep -rlE --exclude="$SELF_BASE" --exclude='A4THER_UPLOAD_SITE_*' --exclude-dir='a4ther_audits' 'createHologram[[:space:]]*\(' $HOLO_PATHS 2>/dev/null | head -20)
+        STR_MATCH=$(grep -rlE --exclude="$SELF_BASE" --exclude='_scan_console.log' --exclude='A4THER_UPLOAD_SITE_*' --exclude-dir='a4ther_audits' --exclude-dir='a4ther' 'createHologram[[:space:]]*\(' $HOLO_PATHS 2>/dev/null | head -20)
         if [ -n "$STR_MATCH" ]; then
             echo "$STR_MATCH" | while IFS= read -r F; do
                 [ -z "$F" ] || [ ! -r "$F" ] && continue
@@ -1588,7 +1602,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
         fi
 
         # Pattern crítico: BoxGeometry(1, 2, 1) + cor 0xff0000 = silhueta humanoide vermelha
-        BOX_MATCH=$(grep -rlE --exclude="$SELF_BASE" --exclude='A4THER_UPLOAD_SITE_*' --exclude-dir='a4ther_audits' 'BoxGeometry[[:space:]]*\([[:space:]]*1[[:space:]]*,[[:space:]]*2[[:space:]]*,[[:space:]]*1[[:space:]]*\)' $HOLO_PATHS 2>/dev/null | head -10)
+        BOX_MATCH=$(grep -rlE --exclude="$SELF_BASE" --exclude='_scan_console.log' --exclude='A4THER_UPLOAD_SITE_*' --exclude-dir='a4ther_audits' --exclude-dir='a4ther' 'BoxGeometry[[:space:]]*\([[:space:]]*1[[:space:]]*,[[:space:]]*2[[:space:]]*,[[:space:]]*1[[:space:]]*\)' $HOLO_PATHS 2>/dev/null | head -10)
         if [ -n "$BOX_MATCH" ]; then
             echo "$BOX_MATCH" | while IFS= read -r F; do
                 [ -z "$F" ] && continue
@@ -1617,7 +1631,7 @@ if [ -n "$HOLO_PATHS" ] && have find; then
         for WV in "/data/data/$FFPKG/app_webview" "/data/data/$FFPKG/app_chromium" \
                   "/data/data/$FFPKG/cache/WebView"; do
             [ -d "$WV" ] || continue
-            WV_HIT=$(grep -rliE --exclude="$SELF_BASE" --exclude='A4THER_UPLOAD_SITE_*' --exclude-dir='a4ther_audits' 'createHologram|updateHolograms|hologram-.{1,5}enemy' "$WV" 2>/dev/null | head -3)
+            WV_HIT=$(grep -rliE --exclude="$SELF_BASE" --exclude='_scan_console.log' --exclude='A4THER_UPLOAD_SITE_*' --exclude-dir='a4ther_audits' --exclude-dir='a4ther' 'createHologram|updateHolograms|hologram-.{1,5}enemy' "$WV" 2>/dev/null | head -3)
             if [ -n "$WV_HIT" ]; then
                 echo "$WV_HIT" | while IFS= read -r F; do
                     [ -n "$F" ] && alert "WebView do FF contém script Holograma: $F"
@@ -2241,9 +2255,12 @@ for PKG in $VSPACE_PKGS; do
     [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Virtual sandbox (permite GG sem root): $PKG"; MEM_HITS=$((MEM_HITS+1)); }
 done
 # FFH4X family + injectors Android FF 2026
-FFCHEAT_PKGS="com.ffh4x com.ff.injector com.op999.injector com.teambot.injector com.tb71.injector com.ng.injector com.panelff.app com.novaesp app.mantispro.gamepad app.mantispro.mouse mantis.mouse.pro.beta tn.loukious.fakerunlocker"
+# v4.4.89: keymappers/mapeamento de tela (mantis gamepad/mouse) SAÍRAM daqui — não são
+# injeção em memória nem dão vantagem balística real; foram pro §16 (warn não-crítico).
+# Aqui ficam SÓ injetores/painéis reais.
+FFCHEAT_PKGS="com.ffh4x com.ff.injector com.op999.injector com.teambot.injector com.tb71.injector com.ng.injector com.panelff.app com.novaesp tn.loukious.fakerunlocker"
 for PKG in $FFCHEAT_PKGS; do
-    [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Cheat injector/macro FF: $PKG"; MEM_HITS=$((MEM_HITS+1)); }
+    [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Cheat injector/painel FF: $PKG"; MEM_HITS=$((MEM_HITS+1)); }
 done
 MEM_HITS=0
 if [ -n "$ALL_PKGS" ]; then
@@ -2275,6 +2292,9 @@ com.cheatdroid.autoclicker
 com.autoclicker.clicker
 com.touchassistant.autotap
 com.macrokeyboard.android
+app.mantispro.gamepad
+app.mantispro.mouse
+mantis.mouse.pro.beta
 com.repetitouch.repetitouch
 com.repetitouch.repetitouchpro
 com.macropro.touch
