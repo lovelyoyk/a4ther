@@ -18,8 +18,8 @@ VERSION="4.4.90"
 # ── Versões ESPERADAS do Free Fire (ajuste manual a cada nova OB) ──────────────
 # v4.4.89: comparação EXATA contra estas strings (antes validava ranges de OB
 # antigas como "ok"). Atualize aqui quando a Garena lançar nova OB.
-EXPECTED_FF_VER="1.123.18"      # com.dts.freefireth
-EXPECTED_FFMAX_VER="2.123.18"   # com.dts.freefiremax
+EXPECTED_FF_VER="1.123.18"      # com.dts.freefireth   (confirmado pelo usuário 2026-06-14)
+EXPECTED_FFMAX_VER="2.124.18"   # com.dts.freefiremax  (confirmado pelo usuário 2026-06-14 — pode divergir da OB do FF normal)
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
