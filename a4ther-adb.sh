@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/env bash
 # ============================================================
 #  a4ther — Auditoria de integridade Free Fire via ADB Wi-Fi
-#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.89
+#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.90
 #
 #  Assistente passo a passo para auditoria CONSENTIDA de um
 #  dispositivo Android (o dono precisa habilitar a Depuração
@@ -67,7 +67,7 @@ banner() {
   / __ | / // /_/ __/ _ \/ -_) __/
  /_/ |_|/_//_/(_)__/_//_/\__/_/    AUDIT · ADB Wi-Fi
 EOF
-  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.89${NC}"
+  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.90${NC}"
   hr
 }
 
@@ -345,8 +345,14 @@ step_origin() {
 step_scan() {
   require_connected
   hr; info "ETAPA 4/4 — Scan completo do device + Free Fire (via adb shell)"
-  AUDIT_DIR="${OUT_ROOT}/${TS}_${PKG##*.}"
-  mkdir -p "$AUDIT_DIR"
+  # FIX "Transport endpoint is not connected": pasta de TRABALHO em armazenamento
+  # INTERNO do Termux (ext4 real) — NÃO no /storage/emulated/0 (FUSE). Em scan pesado
+  # (ex.: device se auditando via ADB) o daemon de storage emulado do Android é morto
+  # por pressão de memória/IO e o /sdcard vira ENOTCONN, derrubando LOG/temps/master.
+  # No armazenamento interno isso não acontece; o master é COPIADO pro Download no fim
+  # (build_master), com fallback se o FUSE estiver morto.
+  AUDIT_DIR="${TMPDIR:-$HOME}/.a4ther_work/${TS}_${PKG##*.}"
+  mkdir -p "$AUDIT_DIR" 2>/dev/null || { AUDIT_DIR="${OUT_ROOT}/${TS}_${PKG##*.}"; mkdir -p "$AUDIT_DIR" 2>/dev/null; }
   LOG_FILE="${AUDIT_DIR}/_scan_console.log"
 
   # 1) Garante o a4ther.sh localmente (no Termux)
@@ -492,7 +498,8 @@ collect_hashes() {
 #  tag, então NÃO geram falso positivo nem poluem os campos do device.
 # ============================================================
 build_master() {
-  MASTER_TXT="${DL_ROOT}/A4THER_UPLOAD_SITE_${TS}.txt"
+  local stage="${AUDIT_DIR}/A4THER_UPLOAD_SITE_${TS}.txt"   # monta no INTERNO (estável)
+  MASTER_TXT="${DL_ROOT}/A4THER_UPLOAD_SITE_${TS}.txt"      # destino público (Download)
 
   # corpo = saída do scan SEM cores (o site parseia linha a linha). Se o strip
   # falhar por algum motivo, cai pro log cru — NUNCA deixa o corpo vazio.
@@ -511,7 +518,7 @@ build_master() {
   {
     echo "============================================================"
     echo " A4THER SYSTEMS — RELATORIO UNICO DE AUDITORIA"
-    echo " Gerado por a4ther v4.4.89 (coletor ADB Wi-Fi)"
+    echo " Gerado por a4ther v4.4.90 (coletor ADB Wi-Fi)"
     echo " >>> Envie SOMENTE este arquivo .txt ao site verificador <<<"
     echo "============================================================"
     echo "data         : $(date '+%Y-%m-%d %H:%M:%S')"
@@ -542,9 +549,17 @@ build_master() {
     else echo "(sem hashes — artefatos inacessiveis)"; fi
     echo ""
     echo "============================================================"
-    echo " FIM DO RELATORIO - A4ther v4.4.89"
+    echo " FIM DO RELATORIO - A4ther v4.4.90"
     echo "============================================================"
-  } > "$MASTER_TXT" 2>/dev/null
+  } > "$stage" 2>/dev/null
+  # leva pro Download (FUSE/shared). Se falhar (ENOTCONN), re-tenta destravar o storage
+  # 1x; se ainda falhar, MANTÉM o master no interno e o finalize() mostra como puxar.
+  if cp "$stage" "$MASTER_TXT" 2>/dev/null && [ -s "$MASTER_TXT" ]; then :
+  else
+    command -v termux-setup-storage >/dev/null 2>&1 && { termux-setup-storage 2>/dev/null; sleep 1; }
+    if cp "$stage" "$MASTER_TXT" 2>/dev/null && [ -s "$MASTER_TXT" ]; then :
+    else MASTER_TXT="$stage"; fi
+  fi
 }
 
 # ---------- Finalização: coleta paralela → ARQUIVO ÚNICO → backup opcional ----------
@@ -591,7 +606,7 @@ finalize() {
       printf '%s\n' "$SHA_MANIFEST" | awk 'NF>=2{ $1=""; sub(/^[ \t]+/,""); print }' \
         > "${AUDIT_DIR}/_filelist.txt" 2>/dev/null
       {
-        echo "A4ther Audit · v4.4.89"
+        echo "A4ther Audit · v4.4.90"
         echo "data        : $(date '+%Y-%m-%d %H:%M:%S')"
         echo "alvo        : ${PKG_LABEL} (${PKG})"
         echo "device      : ${ADB_TARGET}"
@@ -599,12 +614,19 @@ finalize() {
         echo "fingerprint : $(meta_get fp)"
         echo "relatorio   : ${MASTER_TXT}"
       } > "${AUDIT_DIR}/_audit_meta.txt" 2>/dev/null
-      ok "Backup em: ${BLD}${AUDIT_DIR}${NC}"
+      # AUDIT_DIR agora é INTERNO (estável) — copia pro Download pra ficar visível no Gerenciador.
+      _bk="${DL_ROOT}/a4ther_audits/${TS}_${PKG##*.}"
+      if mkdir -p "$_bk" 2>/dev/null && cp -rf "$AUDIT_DIR"/. "$_bk"/ 2>/dev/null; then
+          ok "Backup em: ${BLD}${_bk}${NC}"
+      else
+          ok "Backup (interno do Termux): ${BLD}${AUDIT_DIR}${NC}"
+          warn "Storage indisponível p/ copiar — no PC: ${BLD}adb pull ${AUDIT_DIR}${NC}"
+      fi
       warn "Pro site, envie MESMO ASSIM só o ${BLD}$(basename "$MASTER_TXT")${NC}."
       ;;
     *)
       # descarta a pasta de backup, MAS mantém o arquivo ÚNICO de upload (em DL_ROOT)
-      case "$AUDIT_DIR" in */a4ther_audits/*|*/a4ther/audits/*) [ -n "$AUDIT_DIR" ] && rm -rf "$AUDIT_DIR" 2>/dev/null ;; esac
+      case "$AUDIT_DIR" in */.a4ther_work/*|*/a4ther_audits/*|*/a4ther/audits/*) [ -n "$AUDIT_DIR" ] && rm -rf "$AUDIT_DIR" 2>/dev/null ;; esac
       # limpa o rastro NO DEVICE: .txt gerado pelo a4ther.sh + cópia + script enviado
       if [ -n "$REMOTE_RPT" ]; then
         adb -s "$ADB_TARGET" shell "rm -f '$REMOTE_RPT' '/sdcard/Download/$(basename "$REMOTE_RPT")'" >/dev/null 2>&1
