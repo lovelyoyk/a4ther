@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.90 | LS Aluguel
+#  A4ther Systems v4.4.91 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,13 +13,15 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.90"
+VERSION="4.4.91"
 
 # ── Versões ESPERADAS do Free Fire (ajuste manual a cada nova OB) ──────────────
-# v4.4.89: comparação EXATA contra estas strings (antes validava ranges de OB
-# antigas como "ok"). Atualize aqui quando a Garena lançar nova OB.
-EXPECTED_FF_VER="1.123.18"      # com.dts.freefireth   (confirmado pelo usuário 2026-06-14)
-EXPECTED_FFMAX_VER="2.124.18"   # com.dts.freefiremax  (confirmado pelo usuário 2026-06-14 — pode divergir da OB do FF normal)
+# v4.4.89 comparava EXATO; v4.4.91 faz match por OB (major.minor via ${VER%.*},
+# ignora o patch — a Garena solta hotfix de patch e o exato quebrava a cada release).
+# Pode manter o patch aqui (ex. .1): ele é ignorado. Atualize quando a OB (o número
+# do meio) virar; o patch não importa mais.
+EXPECTED_FF_VER="1.123.1"       # com.dts.freefireth   (versionName real lido do device — confirmado 2026-06-14)
+EXPECTED_FFMAX_VER="2.124.1"    # com.dts.freefiremax  (versionName real lido do device — confirmado 2026-06-14)
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -550,6 +552,124 @@ done
 for P in /proc/sys/fs/susfs /sys/kernel/security/susfs /data/adb/susfs; do
     exists "$P" && { alert "suSFS detectado: $P (Magisk Hide moderno)"; KERNEL_HITS=$((KERNEL_HITS+1)); }
 done
+
+# ════════════════════════════════════════════════════════════════════════
+#  MÓDULO 1 (v4.4.91) — Auditoria de Propriedades EXTRA (getprop)
+#  ADITIVO: cobre só os 2 props que o scanner AINDA não vê. NÃO re-checa
+#  ro.debuggable / ro.secure / verifiedbootstate (já tratados em 470-504 e
+#  689-691) — re-checar duplicaria alerta e inflaria KERNEL_HITS/ALERTS.
+# ════════════════════════════════════════════════════════════════════════
+
+# ── 1A) ro.kernel.ksu — vazamento de propriedade do KernelSU ──────────────
+# COMO O ATACANTE USA: KernelSU (KSU) é root RESIDENTE NO KERNEL. Ele não
+# joga um "su" no /system/xbin nem exige app gerenciador, então escapa das
+# checagens clássicas de userland — por isso é o root favorito pra cheat de
+# FF (passa em anti-cheat que só olha o espaço de usuário).
+# POR QUE DETECTA: certos kernels com KSU compilado embutido (ou forks/
+# managers mal configurados) VAZAM a flag `ro.kernel.ksu`. Se ela aparece,
+# é tell direto de kernel KSU.
+# HONESTIDADE: ausência NÃO inocenta — KSU bem feito não seta prop nenhuma.
+# Detectores PRIMÁRIOS de KSU seguem sendo os arquivos (/data/adb/ksu*,
+# bloco "Paths kernel-level") e o /proc/kallsyms. Isto aqui é reforço barato.
+KSU_PROP=$(gp ro.kernel.ksu)
+case "$KSU_PROP" in
+    1|true|TRUE)
+        alert "ro.kernel.ksu=$KSU_PROP (KernelSU exposto via propriedade)"
+        KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+esac
+
+# ── 1B) ro.adb.secure=0 — autenticação do ADB DESLIGADA ───────────────────
+# COMO O ATACANTE USA: em device de fábrica ro.adb.secure=1 → toda conexão
+# ADB exige o usuário APROVAR a chave RSA (o popup "Permitir depuração?").
+# Com =0 (builds eng/userdebug ou ROM adulterada) esse portão cai: qualquer
+# host vira shell uid 2000 SEM aprovação. uid 2000 é justamente o nível que
+# habilita auto-elevação, sideload silencioso e injeção assistida.
+# POR QUE DETECTA: lê a prop direto. É IRMÃ de ro.secure (690) e
+# service.adb.root (691), mas distinta — cobre o ADB aceitar conexão não
+# autorizada mesmo com ro.secure=1. Severidade = warn (igual ro.secure=0),
+# pois há device eng legítimo; promova a alert se quiser rígido.
+case "$(gp ro.adb.secure)" in
+    0) warn "ro.adb.secure=0 (ADB sem autenticação RSA — build eng/adulterada)" ;;
+esac
+# ════════════════════════════ FIM MÓDULO 1 ═══════════════════════════════
+
+# ════════════════════════════════════════════════════════════════════════
+#  MÓDULO 2 (v4.4.91) — Auditoria de MOUNTS (root-hide / magic-mount)
+#  ADITIVO: o scanner só lia /proc/mounts pra TIPO de FS (~linha 176).
+#  Aqui varremos /proc/mounts E /proc/self/mountinfo atrás dos rastros que
+#  Magisk / KernelSU / APatch deixam ao se montar por cima do sistema.
+#
+#  COMO O ATACANTE USA: pra ter root sem reflashar partição, esses frameworks
+#  fazem BIND-MOUNT / overlay por cima de /system, /vendor etc. (a "magic
+#  mount" do Magisk; overlayfs de módulos no KSU). Assim injetam su/módulos e
+#  ESCONDEM o root — mas todo mount aparece na tabela de mounts do kernel.
+#  POR QUE 2 ARQUIVOS: /proc/mounts é o alvo nº1 de spoof (susfs FILTRA ele
+#  pra sumir com as linhas). /proc/self/mountinfo é mais rico (mount-id,
+#  parent-id, fonte do mount, relação de bind) e mais difícil de limpar 100%
+#  de forma consistente — um rastro some de um e sobra no outro. Lemos OS DOIS.
+# ════════════════════════════════════════════════════════════════════════
+header "MOUNTS / MAGIC-MOUNT (root-hide)"
+
+# Assinaturas de mount dos frameworks de root-hide:
+#   magisk         → mounts/worker dirs do Magisk
+#   ksud / KSU     → daemon e overlay de módulos do KernelSU
+#   overlayfs_loop → overlay de módulos via loop device (KSU/moderno)
+#   .magic_mount   → diretório-fonte da "magic mount" do Magisk
+#   patch_hw       → fonte de mount de frameworks de patch (APatch & cia).
+#                    É a assinatura MAIS ambígua (alguns OEM têm mount "hw_*"):
+#                    se um device limpo cair aqui por causa dela, mova patch_hw
+#                    pra um tier de AVISO em vez de ALERTA.
+MNT_SIG='magisk|ksud|overlayfs_loop|KSU|\.magic_mount|patch_hw'
+MNT_FOUND=0; MNT_READ=0
+for MF in /proc/mounts /proc/self/mountinfo; do
+    [ -r "$MF" ] || continue
+    MNT_READ=1
+    # sem -a de propósito: os dois são texto puro; -a quebra em toybox antigo
+    # e, com o 2>/dev/null, mataria o check silenciosamente.
+    HITS=$(grep -iE "$MNT_SIG" "$MF" 2>/dev/null | head -n 4)
+    if [ -n "$HITS" ]; then
+        MNT_FOUND=1
+        echo "$HITS" | while IFS= read -r LN; do
+            [ -n "$LN" ] && alert "mount root-hide ($MF): $(echo "$LN" | cut -c1-120)"
+        done
+    fi
+done
+if   [ "$MNT_FOUND" = "1" ]; then KERNEL_HITS=$((KERNEL_HITS+1))
+elif [ "$MNT_READ"  = "1" ]; then ok "Mounts limpos (sem rastro de magic-mount/overlay de root)"
+else info "Tabela de mounts indisponível"; fi
+# ════════════════════════════ FIM MÓDULO 2 ═══════════════════════════════
+
+# ════════════════════════════════════════════════════════════════════════
+#  MÓDULO 3 (v4.4.91) — Blacklist forense de PATHS (cheat tools / loaders)
+#  ADITIVO: paths em DISCO que os loops existentes não cobrem (eles pegam
+#  su/ksu/magisk em /data/adb e os apps por PACOTE). Aqui é por arquivo.
+#
+#  COMO O ATACANTE USA: cada um é o rastro em disco de uma ferramenta:
+#   Shizuku (dá poderes de ADB a apps sem root), HyperCeiler (mod de HyperOS),
+#   WechatXposed (hook Xposed), Lucky Patcher (patch/bypass), APatch (root).
+#  LIMITAÇÃO TERMUX — alcance REAL de cada path sob uid 2000 (shell ADB):
+#   • /data/local/tmp/*   → uid 2000 lê/stat normalmente             (ok)
+#   • /storage/emulated/0 → shared storage, uid 2000 lê              (ok)
+#   • /data/local/luckys  → /data/local é 0751 (x p/ outros): stat ok (ok)
+#   • /data/adb/*         → 0700 root:root → SEM root o check SEMPRE
+#     dá "não existe". Só vale rodando COMO ROOT; aqui o APatch é
+#     reforço redundante (/data/adb/ap já está na linha 540). Os vetores
+#     reais de APatch são kallsyms + mount (Módulo 2).
+# ════════════════════════════════════════════════════════════════════════
+header "BLACKLIST DE PATHS (cheat tools / loaders)"
+
+BL3_HITS=0
+for ENTRY in \
+    "/data/local/tmp/shizuku|Shizuku (escalonamento via ADB sem root)" \
+    "/data/local/tmp/HyperCeiler|HyperCeiler (mod framework HyperOS/MIUI)" \
+    "/storage/emulated/0/WechatXposed|WechatXposed (hook Xposed)" \
+    "/data/local/luckys|Lucky Patcher / loader (patch/bypass)" \
+    "/data/adb/apatch|APatch (root via patch de kernel — só visível c/ root)"; do
+    P=${ENTRY%%|*}; LBL=${ENTRY#*|}
+    [ -e "$P" ] && { alert "Path blacklist: $P → $LBL"; BL3_HITS=$((BL3_HITS+1)); }
+done
+[ "$BL3_HITS" = "0" ] && ok "Nenhum path da blacklist de cheat-tools presente"
+# ════════════════════════════ FIM MÓDULO 3 ═══════════════════════════════
 
 # Módulos no /sys/module
 if [ -d /sys/module ]; then
@@ -1154,8 +1274,11 @@ for PKG in $FF_PKGS; do
             [ -n "$FIRST" ] && info "  install:   $FIRST"
             [ -n "$UPD" ]   && info "  update:    $UPD"
             [ -n "$INST" ]  && info "  installer: $INST"
-            # v4.4.89: versão EXATA esperada (FF e FF Max). Diferente = jogo
-            # desatualizado OU modificado → não passa mais como "ok".
+            # v4.4.91: match por OB. Compara só major.OB (${VER%.*} = tira o último
+            # segmento .patch), pois a Garena solta hotfix de patch direto e o match
+            # EXATO (v4.4.89) quebrava a cada release. OB diferente = jogo desatualizado
+            # ou modificado → não passa como "ok". (${X%.*} = remove o MENOR sufixo
+            # ".algo" do fim: "2.124.1" → "2.124"; usa % simples, não %% que daria "2".)
             if [ -n "$VER" ]; then
                 _EXP=""
                 case "$PKG" in
@@ -1163,10 +1286,10 @@ for PKG in $FF_PKGS; do
                     com.dts.freefireth)  _EXP="$EXPECTED_FF_VER" ;;
                 esac
                 if [ -n "$_EXP" ]; then
-                    if [ "$VER" = "$_EXP" ]; then
-                        ok "  versão $VER == esperada ($_EXP) — OB atual"
+                    if [ "${VER%.*}" = "${_EXP%.*}" ]; then
+                        ok "  versão $VER (OB ${VER%.*}) == OB esperada (${_EXP%.*}) — atual"
                     else
-                        warn "  versão $VER ≠ esperada ($_EXP) — FF desatualizado ou modificado (conferir Garena)"
+                        warn "  versão $VER (OB ${VER%.*}) ≠ OB esperada (${_EXP%.*}) — FF desatualizado ou modificado (conferir Garena)"
                     fi
                 fi
             fi
@@ -1221,10 +1344,16 @@ for PKG in $FF_PKGS; do
         CORE_KB=$((APK_KB + OBB_KB))           # Base+Splits+OBB = critério do flag
         info "  tamanho: Base+Splits+OBB = $(human_kb "$CORE_KB")  (+Data $(human_kb "$DATA_KB"))  ·  ${SPLIT_N} APK(s)"
         info "    APKs(base+splits): $(human_kb "$APK_KB")  |  OBB: $(human_kb "$OBB_KB")  |  Data: $(human_kb "$DATA_KB")"
-        # Só acusa se mediu o OBB (onde está o bulk) E Base+Splits+OBB < 1GB. Nunca flagga
-        # por base.apk pequeno nem quando o OBB não pôde ser lido (scoped storage sem root).
-        if [ "$OBB_KB" -gt 0 ] && [ "$CORE_KB" -gt 0 ] && [ "$CORE_KB" -lt 1048576 ] 2>/dev/null; then
-            warn "  Instalação do FF pequena (Base+Splits+OBB = $(human_kb "$CORE_KB") < 1GB) — possível repack/mod."
+        # v4.4.91: tamanho NÃO é mais critério de repack. Sob uid 2000 + Scoped Storage
+        # (Android 11+) o du do OBB sub-conta (permission-denied → soma só o que lê) e
+        # /Android/data fica ilegível — e o FF guarda o BULK dos assets em Data, não no
+        # OBB. Então "Base+Splits+OBB < 1GB" dava FALSO POSITIVO em FF legítimo (ex.: 372MB
+        # num install real). Repack/mod fica com os detectores CONFIÁVEIS: metadata da lib
+        # (regra 1981, abaixo) + assinatura + origem.
+        if [ "$OBB_KB" -eq 0 ] && [ "$DATA_KB" -eq 0 ]; then
+            info "  tamanho não conclusivo p/ repack (OBB/Data inacessíveis — Scoped Storage sem root)"
+        else
+            info "  tamanho registrado p/ forense (não é prova de repack: bulk do FF fica em Data)"
         fi
         # ── v4.4.75: AUDITORIA DE METADATA DA LIB (regra de 1981) — repack/mod detect ──
         # APK oficial: o ZIP do Android grava os .so da pasta lib com o epoch mínimo do

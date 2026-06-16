@@ -2730,6 +2730,21 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
 .la-caret { background: var(--scan); box-shadow: 0 0 8px var(--scan-glow); }
 .loading-bar-fill { background: linear-gradient(90deg, var(--scan), var(--purple)) !important; box-shadow: 0 0 12px var(--scan-glow); }
 .loading-scan-line { background: linear-gradient(90deg, transparent, var(--scan), transparent) !important; box-shadow: 0 0 10px var(--scan-glow); }
+
+/* ════════════════════════════════════════════════════════════════════
+   v4.4.91 · GATE MOBILE (conservador) — alivia GPU/compositing no Safari
+   mobile. Desliga as camadas de fundo vivas e o backdrop-filter (caro no
+   iPhone). NÃO mexe em animação (pedido: conservador). Painéis já são
+   opacos → sem perda de leitura. [Obs: polish mobile; NÃO é o fix do crash
+   do bugreport — esse é a guarda de memória no handler, separado.]
+   ════════════════════════════════════════════════════════════════════ */
+@media (max-width: 820px), (pointer: coarse) {
+    .fx-layer, .fx-aurora, .fx-beam, .fx-scanlines, .hero-radar { display: none !important; }
+    *, *::before, *::after {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+}
 </style>
 </head>
 <body>
@@ -2788,7 +2803,7 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
     <div class="tagline">
         <span class="accent">S Y S T E M S</span>
         <span class="sep">·</span>
-        <span id="version">v4.4.90</span>
+        <span id="version">v4.4.91</span>
     </div>
 
     <div class="hero-divider"></div>
@@ -3242,7 +3257,7 @@ body::-webkit-scrollbar-thumb{ background:linear-gradient(180deg, var(--purple-s
      SCRIPT
      ============================================================ -->
 <script>
-const VERSION = "4.4.90";
+const VERSION = "4.4.91";
 
 /* ============================================================
    BACKEND CONFIG — lspainel.com.br (LS Aluguel)
@@ -5286,6 +5301,7 @@ async function _unzipFindBugreportTxt(arrayBuffer, onPick) {
         const flags    = dv.getUint16(off + 6, true);
         const method   = dv.getUint16(off + 8, true);
         const compSize = dv.getUint32(off + 18, true);
+        const uncompSize = dv.getUint32(off + 22, true);   // tamanho DESCOMPRIMIDO (local header +22)
         const nameLen  = dv.getUint16(off + 26, true);
         const extraLen = dv.getUint16(off + 28, true);
         const name = td.decode(u8.subarray(off + 30, off + 30 + nameLen));
@@ -5293,7 +5309,7 @@ async function _unzipFindBugreportTxt(arrayBuffer, onPick) {
         if ((flags & 0x08) && compSize === 0) break; // streaming zip (data descriptor) — não suportado
         const base = (name.split('/').pop() || name);
         if (/\.txt$/i.test(base)) {
-            cands.push({ base, method, start: dataStart, size: compSize,
+            cands.push({ base, method, start: dataStart, size: compSize, usize: uncompSize,
                 priority: /^bugreport.*\.txt$/i.test(base) ? 3 : /^dumpstate.*\.txt$/i.test(base) ? 2 : 1 });
         }
         off = dataStart + compSize;
@@ -5302,12 +5318,20 @@ async function _unzipFindBugreportTxt(arrayBuffer, onPick) {
     cands.sort((a, b) => b.priority - a.priority || b.size - a.size);
     const pick = cands[0];
     if (onPick) onPick(pick.base);
+    // v4.4.91: GUARD de memória iOS. O bugreport.txt infla pra 100-300MB e o Safari
+    // mobile (~1-1.5GB/aba) estoura ("Um problema ocorreu repetidamente"). Mede o
+    // tamanho DESCOMPRIMIDO real (local header +22) e barra ANTES de inflar — espelha
+    // a política do handleTarGz. (usize=0 em zip streaming → não barra, segue normal.)
+    const txtMb = (pick.usize || 0) / (1024 * 1024);
+    if (typeof isIOSMobile === 'function' && isIOSMobile() && txtMb > 150) {
+        return { name: pick.base, blocked: true, mb: txtMb };
+    }
     const comp = u8.subarray(pick.start, pick.start + pick.size);
     let out;
     if (pick.method === 0)      out = comp;                  // stored
     else if (pick.method === 8) out = await _inflateRaw(comp); // deflate
     else throw new Error('método de compressão ZIP não suportado: ' + pick.method);
-    return { name: pick.base, text: new TextDecoder('utf-8', { fatal: false }).decode(out) };
+    return { name: pick.base, mb: txtMb, text: new TextDecoder('utf-8', { fatal: false }).decode(out) };
 }
 
 // Converte o bugreport CRU → relatório no formato a4ther.sh (linhas ◆/○/●).
@@ -5323,7 +5347,7 @@ async function _bugreportToReport(txt) {
     };
     const first = (...keys) => { for (const k of keys) { const v = prop(k); if (v) return v; } return ''; };
 
-    L.push('A4ther bugreport parser v4.4.90');
+    L.push('A4ther bugreport parser v4.4.91');
 
     // ── INFO DO SISTEMA ──
     H('INFO DO SISTEMA (bugreport)');
@@ -5403,11 +5427,26 @@ async function handleBugreportZip(file) {
         if (sizeMb > 400) warn(`bugreport grande (${sizeMb.toFixed(0)} MB) — pode forçar a memória do navegador`);
         showLoading(`Descompactando ${file.name} (${sizeMb.toFixed(1)} MB)…`);
         const found = await _unzipFindBugreportTxt(await file.arrayBuffer(), (n) => showLoading(`Lendo ${n}…`));
+        // v4.4.91: bloqueio de OOM no Safari iOS (bugreport descomprimido grande demais).
+        if (found && found.blocked) {
+            warn('────────────────────────────────────────────');
+            warn(`bugreport de ${found.mb.toFixed(0)} MB descomprimido — o Safari do iPhone não tem RAM pra isso e trava ("Um problema ocorreu repetidamente").`);
+            warn('Resolva por um destes caminhos:');
+            warn('  1) Abra este site num PC/notebook e envie o .zip lá (RAM sobra).');
+            warn('  2) Extraia o bugreport-*.txt do .zip e tente "Android · scan TXT".');
+            warn('  3) Gere um bugreport menor / mais recente.');
+            warn('────────────────────────────────────────────');
+            renderResults({ mode: 'android-txt' });
+            return;
+        }
         if (!found || !found.text || found.text.length < 200) {
             warn('Não achei um bugreport-*.txt (nem dumpstate*.txt) dentro do .zip');
             warn('Gere com: adb bugreport arquivo.zip (modo FULL)');
             renderResults({ mode: 'android-txt' });
             return;
+        }
+        if (typeof isIOSMobile === 'function' && isIOSMobile() && found.mb > 80) {
+            warn(`bugreport de ${found.mb.toFixed(0)} MB descomprimido — perto do limite de RAM do Safari iOS; se travar, use um PC.`);
         }
         showLoading('Analisando bugreport (HWID + IOCs)…');
         const report = await _bugreportToReport(found.text);
