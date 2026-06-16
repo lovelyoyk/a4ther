@@ -1,0 +1,19 @@
+{
+  "name": "a4ther-ffscanner-build",
+  "version": "4.4.91",
+  "private": true,
+  "description": "Secure build infrastructure for A4ther FFScanner (obfuscation, encryption, minification, packaging).",
+  "type": "commonjs",
+  "scripts": {
+    "obfuscate": "node obfuscate.js",
+    "build": "sh ./build.sh",
+    "clean": "rm -rf dist a4ther-scanner-*.zip a4ther-scanner-*.tar.gz"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "html-minifier-terser": "^7.2.0",
+    "javascript-obfuscator": "^4.1.1"
+  }
+}
