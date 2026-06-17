@@ -1,78 +1,18 @@
 {
   "product": "A4ther FFScanner — EXTREME build",
-  "version": "4.4.91",
+  "version": "4.4.93",
   "guardLevel": "high",
-  "generatedAt": "2026-06-17T19:39:25.949Z",
+  "generatedAt": "2026-06-17T20:15:00Z",
   "layers": [
     "1:script-pack(gzip+base64+antidebug)",
     "2:wasm-core",
     "3:js-obfuscation+html-minify",
     "4:antitamper-guard"
   ],
-  "artifacts": {
-    "a4ther-adb.sh": {
-      "bytes": 17372,
-      "sha256": "02b30a65be343ec4937b544e7011290f93a02777642a479bfb426a04af19b800"
-    },
-    "a4ther-adb.sh.enc": {
-      "bytes": 23555,
-      "sha256": "b786b730e5dcace2ee77916e8a4ec0c8d72ecf4553a8e78dad060af1b99e7766"
-    },
-    "a4ther-ios.js": {
-      "bytes": 1066661,
-      "sha256": "ee8503d9fad9dee766cf3b769b1fa38a2920aa152713780e559bd689d76852d4"
-    },
-    "a4ther-ios.wasm": {
-      "bytes": 758,
-      "sha256": "b7c004a77a7909caf9ebe81df79fb0d11ada0babd0d6042f2098e89ef405e96f"
-    },
-    "a4ther-wasm-loader.min.js": {
-      "bytes": 28397,
-      "sha256": "13733ed2b3577d15f1036f4e8e63cfc475d8f11bb79c66f5a227735bf510ea78"
-    },
-    "a4ther.sh": {
-      "bytes": 105890,
-      "sha256": "0b033334e216e4273c23a641ba19ae255265044821dbe7cb1305a569dc3ba10a"
-    },
-    "a4ther.sh.enc": {
-      "bytes": 143435,
-      "sha256": "505d6ab86f5fdd7d43cd03481abd0eb99ae9b4ee6535bc341d6703eb99d3cc18"
-    },
-    "apple-touch-icon.png": {
-      "bytes": 5107,
-      "sha256": "42dfbf248ee3e46dc3f36d4755e1ee260e50aac9e36ac19476b52f2d68c4fd65"
-    },
-    "decrypt.sh": {
-      "bytes": 630,
-      "sha256": "0a7176b96c5163e2adaf2151d83e6de76a496809deb2fcc62eb21eb5600d9aa0"
-    },
-    "icon-192.png": {
-      "bytes": 5334,
-      "sha256": "b183008f784f037baaead1e808222dab10e541c4848dc35e9a5e1861cc251074"
-    },
-    "icon-512.png": {
-      "bytes": 17125,
-      "sha256": "77e55f2f807b46c8d2661b32e82d4eb6d0a57e29c8f982ec64db6cbaf4b17466"
-    },
-    "icon.svg": {
-      "bytes": 23062,
-      "sha256": "94b2fc8379a01bac8f7d504833444ebf06066cdbc8740200cd5af1e09a1151e9"
-    },
-    "index.html": {
-      "bytes": 436382,
-      "sha256": "027d0116ecfe2e879c48def3447cef83c959e7ea47a121f850613e4f3f149235"
-    },
-    "manifest.webmanifest": {
-      "bytes": 922,
-      "sha256": "86aeca53ac38d99c6b9449565fa6adf71bb727544d3c8362b6f7f07d19ac4e0a"
-    },
-    "security-manifest.json": {
-      "bytes": 1226,
-      "sha256": "7d5eecf2deced2ecb4846f80824c58e1724d630e3ad5a874f7309bd7a9d16268"
-    },
-    "service-worker.js": {
-      "bytes": 16276,
-      "sha256": "6d1276ccc7f29ba8f28ac385039be142550e1a2863a9d7541c49d6c0060c6f44"
-    }
+  "changelog": {
+    "scanner": "Match de versão FF por OB, fix falso-positivo tamanho, detecção MITM/VPN melhorada",
+    "collector": "Fix ENOTCONN com FUSE (Scoped Storage)",
+    "web": "Detector cert de usuário, guard OOM iOS, gate mobile conservador",
+    "caching": "CACHE_VERSION = v4.4.93"
   }
 }

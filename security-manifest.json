@@ -1,28 +1,28 @@
 {
   "level": "high",
-  "generatedAt": "2026-06-17T19:39:25.663Z",
+  "generatedAt": "2026-06-17T20:55:16.662Z",
   "targets": {
     "index.html": {
       "sigs": {
-        "checkBlacklist": "9cb42095864b62eb5326ae6a7781aa9d44932d1b6e1b491243d4f0e4fc88532f",
-        "submitToBlacklist": "c64a3bf3f938f4d43cdcd659b61b45803ecd03c0c62096403155907ec8fe14e8",
-        "fetchThreatIntel": "9576d5a178592a722a0845f8e0720190d36cef3be2b750f519bdd1a44e55b749",
-        "applyRemoteIntel": "250440b2e47114360b58b632f408f7fb6d4aed6cfb7b55a5ff7a23f6d85e64b5"
+        "checkBlacklist": "fbd768e2bc02a2f16db284611fce4d34276b4a1b1002a5aed89ad1ec860eb566",
+        "submitToBlacklist": "92b2a57037f5c6b82589624d577490f516da510d9011d6ac6eb6b89e02075078",
+        "fetchThreatIntel": "f7c3c9aff2b70a3cd12ee3d5e47c4b2d2ea3bcc760e08a191ef84b43a85a20ec",
+        "applyRemoteIntel": "ffc6aa8c9e9e4d523d4bc0b2d8bda9b7263704fde5ad2a4d3b049f051ffc7d41"
       },
-      "guardSha": "f17f502e0d2710cc19816e92a4af84f2ec63869867321c0eea57341e5d8c11e5",
-      "hexId": "_0xa7b25474",
-      "bytes": 59016
+      "guardSha": "08ca2839166a8aebd79b82a32124d1502ac4745658cdb9a0f7768c9eb2ffc191",
+      "hexId": "_0x52f550d2",
+      "bytes": 41737
     },
     "a4ther-ios.js": {
       "sigs": {
-        "runPrivacyReport": "3a08703ea05b7ba1b11ef807043e8ae5c209ee3025173165631babc6cb8dfcce",
-        "runSysdiagnoseAnalyzer": "d183304a2de5b221575d43ffcd65417a7e56db8a09ec30995dd3b5908088c6f3",
-        "detect": "08f097cee18ee38669f9c3545ecb16246515fc5fd7beee7527c6f4f2f8c797f6",
-        "buildTextReport": "ec72cf0fbb36ec9794d2ad84e36941ad54c6d6b73665fdc374093eb9277c509f"
+        "runPrivacyReport": "4bf19fa132c3d9a41cb8aec2ea6259c56b20d938ce4223d9be11eac92ab0663c",
+        "runSysdiagnoseAnalyzer": "492102a1d737e46f81dc5e333fa2f14b718c7938722036d6dcc5c5d4871e1402",
+        "detect": "1906ebff5e78dc99bb3a415c72d71c432c50ee7c938310cc0c9cb22cb498492b",
+        "buildTextReport": "5a0bdb1f32c446b976203d5547f25bc158262e1bff2340476f18a26b3cd18a27"
       },
-      "guardSha": "53487641ded10c47ed83c006a83ace130945f69466197d4b272e514d3bc835df",
-      "hexId": "_0x6ab15ce4",
-      "bytes": 53844
+      "guardSha": "d690dc24d80e2e45e8b00d0e56821446996bf3ec3c5a5da1907f30ab3a4e6009",
+      "hexId": "_0xee5a0ee2",
+      "bytes": 48855
     }
   }
 }
