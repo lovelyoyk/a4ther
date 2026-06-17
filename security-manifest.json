@@ -1,0 +1,28 @@
+{
+  "level": "high",
+  "generatedAt": "2026-06-17T19:39:25.663Z",
+  "targets": {
+    "index.html": {
+      "sigs": {
+        "checkBlacklist": "9cb42095864b62eb5326ae6a7781aa9d44932d1b6e1b491243d4f0e4fc88532f",
+        "submitToBlacklist": "c64a3bf3f938f4d43cdcd659b61b45803ecd03c0c62096403155907ec8fe14e8",
+        "fetchThreatIntel": "9576d5a178592a722a0845f8e0720190d36cef3be2b750f519bdd1a44e55b749",
+        "applyRemoteIntel": "250440b2e47114360b58b632f408f7fb6d4aed6cfb7b55a5ff7a23f6d85e64b5"
+      },
+      "guardSha": "f17f502e0d2710cc19816e92a4af84f2ec63869867321c0eea57341e5d8c11e5",
+      "hexId": "_0xa7b25474",
+      "bytes": 59016
+    },
+    "a4ther-ios.js": {
+      "sigs": {
+        "runPrivacyReport": "3a08703ea05b7ba1b11ef807043e8ae5c209ee3025173165631babc6cb8dfcce",
+        "runSysdiagnoseAnalyzer": "d183304a2de5b221575d43ffcd65417a7e56db8a09ec30995dd3b5908088c6f3",
+        "detect": "08f097cee18ee38669f9c3545ecb16246515fc5fd7beee7527c6f4f2f8c797f6",
+        "buildTextReport": "ec72cf0fbb36ec9794d2ad84e36941ad54c6d6b73665fdc374093eb9277c509f"
+      },
+      "guardSha": "53487641ded10c47ed83c006a83ace130945f69466197d4b272e514d3bc835df",
+      "hexId": "_0x6ab15ce4",
+      "bytes": 53844
+    }
+  }
+}

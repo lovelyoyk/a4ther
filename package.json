@@ -6,6 +6,8 @@
   "type": "commonjs",
   "scripts": {
     "obfuscate": "node obfuscate.js",
+    "guard:inject": "node security/inject.js",
+    "guard:test": "node security/inject.js --self-test",
     "build": "sh ./build.sh",
     "clean": "rm -rf dist a4ther-scanner-*.zip a4ther-scanner-*.tar.gz"
   },

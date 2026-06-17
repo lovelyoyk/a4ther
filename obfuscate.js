@@ -41,6 +41,7 @@ const SKIP_DIRS = new Set([
   '.claude',
   'backend',         // PHP backend — not JS we ship to clients
   'backend-workers', // deploy these via wrangler separately, not obfuscated here
+  'security',        // anti-tampering guard sources; injected separately
 ]);
 
 // Files we copy verbatim instead of obfuscating (already minified / vendor).
@@ -49,7 +50,12 @@ function isVendorOrMin(file) {
 }
 
 // Build-time scripts that must never ship inside dist/.
-const EXCLUDE_BASENAMES = new Set(['obfuscate.js', 'build.js']);
+// guard.js + inject.js are the anti-tampering layer's SOURCE; the guard is
+// injected (already obfuscated) by inject.js as a post-step, so the raw sources
+// must never be copied into dist/ on their own.
+const EXCLUDE_BASENAMES = new Set([
+  'obfuscate.js', 'build.js', 'inject.js', 'guard.js',
+]);
 function isBuildScript(file) {
   return EXCLUDE_BASENAMES.has(path.basename(file));
 }

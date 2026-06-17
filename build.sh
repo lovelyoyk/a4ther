@@ -6,7 +6,13 @@
 #   2. Encrypt bash/sh scripts          -> AES-256 via openssl (dist/*.sh.enc)
 #   3. Minify HTML                       -> html-minifier-terser (dist/*.html)
 #   4. Copy remaining static assets      -> dist/
-#   5. Package final archive             -> a4ther-scanner-v<VERSION>.(zip|tar.gz)
+#   5. Inject anti-tampering guard       -> node security/inject.js (dist/)
+#   6. Package final archive             -> a4ther-scanner-v<VERSION>.(zip|tar.gz)
+#
+# Guard env overrides:
+#   FF_SKIP_GUARD   set to 1 to skip anti-tampering injection
+#   FF_GUARD_LEVEL  high | max         obfuscation strength for the guard
+#   FF_GUARD_SIGN   "fnA,fnB,..."      top-level functions to code-sign
 #
 # POSIX-portable: pure /bin/sh, no bashisms, no arrays, no `case` inside $(),
 # no process substitution. Tested under dash/ash/bash --posix.
@@ -63,16 +69,16 @@ fi
 # ===========================================================================
 # Step 1 — obfuscate JS into dist/
 # ===========================================================================
-log "step 1/5  obfuscating JavaScript"
+log "step 1/6  obfuscating JavaScript"
 node obfuscate.js
 
 # ===========================================================================
 # Step 2 — encrypt shell scripts (AES-256-CBC, salted, base64).
 # ===========================================================================
 if [ "${FF_SKIP_ENCRYPT:-0}" = "1" ]; then
-  log "step 2/5  encryption skipped (FF_SKIP_ENCRYPT=1)"
+  log "step 2/6  encryption skipped (FF_SKIP_ENCRYPT=1)"
 else
-  log "step 2/5  encrypting shell scripts"
+  log "step 2/6  encrypting shell scripts"
 
   # Resolve passphrase. Priority: env > file > generated.
   PASS=""
@@ -115,7 +121,7 @@ fi
 # ===========================================================================
 # Step 3 — minify HTML into dist/
 # ===========================================================================
-log "step 3/5  minifying HTML"
+log "step 3/6  minifying HTML"
 
 MINIFIER="$SCRIPT_DIR/node_modules/.bin/html-minifier-terser"
 find "$SCRIPT_DIR" -maxdepth 1 -type f -name '*.html' | while IFS= read -r html_file; do
@@ -140,7 +146,7 @@ done
 # ===========================================================================
 # Step 4 — copy remaining static deploy assets.
 # ===========================================================================
-log "step 4/5  copying static assets"
+log "step 4/6  copying static assets"
 
 # Web deploy assets that are not JS/SH/HTML.
 for asset in manifest.webmanifest icon.svg apple-touch-icon.png \
@@ -152,9 +158,24 @@ for asset in manifest.webmanifest icon.svg apple-touch-icon.png \
 done
 
 # ===========================================================================
-# Step 5 — package final archive (prefer zip, fall back to tar.gz).
+# Step 5 — inject runtime anti-tampering guard into shipped artifacts.
+#          Runs AFTER obfuscation + minify so it signs the final bytes.
 # ===========================================================================
-log "step 5/5  packaging archive"
+if [ "${FF_SKIP_GUARD:-0}" = "1" ]; then
+  log "step 5/6  guard injection skipped (FF_SKIP_GUARD=1)"
+else
+  log "step 5/6  injecting anti-tampering guard"
+  # Default set of critical functions to code-sign. Web vs iOS names differ;
+  # the injector signs whichever exist in each target and skips the rest.
+  : "${FF_GUARD_SIGN:=runPrivacyReport,runSysdiagnoseAnalyzer,detect,buildTextReport,checkBlacklist,submitToBlacklist,fetchThreatIntel,applyRemoteIntel}"
+  export FF_GUARD_SIGN
+  FF_DIST="$DIST" node "$SCRIPT_DIR/security/inject.js"
+fi
+
+# ===========================================================================
+# Step 6 — package final archive (prefer zip, fall back to tar.gz).
+# ===========================================================================
+log "step 6/6  packaging archive"
 
 ARCHIVE_BASE="a4ther-scanner-v$VERSION"
 rm -f "$SCRIPT_DIR/$ARCHIVE_BASE.zip" "$SCRIPT_DIR/$ARCHIVE_BASE.tar.gz"
