@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.93 | LS Aluguel
+#  A4ther Systems v4.4.94 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.93"
+VERSION="4.4.94"
 
 # ── Versões ESPERADAS do Free Fire (ajuste manual a cada nova OB) ──────────────
 # v4.4.89 comparava EXATO; v4.4.91 faz match por OB (major.minor via ${VER%.*},
@@ -537,6 +537,14 @@ case "$KVER" in
         alert "Kernel Kali/NetHunter: $KVER — ROM de pentest (tooling avançado)"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
 esac
 
+# v4.4.94: kernel "-dirty" = árvore com mudanças NÃO-commitadas (patch/custom).
+case "$KVER" in *-dirty*)
+    alert "Kernel '-dirty' ($KVER): árvore modificada/patchada"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+esac
+case "$(cat /proc/version 2>/dev/null)" in *-dirty*)
+    alert "/proc/version contém '-dirty' (kernel patchado)"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+esac
+
 # Paths kernel-level
 for P in /data/adb/ksu /data/adb/ksud /data/adb/ksunext /data/adb/ksu/bin/ksud \
          /data/adb/ap /data/adb/apd \
@@ -619,7 +627,7 @@ header "MOUNTS / MAGIC-MOUNT (root-hide)"
 #                    É a assinatura MAIS ambígua (alguns OEM têm mount "hw_*"):
 #                    se um device limpo cair aqui por causa dela, mova patch_hw
 #                    pra um tier de AVISO em vez de ALERTA.
-MNT_SIG='magisk|ksud|overlayfs_loop|KSU|\.magic_mount|patch_hw'
+MNT_SIG='magisk|ksud|overlayfs_loop|KSU|\.magic_mount|patch_hw|meta_hybird|meta-hybrid'
 MNT_FOUND=0; MNT_READ=0
 for MF in /proc/mounts /proc/self/mountinfo; do
     [ -r "$MF" ] || continue
@@ -637,6 +645,11 @@ done
 if   [ "$MNT_FOUND" = "1" ]; then KERNEL_HITS=$((KERNEL_HITS+1))
 elif [ "$MNT_READ"  = "1" ]; then ok "Mounts limpos (sem rastro de magic-mount/overlay de root)"
 else info "Tabela de mounts indisponível"; fi
+
+# v4.4.94: Meta-Hybrid Mount / hide-mount framework (mais novo que Magisk Hide).
+for P in /dev/meta_hybird_mnt /run/staging /run/stash /run/workdir; do
+    [ -e "$P" ] && { alert "Meta-Hybrid/hide-mount framework: $P"; KERNEL_HITS=$((KERNEL_HITS+1)); }
+done
 # ════════════════════════════ FIM MÓDULO 2 ═══════════════════════════════
 
 # ════════════════════════════════════════════════════════════════════════
@@ -664,6 +677,10 @@ for ENTRY in \
     "/data/local/tmp/HyperCeiler|HyperCeiler (mod framework HyperOS/MIUI)" \
     "/storage/emulated/0/WechatXposed|WechatXposed (hook Xposed)" \
     "/data/local/luckys|Lucky Patcher / loader (patch/bypass)" \
+    "/data/local/tmp/simpleHook|simpleHook (loader de hook nativo)" \
+    "/data/local/tmp/byyang|byyang (loader de cheat)" \
+    "/storage/emulated/0/xzr.hkf|xzr.hkf (config de cheat)" \
+    "/storage/emulated/0/meow_detector.log|meow_detector (log de cheat/detector)" \
     "/data/adb/apatch|APatch (root via patch de kernel — só visível c/ root)"; do
     P=${ENTRY%%|*}; LBL=${ENTRY#*|}
     [ -e "$P" ] && { alert "Path blacklist: $P → $LBL"; BL3_HITS=$((BL3_HITS+1)); }
@@ -989,6 +1006,15 @@ DFIR_HITS=0
 FF_PID=$(pidof com.dts.freefireth 2>/dev/null)
 [ -z "$FF_PID" ] && FF_PID=$(pidof com.dts.freefiremax 2>/dev/null)
 
+# v4.4.94: Free Fire sob ptrace (debugger/Frida anexado ao processo do jogo).
+if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/status" ]; then
+    TP=$(grep -m1 '^TracerPid:' "/proc/$FF_PID/status" 2>/dev/null | awk '{print $2}')
+    case "$TP" in
+        ""|0) ok "Free Fire não está sob ptrace (TracerPid=0)" ;;
+        *)    alert "Free Fire TRACED por PID $TP ($(cat /proc/$TP/comm 2>/dev/null)) — debugger/Frida anexado"; DFIR_HITS=$((DFIR_HITS+1)) ;;
+    esac
+fi
+
 # /proc/<FF>/maps — libs injetadas (Frida gadget, Substrate, Dobby, xhook, sandhook)
 if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/maps" ]; then
     INJECTED=$(grep -iE '(frida|gadget|substrate|libdobby|libxhook|libgum|libwhale|libsandhook|libepic|libDexposed|libsubstitute|libellekit|libhooker|cydia|tweak)' "/proc/$FF_PID/maps" 2>/dev/null | awk '{print $6}' | sort -u | head -10)
@@ -1244,6 +1270,14 @@ for PKG in es.chiteroman.playintegrityfix com.chiteroman.playintegrityfix \
            com.reveny.nativecheck com.studio.duckdetector \
            io.github.huskydg.memorydetector; do
     pkg_installed "$PKG" && { alert "Integrity bypass: $PKG"; PIF_HITS=$((PIF_HITS+1)); }
+done
+# v4.4.94: módulos de spoof de atestação (forjam locked/genuine p/ Play Integrity).
+for ENTRY in \
+    "/data/adb/modules/bootloaderspoofer|BootloaderSpoofer (forja bootloader LOCKED)" \
+    "/data/adb/modules/keystoreinjector|KeystoreInjector (injeta keybox no Keystore)" \
+    "/data/adb/keystoreinjector|KeystoreInjector (config)"; do
+    P=${ENTRY%%|*}; LBL=${ENTRY#*|}
+    [ -e "$P" ] && { alert "Spoof de atestação: $P → $LBL"; PIF_HITS=$((PIF_HITS+1)); }
 done
 [ "$PIF_HITS" = "0" ] && ok "Sem PIF/TrickyStore"
 
@@ -2798,6 +2832,36 @@ for MDM in /data/system/profiles.xml /data/system/users/0/managed_profile.xml \
 done
 
 [ "$DA_HITS" = "0" ] && ok "Sem device admin/VPN profile/Wi-Fi proxy suspeito"
+
+# ============================================================
+#  CONTROLE REMOTO / ESPELHAMENTO DE TELA (v4.4.94)
+#  Vetor forense: cheat por PC (visão/aimbot via captura) + controle
+#  remoto do device. Acesso remoto não tem uso legítimo numa partida.
+# ============================================================
+header "CONTROLE REMOTO / ESPELHAMENTO DE TELA"
+
+REMOTE_HITS=0
+for PKG in com.anydesk.anydeskandroid com.carriez.flutter_hbb \
+           com.koushikdutta.vysor \
+           com.teamviewer.quicksupport.market com.teamviewer.teamviewer.market.mobile \
+           com.sand.airdroid com.sand.airmirror \
+           com.apowersoft.mirror com.splashtop.remote.pad.v2; do
+    echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && {
+        alert "App de controle remoto/espelhamento: $PKG"; REMOTE_HITS=$((REMOTE_HITS+1)); }
+done
+for ENTRY in \
+    "/storage/emulated/0/anydesk|AnyDesk (controle remoto)" \
+    "/storage/emulated/0/.anydesk|AnyDesk (controle remoto)" \
+    "/storage/emulated/0/AnyDesk|AnyDesk (controle remoto)" \
+    "/storage/emulated/0/rustdesk|RustDesk (controle remoto)" \
+    "/storage/emulated/0/.rustdesk|RustDesk (controle remoto)" \
+    "/storage/emulated/0/Vysor|Vysor (espelhamento/controle)" \
+    "/storage/emulated/0/.vysor|Vysor (espelhamento/controle)" \
+    "/data/local/tmp/scrcpy-server|scrcpy (espelhamento/controle via PC)"; do
+    P=${ENTRY%%|*}; LBL=${ENTRY#*|}
+    [ -e "$P" ] && { alert "Rastro de controle remoto: $P → $LBL"; REMOTE_HITS=$((REMOTE_HITS+1)); }
+done
+[ "$REMOTE_HITS" = "0" ] && ok "Nenhum app/rastro de controle remoto ou espelhamento"
 
 # ============================================================
 #  22. DNS
