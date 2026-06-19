@@ -1,4 +1,4 @@
-# A4ther FFScanner — Deployment Guide (v4.4.93)
+# A4ther FFScanner — Deployment Guide (v4.4.94)
 
 ## 🎯 Dois Fluxos Disponíveis
 
@@ -106,6 +106,6 @@ curl -s https://raw.githubusercontent.com/lovelyoyk/a4ther/main/a4ther.sh | sh
 
 ## 📝 Versão
 
-- **v4.4.93-HYBRID**
-- Última atualização: 2026-06-17
+- **v4.4.94-HYBRID**
+- Última atualização: 2026-06-19
 - Ambos fluxos garantidos em `main`

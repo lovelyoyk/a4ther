@@ -1,8 +1,8 @@
 {
   "product": "A4ther FFScanner — EXTREME build",
-  "version": "4.4.93",
+  "version": "4.4.94",
   "guardLevel": "high",
-  "generatedAt": "2026-06-17T20:15:00Z",
+  "generatedAt": "2026-06-19T00:00:00Z",
   "layers": [
     "1:script-pack(gzip+base64+antidebug)",
     "2:wasm-core",
@@ -13,6 +13,6 @@
     "scanner": "Match de versão FF por OB, fix falso-positivo tamanho, detecção MITM/VPN melhorada",
     "collector": "Fix ENOTCONN com FUSE (Scoped Storage)",
     "web": "Detector cert de usuário, guard OOM iOS, gate mobile conservador",
-    "caching": "CACHE_VERSION = v4.4.93"
+    "caching": "CACHE_VERSION = v4.4.94"
   }
 }

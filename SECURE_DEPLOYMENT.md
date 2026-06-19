@@ -1,4 +1,4 @@
-# A4ther FFScanner — Secure Deployment (v4.4.93)
+# A4ther FFScanner — Secure Deployment (v4.4.94)
 
 ## 🔐 Passphrase Management
 
@@ -64,5 +64,5 @@ curl -s https://raw.githubusercontent.com/lovelyoyk/a4ther/main/decrypt.sh | sh 
 
 ---
 
-**Latest Release:** v4.4.93-HYBRID  
-**Last Updated:** 2026-06-17
+**Latest Release:** v4.4.94-HYBRID  
+**Last Updated:** 2026-06-19
