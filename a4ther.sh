@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.94 | LS Aluguel
+#  A4ther Systems v4.4.95 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.94"
+VERSION="4.4.95"
 
 # ── Versões ESPERADAS do Free Fire (ajuste manual a cada nova OB) ──────────────
 # v4.4.89 comparava EXATO; v4.4.91 faz match por OB (major.minor via ${VER%.*},
@@ -1013,6 +1013,89 @@ if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/status" ]; then
         ""|0) ok "Free Fire não está sob ptrace (TracerPid=0)" ;;
         *)    alert "Free Fire TRACED por PID $TP ($(cat /proc/$TP/comm 2>/dev/null)) — debugger/Frida anexado"; DFIR_HITS=$((DFIR_HITS+1)) ;;
     esac
+fi
+
+# ════════════════════════════════════════════════════════════════════════
+#  v4.4.95 — MAGIC-MOUNT / NAMESPACE SPOOFING (visão isolada do FF × global)
+#
+#  COMO O ATACANTE USA: o Magisk "magic mount" (e KSU/APatch) NÃO reflasham
+#  partição — eles fazem BIND/overlay POR CIMA de libs gráficas, do /system ou
+#  da pasta do jogo, mas SÓ dentro do mount-namespace do processo-alvo. Assim o
+#  FF carrega .so adulterada (wallhack/chams/shaders) enquanto o resto do sistema
+#  enxerga os arquivos originais — o cheat fica invisível pra qualquer check da
+#  visão GLOBAL. O Módulo 2 (linha ~605) varre a tabela GLOBAL (/proc/mounts,
+#  /proc/self/mountinfo); ISTO é o complemento: compara a visão do FF com a
+#  global e flagra o que SÓ existe no namespace do jogo.
+#
+#  SINAL PRIMÁRIO (o diff): mounts presentes em /proc/$FF_PID/mountinfo e AUSENTES
+#  na visão global (/proc/1/mountinfo do init; fallback /proc/self/mountinfo) =
+#  injetados via mount-namespace. Chaveamos por "mount-point + fonte" (campos 5 e
+#  do tip/source após o separador " - "), que sobrevive a mount-id/parent-id
+#  diferentes entre namespaces. Foco em mount SUSPEITO: overlay/bind sobre libs/
+#  shaders/.so/system ou sobre a pasta de dados/obb do FF, e linhas batendo as
+#  assinaturas de root-hide.
+#  SINAL SECUNDÁRIO (assinatura): linha do mountinfo do FF batendo as keywords —
+#  vale mesmo sem conseguir a visão global pra diff.
+#
+#  SEM ROOT PRIMEIRO: lê /proc/$FF_PID/mountinfo DIRETO (uid 2000 + grupo readproc,
+#  igual o TracerPid acima). Root (se EXISTIR — checado com `have su`, nunca
+#  assumido) entra só como ENRIQUECIMENTO: re-lê o mountinfo do FF via `su` caso o
+#  uid 2000 tenha sido barrado por hidepid. Degrada com elegância: sem conseguir
+#  ler → warn/info, NUNCA um "ok/limpo" falso.
+# ════════════════════════════════════════════════════════════════════════
+if [ -z "$FF_PID" ]; then
+    warn "Namespace do FF não inspecionado — jogo fechado; ABRA o Free Fire para a varredura de magic-mount em memória"
+elif [ -r "/proc/$FF_PID/mountinfo" ] || { have su && su -c "test -r /proc/$FF_PID/mountinfo" >/dev/null 2>&1; }; then
+    # Assinaturas de mount de root-hide (paridade c/ o MNT_SIG do Módulo 2, +
+    # caminhos do FF/libs gráficas que um overlay de cheat visual mira).
+    NS_SIG='magisk|ksud|overlayfs_loop|KSU|\.magic_mount|patch_hw|meta_hybird|meta-hybrid|/data/adb'
+    # Lê o mountinfo do FF SEM root; se vier vazio (hidepid) e houver su, re-lê c/ root.
+    FF_MNT=$(cat "/proc/$FF_PID/mountinfo" 2>/dev/null)
+    NS_SRC="uid 2000"
+    if [ -z "$FF_MNT" ] && have su; then
+        FF_MNT=$(su -c "cat /proc/$FF_PID/mountinfo" 2>/dev/null); NS_SRC="root (su)"
+    fi
+    # Visão GLOBAL p/ o diff: o init (PID 1) é o namespace-raiz; cai pro self se 1
+    # não for legível sob uid 2000.
+    GLOBAL_MI=/proc/1/mountinfo; [ -r "$GLOBAL_MI" ] || GLOBAL_MI=/proc/self/mountinfo
+
+    if [ -z "$FF_MNT" ]; then
+        warn "Não foi possível inspecionar o namespace do FF (mountinfo ilegível mesmo via $NS_SRC) — hidepid/SELinux; resultado INCONCLUSIVO, não 'limpo'"
+    else
+        # Chave estável por linha: "<mount-point> <- <source>" (campo 5 = ponto de
+        # montagem; o token após " - <fstype> " = fonte). Imune a mount-id/parent
+        # diferirem entre namespaces. Vira a "impressão digital" do mount p/ o diff.
+        mi_keys() { awk '{ mp=$5; src="?"; for(i=6;i<=NF;i++) if($i=="-"){ src=(i+2<=NF?$(i+2):"?"); break } print mp" <- "src }' 2>/dev/null; }
+        GLOBAL_KEYS=$(printf '%s\n' "$(cat "$GLOBAL_MI" 2>/dev/null)" | mi_keys | sort -u)
+
+        # DIFF: linhas (chaves) do FF ausentes na global = injetadas no namespace.
+        NS_ONLY=$(printf '%s\n' "$FF_MNT" | mi_keys | sort -u | { [ -n "$GLOBAL_KEYS" ] && grep -vxF "$GLOBAL_KEYS" || cat; })
+        # Dentre as exclusivas do FF, fica só com as SUSPEITAS: overlay/bind sobre
+        # libs/.so/shaders/system OU sobre a pasta do FF OU batendo root-hide.
+        NS_SUS=$(printf '%s\n' "$NS_ONLY" | grep -iE "$NS_SIG|overlay|\.so( |\$)|/lib|shader|com\.dts\.freefire|/system/|/vendor/" | grep -v '^[[:space:]]*$' | head -n 8)
+
+        if [ -n "$NS_SUS" ] && [ -n "$GLOBAL_KEYS" ]; then
+            alert "Magic-Mount: FF (PID $FF_PID) enxerga mount(s) AUSENTE(s) na visão global — injeção via mount-namespace [$NS_SRC]:"
+            printf '%s\n' "$NS_SUS" | while IFS= read -r L; do [ -n "$L" ] && alert "  → ns-only: $(printf '%s' "$L" | cut -c1-120)"; done
+            DFIR_HITS=$((DFIR_HITS+1))
+        elif [ -z "$GLOBAL_KEYS" ]; then
+            info "Visão global de mounts indisponível sob uid 2000 — diff de namespace pulado (usando só assinatura abaixo)"
+        fi
+
+        # SINAL SECUNDÁRIO: assinatura nas linhas do mountinfo do FF (independe do diff).
+        NS_HITS=$(printf '%s\n' "$FF_MNT" | grep -iE "$NS_SIG" | head -n 4)
+        if [ -n "$NS_HITS" ]; then
+            alert "Mount de root-hide no namespace do FF (PID $FF_PID) [$NS_SRC]:"
+            printf '%s\n' "$NS_HITS" | while IFS= read -r L; do [ -n "$L" ] && alert "  → $(printf '%s' "$L" | cut -c1-120)"; done
+            DFIR_HITS=$((DFIR_HITS+1))
+        fi
+
+        # Só declara limpo quando REALMENTE deu pra comparar (global lida E sem hit).
+        [ -z "$NS_SUS" ] && [ -z "$NS_HITS" ] && [ -n "$GLOBAL_KEYS" ] && \
+            ok "Namespace do FF idêntico à visão global (sem magic-mount/overlay injetado) [$NS_SRC]"
+    fi
+else
+    warn "Namespace do FF não inspecionado — /proc/$FF_PID/mountinfo ilegível sob uid 2000 e sem root; INCONCLUSIVO, não 'limpo'"
 fi
 
 # /proc/<FF>/maps — libs injetadas (Frida gadget, Substrate, Dobby, xhook, sandhook)

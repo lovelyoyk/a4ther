@@ -52,6 +52,38 @@ CREATE TABLE IF NOT EXISTS `scan_log` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ────────────────────────────────────────────────────────────
+-- TABELA: scan_report
+-- Submissões COMPLETAS do app (a4ther-apk) p/ o painel revisar.
+-- Pública (sem admin token) e NÃO bane — só arquiva a evidência.
+-- Append-only: cada scan = 1 linha (histórico por device, sem UNIQUE no hwid).
+-- ────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `scan_report` (
+    `id`             BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `serial`         VARCHAR(128) NULL,                          -- serial de caixa (psno-first no Xiaomi)
+    `hwid`           VARCHAR(128) NULL,                          -- HWID composto (mesma chave da blacklist)
+    `verdict`        ENUM('W.O', 'REVISAR', 'LIMPO') NOT NULL DEFAULT 'LIMPO',
+    `alerts_count`   INT UNSIGNED NOT NULL DEFAULT 0,
+    `warnings_count` INT UNSIGNED NOT NULL DEFAULT 0,
+    `model`          VARCHAR(64)  NULL,                          -- ex.: "POCO X7"
+    `evidence`       JSON NULL,                                  -- dump completo (device + alerts[] + warnings[] + native)
+    `app_version`    VARCHAR(32)  NULL,
+    `engine_version` VARCHAR(16)  NULL,
+    `source`         VARCHAR(32)  NOT NULL DEFAULT 'a4ther-apk', -- apk|web|sh
+    `status`         ENUM('pendente', 'revisado', 'ignorado', 'banido') NOT NULL DEFAULT 'pendente',
+    `reviewed_by`    VARCHAR(64)  NULL,                          -- admin que revisou (painel)
+    `reviewed_at`    DATETIME     NULL,
+    `ip`             VARCHAR(45)  NULL,
+    `ua`             VARCHAR(255) NULL,
+    `created_at`     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_serial`     (`serial`),
+    KEY `idx_hwid`       (`hwid`),
+    KEY `idx_verdict`    (`verdict`),
+    KEY `idx_status`     (`status`),
+    KEY `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ────────────────────────────────────────────────────────────
 -- TABELA: threat_intel
 -- IOCs (cheat bundles/domains/ips/patterns) servidos via /intel/feed
 -- Permite atualizar threat intel sem deploy do frontend

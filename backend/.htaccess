@@ -15,6 +15,7 @@ RewriteRule ^api/a4ther/blacklist/check/?$  api/a4ther/blacklist/check.php   [L,
 RewriteRule ^api/a4ther/blacklist/submit/?$ api/a4ther/blacklist/submit.php  [L,QSA]
 RewriteRule ^api/a4ther/intel/feed\.json$   api/a4ther/intel/feed.php        [L,QSA]
 RewriteRule ^api/a4ther/scan/log/?$         api/a4ther/scan/log.php          [L,QSA]
+RewriteRule ^api/a4ther/scan/report/?$      api/a4ther/scan/report.php       [L,QSA]
 
 # Security headers
 <IfModule mod_headers.c>

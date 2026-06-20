@@ -1,4 +1,4 @@
-# A4ther FFScanner — Security Hardening (v4.4.94 EXTREME)
+# A4ther FFScanner — Security Hardening (v4.4.95 EXTREME)
 
 ## 🔐 Multi-Layer Protection Strategy
 
