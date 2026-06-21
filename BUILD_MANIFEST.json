@@ -1,6 +1,6 @@
 {
   "product": "A4ther FFScanner — EXTREME build",
-  "version": "4.4.95",
+  "version": "4.4.96",
   "guardLevel": "high",
   "generatedAt": "2026-06-20T00:00:00Z",
   "layers": [
@@ -13,6 +13,6 @@
     "scanner": "Detecção Magic-Mount / namespace spoofing — diff do mountinfo do FF vs a visão global (pega overlay/shader injetado invisível ao sistema)",
     "collector": "Fix ENOTCONN com FUSE (Scoped Storage)",
     "web": "Detector cert de usuário, guard OOM iOS, gate mobile conservador",
-    "caching": "CACHE_VERSION = v4.4.95"
+    "caching": "CACHE_VERSION = v4.4.93 (SW inalterado nesta release p/ evitar transicao)"
   }
 }
