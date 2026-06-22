@@ -6367,6 +6367,7 @@ $('#btn-share').addEventListener('click', async () => {
    ============================================================ */
 window._dbg && window._dbg('4- passou DETECTION DATA + funcs, entrando init (lenis)');
 (function setupLenis() {
+    return; // v4.4.95 TESTE: lenis DESATIVADO (new Lenis() = suspeito do freeze no boot)
     if (typeof Lenis === 'undefined') return;
     // Desliga em dispositivos que preferem movimento reduzido
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -6389,6 +6390,7 @@ window._dbg && window._dbg('4- passou DETECTION DATA + funcs, entrando init (len
     // Exposto pra debug/uso futuro
     window.__lenis = lenis;
 })();
+window._dbg && window._dbg('4b- passou setupLenis (lenis OFF) -> entrando reveal');
 
 /* ============================================================
    SCROLL REVEAL MOTION (IntersectionObserver)
