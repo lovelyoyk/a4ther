@@ -8,11 +8,14 @@
 const DB_HOST    = 'localhost';
 const DB_NAME    = 'lspainel_a4ther';   // criar database/schema antes
 const DB_USER    = 'lspainel_user';     // ajustar
-const DB_PASS    = 'CHANGE_ME';         // ajustar (variável de ambiente recomendado)
+// P1: segredo via env A4_DB_PASS (fallback p/ retrocompat). Em prod NÃO hardcodar —
+// setar A4_DB_PASS (SetEnv do Apache ou .env fora do webroot); o fonte (repo público) nunca leva o valor real.
+define('DB_PASS', getenv('A4_DB_PASS') ?: 'CHANGE_ME');
 const DB_CHARSET = 'utf8mb4';
 
-// Admin token pra submit/admin endpoints (rotate em produção, .env recomendado)
-const ADMIN_TOKEN = 'CHANGE_ME_SECRET_TOKEN_32_CHARS_MINIMUM';
+// Admin token pra submit/admin endpoints. P1: via env A4_ADMIN_TOKEN (fallback p/
+// retrocompat). Em prod setar A4_ADMIN_TOKEN (SetEnv/.env) e rotacionar — nunca hardcodar.
+define('ADMIN_TOKEN', getenv('A4_ADMIN_TOKEN') ?: 'CHANGE_ME_SECRET_TOKEN_32_CHARS_MINIMUM');
 
 // CORS — origins permitidos (Apple Safari precisa de listagem explícita)
 const ALLOWED_ORIGINS = [
@@ -37,11 +40,19 @@ function db() {
     static $pdo = null;
     if ($pdo === null) {
         $dsn = "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET;
-        $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false,
-        ]);
+        try {
+            $pdo = new PDO($dsn, DB_USER, DB_PASS, [
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES   => false,
+            ]);
+        } catch (PDOException $e) {
+            // P1: falha de CONEXÃO é crítica (infra) e a mensagem do PDOException de
+            // conexão costuma conter o DSN (host/dbname/user). NUNCA logar getMessage()
+            // aqui — só o código. Relança genérico pra o endpoint não vazar o DSN.
+            error_log('[a4ther][CRITICAL] db_connect falhou code=' . $e->getCode());
+            throw new RuntimeException('db_unavailable', 0);
+        }
     }
     return $pdo;
 }
