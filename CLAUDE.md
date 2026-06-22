@@ -45,6 +45,19 @@ Fluxo obrigatório para QUALQUER mudança (web, engine ou docs):
 Motivo: deploy direto, sem essa etapa, já quebrou produção (tela preta / "Page
 Unresponsive") sem chance de revisar antes. A branch + PR é o portão de revisão antes do ar.
 
+## Regras de trabalho (como o Claude deve operar neste repo)
+
+Valem para TODA interação, junto com o fluxo de deploy acima:
+
+1. **Teste lógico antes de cada alteração.** Avalie criticamente se a mudança faz sentido de
+   ser feita ANTES de fazê-la — nunca altere "no automático". Se algo não fizer sentido,
+   contradisser outra parte do sistema, ou não couber no runtime (ex.: sugerir um logger
+   Node como Winston/Pino num backend PHP), levante isso e discuta ANTES de aplicar.
+2. **Pergunte antes de QUALQUER commit.** Nunca commitar/pushar sem confirmação explícita do
+   usuário. Prepare na branch, mostre o diff, explique, e só commite/abra PR após o "pode".
+3. **Explique sempre.** Diga o que está fazendo e, para CADA parte alterada, o que ela
+   PASSA A FAZER depois da mudança (o comportamento novo) — não só o que mudou.
+
 ## Arquivos principais
 
 - **`a4ther.sh`** (~5800 linhas) — o engine. Android (36 seções) + iOS-SSH (9 seções),
