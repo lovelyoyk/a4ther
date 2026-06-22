@@ -67,6 +67,21 @@ if [ ! -d "$SCRIPT_DIR/node_modules/javascript-obfuscator" ]; then
 fi
 
 # ===========================================================================
+# Step 0 — lint anti-regressão (P0): detecção shell NUNCA pode usar a forma
+# `emit "[ALERTA]"` (colchete) — ela NÃO conta no veredito (ALERTS/WARNINGS),
+# virando falso negativo. Toda detecção vai por alert()/warn(). Falha o build
+# se a forma com colchete reaparecer.
+# ===========================================================================
+log "step 0/6  lint anti-regressao (sem [ALERTA]/[AVISO]/[CRITICAL] crus)"
+for _sh in a4ther.sh a4ther-adb.sh; do
+  [ -f "$_sh" ] || continue
+  if grep -nE 'emit .*\[(ALERTA|AVISO|CRITICAL)\]' "$_sh" >/dev/null 2>&1; then
+    grep -nE 'emit .*\[(ALERTA|AVISO|CRITICAL)\]' "$_sh" >&2
+    die "$_sh: deteccao com colchete [ALERTA]/[AVISO]/[CRITICAL] — use alert()/warn() (colchete nao conta no veredito)"
+  fi
+done
+
+# ===========================================================================
 # Step 1 — obfuscate JS into dist/
 # ===========================================================================
 log "step 1/6  obfuscating JavaScript"
