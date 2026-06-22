@@ -224,8 +224,15 @@ export default {
                 response = json({ error: 'not_found' }, { status: 404 });
             }
         } catch (e) {
-            console.error('worker error:', e?.message || e, e?.stack);
-            response = json({ error: 'internal', detail: String(e?.message || e) }, { status: 500 });
+            // P2: NUNCA vazar detalhe interno (fragmento de SQL, nome de coluna, valor
+            // de bind como hwid) na resposta ao cliente. O detalhe vai SÓ pro log
+            // server-side, agora estruturado em JSON (indexável no Logpush/Tail).
+            console.error(JSON.stringify({
+                level: 'error', msg: 'unhandled',
+                route: url.pathname, method: request.method,
+                name: e?.name, error: String(e?.message || e), stack: e?.stack,
+            }));
+            response = json({ error: 'internal' }, { status: 500 });
         }
 
         // Merge CORS headers
