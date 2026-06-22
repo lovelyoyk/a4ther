@@ -61,6 +61,9 @@ SDCARD=/sdcard; [ -d "$SDCARD" ] || SDCARD=/storage/emulated/0
 ALERTS=0
 WARNINGS=0
 CLEAN=0
+# v4.4.95: RC default = 1 (fail-closed). Se o scan truncar/abortar ANTES do RESUMO
+# (que seta RC=0/1/2), o exit NUNCA mente "LIMPO" (0) — sai REVISAR (1).
+RC=1
 
 # v4.4.88: TERMINAL SILENCIOSO + LOG VERBOSO.
 #   QUIET=1 (default, run direto no Termux): a TELA recebe só progresso por seção
@@ -845,8 +848,8 @@ for MODDIR in /data/adb/modules /data/adb/ksu/modules /data/adb/ap/modules; do
             case "$M" in
                 .core|core|.disable|update|.update|disable) ;;
                 *shamiko*|*hide*|*denylist*|*frida*|*inject*|*lsposed*|*riru*|*zygisk*|*ssl*|*pinning*|*magiskhide*|*safetynet*|*tricky*|*pif*|*susfs*|*vector*|*hma_oss*|*playintegrityfork*|*zygisk_assist*|*zygisk_next*|*rezygisk*|*fakerunlocker*)
-                    emit "${CR}[ALERTA]${CN}  Módulo suspeito: $M" ;;
-                *) emit "${CY}[AVISO]${CN}   Módulo: $M" ;;
+                    alert "Módulo suspeito: $M" ;;
+                *) warn "Módulo: $M" ;;
             esac
         done
         MOD_HITS=1
@@ -868,20 +871,20 @@ done
 for KBX in /data/adb/tricky_store/keybox.xml /data/adb/modules/tricky_store/keybox.xml \
            /data/adb/tricky_store/keybox /data/adb/tricky_store/persist; do
     if [ -r "$KBX" ] 2>/dev/null; then
-        emit "${CR}[ALERTA]${CN}  TrickyStore keybox.xml detectado em $KBX"
-        emit "${CR}[CRITICAL]${CN}  Indicador forte de bypass PlayIntegrity Strong Integrity"
+        alert "TrickyStore keybox.xml detectado em $KBX"
+        alert "Indicador forte de bypass PlayIntegrity Strong Integrity"
     fi
 done
 
 # Vector module (LSPosed rename 2026)
 for VEC in /data/adb/modules/vector /data/adb/modules/jingmatrix_vector; do
-    [ -d "$VEC" ] && emit "${CR}[ALERTA]${CN}  Vector module (LSPosed rename + Dobby) em $VEC"
+    [ -d "$VEC" ] && alert "Vector module (LSPosed rename + Dobby) em $VEC"
 done
 
 # FFH4X / Panel FF / Teambot caches — Android cheat injectors 2026
 for FFC in /sdcard/FFH4X /sdcard/Panel /sdcard/Teambot /sdcard/MSTeam /sdcard/NG_Injector /sdcard/TB71 /sdcard/OP999; do
     if [ -d "$FFC" ] 2>/dev/null; then
-        emit "${CR}[ALERTA]${CN}  Cache de cheat injector: $FFC"
+        alert "Cache de cheat injector: $FFC"
     fi
 done
 
@@ -951,7 +954,7 @@ if have ps; then
     FPROC=$(ps -A 2>/dev/null | grep -iE 'frida|gadget' | grep -v grep)
     [ -z "$FPROC" ] && FPROC=$(ps 2>/dev/null | grep -iE 'frida|gadget' | grep -v grep)
     [ -n "$FPROC" ] && echo "$FPROC" | head -n 3 | while IFS= read -r L; do
-        [ -n "$L" ] && emit "${CR}[ALERTA]${CN}  Processo Frida: $L"
+        [ -n "$L" ] && alert "Processo Frida: $L"
     done
 fi
 
@@ -1717,7 +1720,7 @@ for PKG in $FF_PKGS; do
                 # v4.4.54: + *holograma* / *hologram* / *holo* — cheat 'Holograma'
                 # solta arquivos com esse prefix dentro da pasta do FF (data/obb).
                 *cheat*|*mod*|*hack*|*menu*|*esp*|*aim*|*holograma*|*hologram*|*holo*)
-                    emit "${CR}[ALERTA]${CN}  prefs suspeito: $PREFS/$F" ;;
+                    alert "prefs suspeito: $PREFS/$F" ;;
                 *) info "  $PREFS/$F" ;;
             esac
         done
@@ -2249,7 +2252,7 @@ if have find; then
                 *REGEDIT*|*[Hh]eadshot*|*[Bb]ypass*|*[Mm]agisk*|*KSU*|*KernelSU*|\
                 *LSPatch*|*LSPosed*|*Lulubox*|*[Ll]ucky[Pp]atcher*|\
                 *[Hh]olograma*|*[Hh]ologram*|*HOLO_*|*_HOLO*)
-                    emit "${CR}[ALERTA]${CN}  APK suspeito: $APK" ;;
+                    alert "APK suspeito: $APK" ;;
                 *) info "  $APK" ;;
             esac
         done
@@ -4851,8 +4854,8 @@ for TWKDIR in /Library/MobileSubstrate/DynamicLibraries \
             [ -z "$T" ] && continue
             case "$T" in
                 *cheat*|*hack*|*mod*|*aim*|*esp*|*wallhack*|*ff*|*freefire*|*macro*|*helper*|*menu*)
-                    emit "${CR}[ALERTA]${CN}  Tweak suspeito: $TWKDIR/$T" ;;
-                *) emit "${CY}[AVISO]${CN}   Tweak: $TWKDIR/$T" ;;
+                    alert "Tweak suspeito: $TWKDIR/$T" ;;
+                *) warn "Tweak: $TWKDIR/$T" ;;
             esac
         done
         TWK_HITS=$((TWK_HITS+1))
@@ -5033,7 +5036,7 @@ if [ -d /var/containers/Bundle/Application ]; then
                 *[Hh]ack*|*[Mm]od*|*[Cc]heat*|*FF*MOD*|*FFH4X*|*[Aa]imbot*|*[Hh]olograma*|*[Hh]ologram*|\
                 *[Ee][Ss][Pp]*|*[Mm]enu*|*[Ii]njector*|*FreeFire*VIP*|\
                 *FF*VIP*|*BLOODY*)
-                    emit "${CR}[ALERTA]${CN}  App suspeito: $APD" ;;
+                    alert "App suspeito: $APD" ;;
             esac
         done
     fi
