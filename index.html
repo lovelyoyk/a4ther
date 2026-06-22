@@ -94,6 +94,7 @@ function blWarnUnavailable(errObj) {
               : String((errObj && errObj.error) || 'erro').slice(0, 60);
     warn(`Blacklist não consultada (${why}) — verifique a conexão; cheque manual em lspainel.com.br/dashboard/blacklist`);
 }
+window._dbg && window._dbg('1- passou BLACKLIST (config + funcs)');
 
 /* Submete um HWID detectado como suspeito (admin-only no backend) */
 async function submitToBlacklist(hwid, reason, evidence) {
@@ -231,6 +232,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     });
 }
 document.getElementById('version').textContent = `v${VERSION}`;
+window._dbg && window._dbg('2- passou SW-reg + version');
 
 /* ============================================================
    DETECTION DATA (sincronizado com a4ther-ios.js)
@@ -1005,6 +1007,7 @@ const _CHEAT_DOMAIN_KEYS = Object.keys(KNOWN_CHEAT_INFRA)
 const CHEAT_DOMAINS_REGEX = _CHEAT_DOMAIN_KEYS.length > 0
     ? new RegExp('(' + _CHEAT_DOMAIN_KEYS.join('|') + ')', 'g')
     : null;
+window._dbg && window._dbg('3- passou regexes top-level (CHEAT_BUNDLES/DOMAINS)');
 
 const SCRIPT_URL_PATTERNS = [
     { regex: /raw\.githubusercontent\.com/i, label: "GitHub Raw" },
@@ -6362,6 +6365,7 @@ $('#btn-share').addEventListener('click', async () => {
 /* ============================================================
    LENIS SMOOTH SCROLL
    ============================================================ */
+window._dbg && window._dbg('4- passou DETECTION DATA + funcs, entrando init (lenis)');
 (function setupLenis() {
     if (typeof Lenis === 'undefined') return;
     // Desliga em dispositivos que preferem movimento reduzido
@@ -6464,6 +6468,7 @@ $('#btn-share').addEventListener('click', async () => {
     // que ainda não disparou (cobre bugs de IntersectionObserver em browsers
     // mobile, WebView, ou quando o elemento foi criado depois do load).
     setTimeout(forceAllVisible, 1500);
+    window._dbg && window._dbg('5- reveal quase no fim (proximo: FIM do script)');
 
     /* v4.4.33: MutationObserver de auto-anotação data-reveal REMOVIDO.
        Causava tela preta após scan de sysdiagnose porque adicionava
