@@ -2523,7 +2523,11 @@ async function handleAndroid(file) {
                     `[CRITICAL][BLACKLIST] DEVICE BANIDO via ${r.key}: ${r.val}`,
                     `${r.result.reason || 'banido'}${data}${motivos}\nFonte: lspainel.com.br/dashboard/blacklist`
                 );
-            } else if (!r.result.error) {
+            } else if (r.result.error) {
+                // P3: degradação honesta — espelha o iOS. Timeout/rede/CORS NÃO pode
+                // sumir em silêncio (o usuário não pode ler "limpo" sem a blacklist ter respondido).
+                warn(`Blacklist ${r.key}: erro consultando (${String(r.result.error).slice(0, 80)})`);
+            } else {
                 ok(`Blacklist ${r.key} (${String(r.val).slice(0,16)}…): clean`);
             }
         }
