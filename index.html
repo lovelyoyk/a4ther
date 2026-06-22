@@ -6441,9 +6441,9 @@ window._dbg && window._dbg('4b- passou setupLenis (lenis OFF) -> entrando reveal
             el.classList.add('in-view');
         });
     };
-    if (!('IntersectionObserver' in window) ||
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (true) {   // v4.4.95 TESTE: pula o IntersectionObserver (suspeito do freeze) e revela tudo direto
         forceAllVisible();
+        window._dbg && window._dbg('4c- forceAllVisible OK (reveal forcado, observer pulado)');
         return;
     }
 
