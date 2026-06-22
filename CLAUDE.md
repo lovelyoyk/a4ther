@@ -31,6 +31,20 @@ Alvos suportados (todos rodam a MESMA lógica de detecção, exceto o iOS-web):
 > rodam shell — Termux, APK (via ADB) e iOS-SSH. NÃO duplique detecção shell em outro lugar.
 > O `a4ther-ios.js` (iOS-web) é a exceção: motor próprio, mantido em paralelo.
 
+## Deploy — SEMPRE via branch + PR (nunca commit direto no `main`)
+
+O GitHub Pages publica do `main` em produção (`lovelyoyk.github.io/a4ther`) **na hora** —
+ou seja, `main` = site AO VIVO. **REGRA: nunca commitar/pushar direto no `main`.**
+
+Fluxo obrigatório para QUALQUER mudança (web, engine ou docs):
+1. `git checkout -b fix/...` (ou `feat/...`, `docs/...`) — uma branch separada.
+2. Commitar e testar na branch (preview local, `sh -n`, etc.).
+3. `gh pr create` — abrir um PR para o `main` (a revisão do diff acontece aí).
+4. Só fazer **merge** no `main` depois de revisar/testar. **O merge no `main` É o deploy.**
+
+Motivo: deploy direto, sem essa etapa, já quebrou produção (tela preta / "Page
+Unresponsive") sem chance de revisar antes. A branch + PR é o portão de revisão antes do ar.
+
 ## Arquivos principais
 
 - **`a4ther.sh`** (~5800 linhas) — o engine. Android (36 seções) + iOS-SSH (9 seções),
