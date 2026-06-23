@@ -808,8 +808,9 @@ for PKG in com.topjohnwu.magisk io.github.vvb2060.magisk io.github.huskydg.magis
            io.github.libxposed io.github.qauxv io.va.exposed \
            io.github.a13e300.ksuwebui io.github.Retmon403.oppotheme \
            io.chaldeaprjkt.gamespace \
-           com.elderdrivers.riru.edxp \
-           me.piebridge.brevent; do
+           com.elderdrivers.riru.edxp; do
+    # v4.4.95: me.piebridge.brevent saiu desta lista (era ALERTA). Brevent virou
+    # AVISO/REVISAR, tratado só no bloco PRIVILEGE ESCALATION (paridade c/ Shizuku).
     pkg_installed "$PKG" && { alert "App de root/hide/hook: $PKG"; ROOT_HITS=$((ROOT_HITS+1)); }
 done
 
@@ -1082,7 +1083,17 @@ elif [ -r "/proc/$FF_PID/mountinfo" ] || { have su && su -c "test -r /proc/$FF_P
         NS_ONLY=$(printf '%s\n' "$FF_MNT" | mi_keys | sort -u | { [ -n "$GLOBAL_KEYS" ] && grep -vxF "$GLOBAL_KEYS" || cat; })
         # Dentre as exclusivas do FF, fica só com as SUSPEITAS: overlay/bind sobre
         # libs/.so/shaders/system OU sobre a pasta do FF OU batendo root-hide.
-        NS_SUS=$(printf '%s\n' "$NS_ONLY" | grep -iE "$NS_SIG|overlay|\.so( |\$)|/lib|shader|com\.dts\.freefire|/system/|/vendor/" | grep -v '^[[:space:]]*$' | head -n 8)
+        # v4.4.95: EXCLUI re-mounts BENIGNOS do namespace per-app — os dados/perfis do
+        # PRÓPRIO FF vindos do MESMO storage real (/dev/block/dm-*/mmcblk*/sd*/ufs*) são
+        # bind content-IDÊNTICO: o zygote isola cada app em mount-namespace e freezers
+        # (ex.: Brevent) bindam o data dir. Mesma fonte real = mesmo conteúdo = NÃO
+        # injeta nada. Injeção real vem de tmpfs/overlay/loop/arquivo//data/adb (segue
+        # flagada). Sem isto, a pasta de dados LEGÍTIMA do FF caía como "magic-mount".
+        NS_BENIGN='^/data/(data|user|user_de|misc/profiles)[^ ]*com\.dts\.freefire[^ ]* <- /dev/block/(dm-|mmcblk|sd|ufs)'
+        NS_SUS=$(printf '%s\n' "$NS_ONLY" \
+            | grep -iE "$NS_SIG|overlay|\.so( |\$)|/lib|shader|com\.dts\.freefire|/system/|/vendor/" \
+            | grep -viE "$NS_BENIGN" \
+            | grep -v '^[[:space:]]*$' | head -n 8)
 
         if [ -n "$NS_SUS" ] && [ -n "$GLOBAL_KEYS" ]; then
             alert "Magic-Mount: FF (PID $FF_PID) enxerga mount(s) AUSENTE(s) na visão global — injeção via mount-namespace [$NS_SRC]:"
@@ -1321,13 +1332,14 @@ done
 header "PRIVILEGE ESCALATION (Shizuku / Brevent / Hunter)"
 
 PRIV_HITS=0
-# Brevent - congela processos (bypass de detecção do FF)
+# Brevent - congela processos (pode mascarar detecção). v4.4.95: REVISAR (warn), não
+# SUSPEITO — gerenciador via ADB/shell != cheat; paridade c/ Shizuku abaixo (decisão do dono).
 for PKG in com.oasisfeng.brevent me.piebridge.brevent; do
-    pkg_installed "$PKG" && { alert "Brevent (freeze process): $PKG"; PRIV_HITS=$((PRIV_HITS+1)); }
+    pkg_installed "$PKG" && { warn "Brevent (freeze de processos — pode mascarar detecção): $PKG"; PRIV_HITS=$((PRIV_HITS+1)); }
 done
-exists /data/local/tmp/brevent.sh && { alert "Brevent script: /data/local/tmp/brevent.sh"; PRIV_HITS=$((PRIV_HITS+1)); }
-exists /data/data/com.oasisfeng.brevent && { alert "Brevent data dir presente"; PRIV_HITS=$((PRIV_HITS+1)); }
-exists /data/data/me.piebridge.brevent && { alert "Brevent (piebridge) data dir"; PRIV_HITS=$((PRIV_HITS+1)); }
+exists /data/local/tmp/brevent.sh && { warn "Brevent script: /data/local/tmp/brevent.sh (revisar contexto)"; PRIV_HITS=$((PRIV_HITS+1)); }
+exists /data/data/com.oasisfeng.brevent && { warn "Brevent data dir presente (revisar contexto)"; PRIV_HITS=$((PRIV_HITS+1)); }
+exists /data/data/me.piebridge.brevent && { warn "Brevent (piebridge) data dir (revisar contexto)"; PRIV_HITS=$((PRIV_HITS+1)); }
 
 # Shizuku - dá permissões de ADB pro app
 for PKG in moe.shizuku.privileged.api com.shizuku.manager rikka.shizuku.api; do
@@ -1349,6 +1361,17 @@ pkg_installed com.zhenxi.hunter && { alert "Hunter (abuso de Shizuku): com.zhenx
 
 # Hack & Debug (sisik)
 pkg_installed eu.sisik.hackendebug && { alert "Hack & Debug: eu.sisik.hackendebug"; PRIV_HITS=$((PRIV_HITS+1)); }
+
+# v4.4.95: daemon ROOT 'shelld' — NÃO é daemon AOSP padrão (init/vold/netd/logd/zygote…).
+# Pode ser shell root persistente disfarçado. REVISAR (não confirma cheat). Triagem
+# manual: binário em /proc/<pid>/exe e o init .rc que define o serviço
+# (grep -rn shelld /system/etc/init /vendor/etc/init /odm/etc/init /system_ext/etc/init).
+SHELLD_PIDS=$(ps -A 2>/dev/null | awk '$1=="root" && $NF=="shelld"{print $2}')
+[ -z "$SHELLD_PIDS" ] && SHELLD_PIDS=$(ps 2>/dev/null | awk '$1=="root" && $NF=="shelld"{print $2}')
+for SP in $SHELLD_PIDS; do
+    warn "Daemon root 'shelld' (PID $SP) — daemon de shell nao-padrao; revisar /proc/$SP/exe e o init .rc que o define"
+    PRIV_HITS=$((PRIV_HITS+1))
+done
 
 [ "$PRIV_HITS" = "0" ] && ok "Sem ferramenta de escalação"
 

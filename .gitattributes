@@ -1,0 +1,19 @@
+# ============================================================
+#  Integridade de bytes — NÃO deixar o Git mexer em EOL.
+#  O a4ther.sh é ASSINADO (a4ther.sh.sig, Ed25519). Se o Git converter
+#  LF<->CRLF (ex.: autocrlf no Windows), os bytes mudam e a assinatura
+#  embutida no APK não valida mais → scan falha (fail-closed). Por isso:
+# ============================================================
+
+# o engine é servido cru pelo raw e assinado byte-a-byte → sempre LF
+a4ther.sh        text eol=lf
+a4ther-adb.sh    text eol=lf
+
+# a assinatura é binária crua (64 B) — Git NUNCA pode tocar
+*.sig            binary
+
+# artefatos binários (não normalizar)
+*.enc            binary
+*.wasm           binary
+*.zip            binary
+*.png            binary
