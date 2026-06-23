@@ -8,14 +8,30 @@
 const DB_HOST    = 'localhost';
 const DB_NAME    = 'lspainel_a4ther';   // criar database/schema antes
 const DB_USER    = 'lspainel_user';     // ajustar
-// P1: segredo via env A4_DB_PASS (fallback p/ retrocompat). Em prod NÃO hardcodar —
-// setar A4_DB_PASS (SetEnv do Apache ou .env fora do webroot); o fonte (repo público) nunca leva o valor real.
-define('DB_PASS', getenv('A4_DB_PASS') ?: 'CHANGE_ME');
+// Aborta o request (fail-closed) — usado quando um segredo obrigatório não foi setado.
+// NÃO usa json_response() (definido mais abaixo): inline mínimo.
+function _a4_misconfig($what) {
+    http_response_code(500);
+    header('Content-Type: application/json; charset=utf-8');
+    error_log("[a4ther] config: $what — backend mal configurado (env nao setada)");
+    echo '{"error":"misconfigured"}';
+    exit;
+}
+
+// Database — segredo via env A4_DB_PASS. FAIL-CLOSED: nunca subir com o placeholder
+// do repo público. Em prod, setar A4_DB_PASS no pool do PHP-FPM (env[...]) ou .env fora
+// do webroot. (SetEnv do Apache NÃO propaga pro PHP-FPM.)
+$__dbpass = getenv('A4_DB_PASS');
+if ($__dbpass === false || strpos($__dbpass, 'CHANGE_ME') !== false) _a4_misconfig('A4_DB_PASS ausente/placeholder');
+define('DB_PASS', $__dbpass);
 const DB_CHARSET = 'utf8mb4';
 
-// Admin token pra submit/admin endpoints. P1: via env A4_ADMIN_TOKEN (fallback p/
-// retrocompat). Em prod setar A4_ADMIN_TOKEN (SetEnv/.env) e rotacionar — nunca hardcodar.
-define('ADMIN_TOKEN', getenv('A4_ADMIN_TOKEN') ?: 'CHANGE_ME_SECRET_TOKEN_32_CHARS_MINIMUM');
+// Admin token (banir/desbanir via /blacklist/submit). FAIL-CLOSED: aborta se ausente,
+// placeholder, ou < 32 chars — senão o token público do repo viraria credencial VÁLIDA
+// e qualquer anônimo controlaria a blacklist. Rotacionar em prod.
+$__admin = getenv('A4_ADMIN_TOKEN');
+if ($__admin === false || strlen($__admin) < 32 || strpos($__admin, 'CHANGE_ME') !== false) _a4_misconfig('A4_ADMIN_TOKEN ausente/placeholder/curto');
+define('ADMIN_TOKEN', $__admin);
 
 // CORS — origins permitidos (Apple Safari precisa de listagem explícita)
 const ALLOWED_ORIGINS = [
