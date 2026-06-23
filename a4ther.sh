@@ -499,6 +499,31 @@ WARR=$(gp ro.boot.warranty_bit)
 AVB=$(gp ro.boot.avb_version)
 [ -n "$AVB" ] && info "AVB version: $AVB"
 
+# ── dm-verity + cross-check prop×cmdline (v4.4.95) ────────────────────────
+# COMO O ATACANTE USA: desligar dm-verity (veritymode=disabled/eio/logging)
+# libera montar /system,/vendor adulterados (patch systemless de libs do FF).
+# E 'resetprop' falsifica ro.boot.* p/ esconder bootloader liberado/verity off.
+# POR QUE DETECTA: (1) ro.boot.veritymode≠enforcing = verity off; ANTES essa
+# prop só ia no relatório, nunca virava veredito. (2) a prop resolvida divergir
+# do /proc/cmdline REAL do kernel = spoof de prop (cmdline não é reescrito por
+# resetprop). HONESTIDADE: cmdline sem o campo → sem cross-check (não inocenta).
+# Fonte: docs/MAGISK_DETECTION_GAPS.md §4.4/§4.5 (Duck kernelcheck).
+case "$(gp ro.boot.veritymode)" in
+    enforcing|"") : ;;
+    *) alert "dm-verity NÃO enforcing (veritymode=$(gp ro.boot.veritymode)) — /system adulterável"
+       KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+esac
+A4_CMDLINE=$(cat /proc/cmdline 2>/dev/null)
+case "$A4_CMDLINE" in
+    *androidboot.enable_dm_verity=0*)
+        alert "cmdline: enable_dm_verity=0 (verity desligado no boot)"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+esac
+A4_CMD_VBS=$(printf '%s' "$A4_CMDLINE" | grep -o 'androidboot\.verifiedbootstate=[^ ]*' | cut -d= -f2)
+if [ -n "$VBOOT" ] && [ -n "$A4_CMD_VBS" ] && [ "$VBOOT" != "$A4_CMD_VBS" ]; then
+    alert "verifiedbootstate DIVERGENTE: prop='$VBOOT' × cmdline='$A4_CMD_VBS' (resetprop/spoof)"
+    KERNEL_HITS=$((KERNEL_HITS+1))
+fi
+
 # force_normal_boot — v4.4.31: rebaixado pra info pq é PADRÃO em Android 10+
 # (boot flow normal vs recovery). Em Android <10 era IOC, hoje é o caminho normal.
 case "$(gp ro.boot.force_normal_boot)" in
@@ -564,6 +589,30 @@ for P in /proc/sys/fs/susfs /sys/kernel/security/susfs /data/adb/susfs; do
     exists "$P" && { alert "suSFS detectado: $P (Magisk Hide moderno)"; KERNEL_HITS=$((KERNEL_HITS+1)); }
 done
 
+# v4.4.95: APatch kpatch + su_path configurável (§12.4 do doc / APTest/hiapatch).
+# COMO O ATACANTE USA: APatch (root via patch de kernel) instala o binário 'kpatch'
+# e guarda o caminho do su num arquivo /data/adb/ap/su_path — o usuário RENOMEIA o
+# su pra escondê-lo, e esse arquivo aponta ONDE ele está. O scanner já cobre
+# /data/adb/ap mas não o kpatch nem o su_path. HONESTIDADE: /data/adb é 0700 root →
+# sob uid 2000 em geral dá "não existe" (degrada quieto); vetor real de APatch sob
+# uid 2000 segue sendo kallsyms/mount. Aqui é reforço barato quando há leitura.
+for P in /data/adb/kpatch /data/adb/ap/kpatch /data/adb/ap/bin/kpatch; do
+    exists "$P" && { alert "APatch kpatch: $P"; KERNEL_HITS=$((KERNEL_HITS+1)); }
+done
+if [ -r /data/adb/ap/su_path ]; then
+    SU_PATH=$(head -1 /data/adb/ap/su_path 2>/dev/null)
+    [ -n "$SU_PATH" ] && { alert "APatch su_path → su escondido em: $SU_PATH"
+        exists "$SU_PATH" && alert "  → confirmado: $SU_PATH"; KERNEL_HITS=$((KERNEL_HITS+1)); }
+fi
+
+# (v4.4.95) Detecção de EMULADOR DE PC (qemu/goldfish/native.bridge) foi AVALIADA
+# e OMITIDA de propósito: o a4ther roda em device FÍSICO (ADB Wi-Fi/Termux), então
+# essas props sempre dariam "limpo" (peso morto); os emuladores de cheat reais
+# (LDPlayer/BlueStacks/Mumu/MEmu) SPOOFAM as props de AVD; e o único sinal robusto
+# (lib de tradução de ISA carregada no FF) JÁ é pego no scan de /proc/$FF_PID/maps
+# (token libhoudini/libndk_translation, adiante). O caso MOBILE que importa —
+# Free Fire num container de virtual-space (VMOS/X8) — é tratado no bloco DFIR.
+
 # ════════════════════════════════════════════════════════════════════════
 #  MÓDULO 1 (v4.4.91) — Auditoria de Propriedades EXTRA (getprop)
 #  ADITIVO: cobre só os 2 props que o scanner AINDA não vê. NÃO re-checa
@@ -588,6 +637,20 @@ case "$KSU_PROP" in
         alert "ro.kernel.ksu=$KSU_PROP (KernelSU exposto via propriedade)"
         KERNEL_HITS=$((KERNEL_HITS+1)) ;;
 esac
+
+# v4.4.95: variantes de prop de root-manager + PlayIntegrityFix (§4.7 do doc).
+# ro.kernel.ksu já tratado acima; aqui as variantes de VERSÃO (KSU/APatch) que
+# certos kernels/managers vazam, + o bloco persist.sys.* do PlayIntegrityFix (PIF).
+# PIF spoofa o device como Pixel pra passar no Play Integrity — é quase onipresente
+# em device de FF com root OCULTO, então é um indicador forte de "tem root escondido
+# aqui". HONESTIDADE: ausência NÃO inocenta (KSU/PIF bem feito não seta prop).
+for K in ro.ksu.version ro.kernel.apatch ro.apatch.version ro.kernel.kpatch; do
+    V=$(gp "$K"); [ -n "$V" ] && { alert "Prop de root-manager: $K=$V"; KERNEL_HITS=$((KERNEL_HITS+1)); }
+done
+for K in persist.sys.spoof.gms persist.sys.pihooks.disable.gms persist.sys.pihooks_BRAND \
+         persist.sys.pihooks_MODEL persist.sys.pixelprops.gms persist.sys.pixelprops.pi; do
+    V=$(gp "$K"); [ -n "$V" ] && { warn "PlayIntegrityFix prop ($K=$V) — bypass de atestação (device com root oculto)"; KERNEL_HITS=$((KERNEL_HITS+1)); }
+done
 
 # ── 1B) ro.adb.secure=0 — autenticação do ADB DESLIGADA ───────────────────
 # COMO O ATACANTE USA: em device de fábrica ro.adb.secure=1 → toda conexão
@@ -721,6 +784,20 @@ if have dmesg; then
     if [ -n "$DMESG_HITS" ]; then
         echo "$DMESG_HITS" | while IFS= read -r L; do
             [ -n "$L" ] && alert "dmesg: $(echo "$L" | head -c 140)"
+        done
+        KERNEL_HITS=$((KERNEL_HITS+1))
+    fi
+    # v4.4.95: AVC denials de domínio root no log do kernel (§12.3 / Hunter
+    # checkRootFromAVCLog). A TRANSIÇÃO de domínio de um processo root deixa rastro
+    # de auditoria SELinux ('avc: denied' com scontext/tcontext de magisk/su/ksu)
+    # difícil de limpar — pega root ATIVO mesmo com binário escondido. Ortogonal ao
+    # grep por nome acima. Token 'ksu' ancorado (:ksu:/ksu_file) p/ não casar
+    # 'journal_checksum' (mesmo motivo do FP histórico do PR #17).
+    DMESG_AVC=$(dmesg 2>/dev/null | grep -iE 'avc:[[:space:]]*denied' \
+                | grep -iE 'magisk|kernelsu|:ksu:|ksu_file|u:r:su|supolicy' | head -n 3)
+    if [ -n "$DMESG_AVC" ]; then
+        echo "$DMESG_AVC" | while IFS= read -r L; do
+            [ -n "$L" ] && alert "AVC denied (domínio root no kernel log): $(echo "$L" | head -c 140)"
         done
         KERNEL_HITS=$((KERNEL_HITS+1))
     fi
@@ -1029,6 +1106,51 @@ if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/status" ]; then
     esac
 fi
 
+# v4.4.95: Contexto SELinux do PROCESSO do FF — domínio de root é flagrante.
+# COMO O ATACANTE USA: root (Magisk/KSU/APatch) que injeta no FF pode deixar o
+# processo do jogo num domínio SELinux privilegiado (u:r:su:s0, *magisk*,
+# *kernelsu*) em vez do esperado u:r:untrusted_app*. Permissive idem.
+# POR QUE DETECTA: lê /proc/$FF_PID/attr/current (uid 2000 + grupo readproc) —
+# ANTES o scanner só via o getenforce GLOBAL, nunca o contexto do processo do FF.
+# HONESTIDADE/FP: contextos legítimos (untrusted_app/platform/priv/isolated/
+# system) → silêncio; contexto DESCONHECIDO → só AVISO (revisar), não alerta.
+# Fonte: docs/MAGISK_DETECTION_GAPS.md §4.3 (Duck su/self_process_ioc).
+if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/attr/current" ]; then
+    FFCTX=$(tr -d '\0' < "/proc/$FF_PID/attr/current" 2>/dev/null)
+    case "$FFCTX" in
+        u:r:untrusted_app*|u:r:platform_app*|u:r:priv_app*|u:r:isolated_app*|u:r:system_app*|"") : ;;
+        *:su:*|*magisk*|*kernelsu*|*adbroot*|*permissive*)
+            alert "FF em contexto SELinux de ROOT: $FFCTX"; DFIR_HITS=$((DFIR_HITS+1)) ;;
+        *)  warn "FF em contexto SELinux inesperado: $FFCTX (revisar)"; DFIR_HITS=$((DFIR_HITS+1)) ;;
+    esac
+fi
+
+# v4.4.95: Free Fire rodando DENTRO de virtual-space (VMOS/X8/VPhoneGaGa/Parallel).
+# COMO O ATACANTE USA: rodar o FF num CONTAINER de virtualização (app que clona/
+# isola outro app) num celular REAL — roda GameGuardian/mods e multi-conta SEM
+# root, escapando de detecção baseada em device. ESTE é o "emulador" que importa
+# no mobile (≠ emulador de PC). A seção CLONE (adiante) acha o data-dir clonado EM
+# DISCO; isto vê pela ÓTICA DO PROCESSO do FF (mountinfo/maps).
+# POR QUE DETECTA: o FF virtualizado roda sob o data-path do HOST (ex.:
+# /data/data/<host>/virtual/.../com.dts.freefireth) e carrega libs do virtualizador
+# (libva++.so, libNimsWrap). HONESTIDADE/FP: Parallel/Island/dual-app têm uso
+# legítimo (multi-conta de WhatsApp); por isso NÃO flagramos a mera presença do
+# app — só o FF de fato rodando sob o data-path do host (sem uso legítimo) → ALERTA.
+# Fonte: docs/MAGISK_DETECTION_GAPS.md §12.2 (VirtualApp/com.lody.virtual).
+if [ -n "$FF_PID" ]; then
+    VS_HIT=""
+    if [ -r "/proc/$FF_PID/mountinfo" ]; then
+        VS_HIT=$(grep -oE '/data/(data|user/[0-9]+)/[a-z0-9._]+' "/proc/$FF_PID/mountinfo" 2>/dev/null \
+                 | grep -iE 'virtualapp|lody\.virtual|/virtual/|vphonegaga|lbe\.parallel|dualspace|x8zs|vmos|gspace|multiparallel' \
+                 | sort -u | head -3)
+    fi
+    if [ -z "$VS_HIT" ] && [ -r "/proc/$FF_PID/maps" ]; then
+        grep -qiE 'libva\+\+\.so|libNimsWrap|libhookzz|/virtual/data/' "/proc/$FF_PID/maps" 2>/dev/null \
+            && VS_HIT="lib de virtual-space no maps do FF"
+    fi
+    [ -n "$VS_HIT" ] && { alert "Free Fire rodando DENTRO de virtual-space (não-físico): $(echo "$VS_HIT" | cut -c1-100)"; DFIR_HITS=$((DFIR_HITS+1)); }
+fi
+
 # ════════════════════════════════════════════════════════════════════════
 #  v4.4.95 — MAGIC-MOUNT / NAMESPACE SPOOFING (visão isolada do FF × global)
 #
@@ -1143,6 +1265,37 @@ if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/maps" ]; then
     if [ -n "$SUS_LIB_PATHS" ]; then
         warn "Libs de paths não-legítimos no FF:"
         echo "$SUS_LIB_PATHS" | while IFS= read -r L; do [ -n "$L" ] && warn "  → $L"; done
+    fi
+    # v4.4.95: Zygisk/Riru/magic-mount + tradução de ISA (emulador) NO espaço do FF.
+    # O regex acima (hooks clássicos) NÃO cobria zygisk/riru/libhoudini; e a lib
+    # executável DELETADA (unlink pós-mmap) é persistência de injeção que escapa de
+    # qualquer check por nome de arquivo. Fonte: docs/MAGISK_DETECTION_GAPS.md §4.2/§4.1.
+    ZINJ=$(grep -iE 'libzygisk|zygisk_loader|libriru|riru_|/\.magisk/|/sbin/\.magisk|libhoudini|libndk_translation|libnb\.so' "/proc/$FF_PID/maps" 2>/dev/null | awk '{print $6}' | sort -u | head -8)
+    if [ -n "$ZINJ" ]; then
+        alert "Zygisk/Riru/tradução-ISA mapeado no FF (PID $FF_PID):"
+        echo "$ZINJ" | while IFS= read -r L; do [ -n "$L" ] && alert "  → $L"; done
+        DFIR_HITS=$((DFIR_HITS+1))
+    fi
+    # Lib executável DELETADA = AVISO (FP raro em update de app mid-sessão), não alerta.
+    DELX=$(awk '$2 ~ /x/ && /\.so \(deleted\)$/ {print $6}' "/proc/$FF_PID/maps" 2>/dev/null | sort -u | head -5)
+    if [ -n "$DELX" ]; then
+        warn "Lib executável DELETADA no FF (possível injeção residente pós-unlink):"
+        echo "$DELX" | while IFS= read -r L; do [ -n "$L" ] && warn "  → $L"; done
+        DFIR_HITS=$((DFIR_HITS+1))
+    fi
+    # v4.4.95: Integridade do runtime Unity (libil2cpp.so). FF é Unity; GG/cheats
+    # DUMPAM ou SUBSTITUEM a libil2cpp. NÃO flagramos a PRESENÇA (é runtime normal —
+    # o scan de injeção acima a exclui de propósito); flagramos TAMPER: path anômalo
+    # (fora do APK oficial) ou DUPLICATA. Ausência = só AVISO (timing: FF carregando).
+    # Fonte: docs/MAGISK_DETECTION_GAPS.md §12.1.
+    IL2=$(awk '/libil2cpp\.so$/{print $6}' "/proc/$FF_PID/maps" 2>/dev/null | sort -u)
+    if [ -z "$IL2" ]; then
+        warn "FF sem libil2cpp.so mapeada — runtime Unity ainda carregando OU adulterado (INCONCLUSIVO)"
+    else
+        echo "$IL2" | grep -vqE '/data/app/.*com\.dts\.freefire' \
+            && { alert "libil2cpp.so de path ANÔMALO no FF: $(echo $IL2)"; DFIR_HITS=$((DFIR_HITS+1)); }
+        [ "$(echo "$IL2" | grep -c .)" -gt 1 ] \
+            && { alert "Múltiplas libil2cpp.so no FF (runtime Unity substituído): $(echo $IL2)"; DFIR_HITS=$((DFIR_HITS+1)); }
     fi
 fi
 
