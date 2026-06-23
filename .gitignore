@@ -5,3 +5,14 @@ a4ther-scanner-*.tar.gz
 .env.local
 a4ther.sh
 a4ther-adb.sh
+
+# artefatos de build (não versionar)
+dist-extreme/
+obfuscated-scanner.zip
+*.zip.sha256
+
+# segredos — NUNCA versionar
+.env*
+engine-key.enc
+engine-signing-ed25519.pem
+*.pem
