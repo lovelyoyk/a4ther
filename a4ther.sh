@@ -630,7 +630,12 @@ header "MOUNTS / MAGIC-MOUNT (root-hide)"
 #                    É a assinatura MAIS ambígua (alguns OEM têm mount "hw_*"):
 #                    se um device limpo cair aqui por causa dela, mova patch_hw
 #                    pra um tier de AVISO em vez de ALERTA.
-MNT_SIG='magisk|ksud|overlayfs_loop|KSU|\.magic_mount|patch_hw|meta_hybird|meta-hybrid'
+# v4.4.95: 'ksu' ancorado com borda à DIREITA — `ksu([^[:alnum:]_]|$)` — porque o
+#   token cru `KSU` sob `grep -iE` casava a substring 'ksu' DENTRO de 'journal_checksum'
+#   (opção de mount ext4 PADRÃO), gerando "root-hide" FALSO em QUALQUER device ext4
+#   limpo (Samsung etc.) e reprovando-o como SUSPEITO. A borda à direita exclui
+#   'che(cksu)m' mas MANTÉM 'KSU', '/data/adb/ksu', 'zygisksu', 'ksu ' como fonte etc.
+MNT_SIG='magisk|ksud|overlayfs_loop|ksu([^[:alnum:]_]|$)|\.magic_mount|patch_hw|meta_hybird|meta-hybrid'
 MNT_FOUND=0; MNT_READ=0
 for MF in /proc/mounts /proc/self/mountinfo; do
     [ -r "$MF" ] || continue
@@ -1051,7 +1056,9 @@ if [ -z "$FF_PID" ]; then
 elif [ -r "/proc/$FF_PID/mountinfo" ] || { have su && su -c "test -r /proc/$FF_PID/mountinfo" >/dev/null 2>&1; }; then
     # Assinaturas de mount de root-hide (paridade c/ o MNT_SIG do Módulo 2, +
     # caminhos do FF/libs gráficas que um overlay de cheat visual mira).
-    NS_SIG='magisk|ksud|overlayfs_loop|KSU|\.magic_mount|patch_hw|meta_hybird|meta-hybrid|/data/adb'
+    # v4.4.95: 'ksu' ancorado à direita (mesmo motivo do MÓDULO 2 ~l.633: não casar
+    #   mais 'ksu' dentro de 'journal_checksum'). '/data/adb' continua substring.
+    NS_SIG='magisk|ksud|overlayfs_loop|ksu([^[:alnum:]_]|$)|\.magic_mount|patch_hw|meta_hybird|meta-hybrid|/data/adb'
     # Lê o mountinfo do FF SEM root; se vier vazio (hidepid) e houver su, re-lê c/ root.
     FF_MNT=$(cat "/proc/$FF_PID/mountinfo" 2>/dev/null)
     NS_SRC="uid 2000"
