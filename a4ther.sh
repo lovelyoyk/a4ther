@@ -957,8 +957,13 @@ for P in /data/local/tmp/frida-server /data/local/tmp/re.frida.server \
 done
 
 if have ps; then
-    FPROC=$(ps -A 2>/dev/null | grep -iE 'frida|gadget' | grep -v grep)
-    [ -z "$FPROC" ] && FPROC=$(ps 2>/dev/null | grep -iE 'frida|gadget' | grep -v grep)
+    # v4.4.95: removido o token cru 'gadget' do grep de PROCESSO — casava
+    #   'android.hardware.usb.gadget-…' (HAL USB padrão MediaTek/AOSP) → CRÍTICO
+    #   "Processo Frida" FALSO em todo device MTK (verdict-flipping). frida-gadget
+    #   é LIB injetada, não processo: já é pega no scan de /proc/$FF_PID/maps
+    #   (~l.1124). 'frida' cobre frida/frida-server/re.frida.server. Paridade c/ iOS.
+    FPROC=$(ps -A 2>/dev/null | grep -i frida | grep -v grep)
+    [ -z "$FPROC" ] && FPROC=$(ps 2>/dev/null | grep -i frida | grep -v grep)
     [ -n "$FPROC" ] && echo "$FPROC" | head -n 3 | while IFS= read -r L; do
         [ -n "$L" ] && alert "Processo Frida: $L"
     done
