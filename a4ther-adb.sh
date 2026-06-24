@@ -186,8 +186,69 @@ read_code() {  # $1 = prompt
   done
 }
 
-# ---------- 1. Conexão ADB Wi-Fi (passo a passo) ----------
+# ---------- 1. Conexão ADB Wi-Fi (AUTOMÁTICA via mDNS, estilo Brevent) ----------
+# v4.4.98: simplifica o pareamento p/ os analistas. Descobre IP:porta pelo mDNS do
+# adb e conecta sozinho. Já pareado → 0 digitação; 1ª vez → só o código de 6 dígitos.
+# Se o mDNS não resolver (build do adb sem mdns / rede), cai no step_connect_manual
+# (o fluxo antigo). NUNCA remove o manual — é a rede de segurança.
+
+# Descobre "IP:porta" de um serviço mDNS do adb (poll curto). $1=_adb-tls-connect|_adb-tls-pairing $2=tentativas
+mdns_find() {
+  local svc="$1" tries="${2:-6}" i=0 t
+  while [ "$i" -lt "$tries" ]; do
+    t=$(adb mdns services 2>/dev/null | grep -i "$svc" \
+        | grep -oE '[0-9]{1,3}(\.[0-9]{1,3}){3}:[0-9]+' | head -1)
+    [ -n "$t" ] && { printf '%s' "$t"; return 0; }
+    i=$((i+1)); sleep 1
+  done
+  return 1
+}
+# Conecta+autoriza em ip:porta. Seta ADB_TARGET e retorna 0 se o device virou "device".
+try_connect() {
+  local t="$1"; [ -n "$t" ] || return 1
+  adb connect "$t" >/dev/null 2>&1; sleep 1
+  if [ "$(adb -s "$t" get-state 2>/dev/null)" = "device" ]; then ADB_TARGET="$t"; return 0; fi
+  adb disconnect "$t" >/dev/null 2>&1 || true; return 1
+}
+show_model() {
+  adb -s "$ADB_TARGET" shell getprop ro.product.model 2>/dev/null | tr -d '\r' | sed 's/^/   Modelo: /' || true
+}
+
 step_connect() {
+  hr; info "ETAPA 1/4 — Conexão ADB Wi-Fi (automática)"
+  printf '%s\n' "${DIM}  No CELULAR: Configurações → Opções do Desenvolvedor → Depuração sem fio → LIGAR.${NC}"
+
+  # Tier A — já pareado (toda vez depois da 1ª): descobre e conecta sozinho, 0 digitação.
+  info "Procurando o aparelho na rede (mDNS)…"
+  if try_connect "$(mdns_find _adb-tls-connect 6)"; then
+    ok "Conectado automaticamente: ${ADB_TARGET}"; show_model; return 0
+  fi
+
+  # Tier B — 1ª vez: pareia pedindo SÓ o código (IP:porta de pareamento via mDNS).
+  printf '%s\n' "${DIM}  Toque em 'Parear dispositivo com código de pareamento' — abre uma janela com 6 dígitos. Deixe ABERTA.${NC}"
+  local pt
+  pt=$(mdns_find _adb-tls-pairing 8)
+  if [ -n "$pt" ]; then
+    ok "Janela de pareamento detectada: ${pt}"
+    read_code "Digite SÓ o Código de Pareamento (6 dígitos):"
+    info "Pareando…"
+    if printf '%s\n' "$REPLY_FIELD" | adb pair "$pt" 2>&1 | grep -qi 'Successfully paired'; then
+      ok "Pareado!"
+      if try_connect "$(mdns_find _adb-tls-connect 8)"; then
+        ok "Conectado: ${ADB_TARGET}"; show_model; return 0
+      fi
+    else
+      warn "Pareamento não confirmado (confira o código e se a janela está aberta)."
+    fi
+  fi
+
+  # Fallback — manual (mDNS indisponível na rede ou no build do adb). Rede de segurança.
+  warn "Descoberta automática (mDNS) não resolveu — usando o modo manual passo-a-passo."
+  step_connect_manual
+}
+
+# ---------- 1b. Conexão ADB Wi-Fi — FALLBACK manual (passo a passo) ----------
+step_connect_manual() {
   hr; info "ETAPA 1/4 — Conexão ADB via Wi-Fi (passo a passo)"
   printf '%s\n' "${DIM}  No CELULAR que vai ser escaneado, abra:
     Configurações → Opções do Desenvolvedor → Depuração sem fio
