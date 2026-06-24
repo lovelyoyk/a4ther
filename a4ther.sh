@@ -20,8 +20,8 @@ VERSION="4.4.98"
 # ignora o patch — a Garena solta hotfix de patch e o exato quebrava a cada release).
 # Pode manter o patch aqui (ex. .1): ele é ignorado. Atualize quando a OB (o número
 # do meio) virar; o patch não importa mais.
-EXPECTED_FF_VER="1.126.2"       # com.dts.freefireth   (versionName real lido do device — confirmado 2026-06-24)
-EXPECTED_FFMAX_VER="2.126.2"    # com.dts.freefiremax  (versionName real lido do device — confirmado 2026-06-24)
+EXPECTED_FF_VER="1.126.3"       # com.dts.freefireth   (versionName real lido do device — confirmado 2026-06-24)
+EXPECTED_FFMAX_VER="2.126.3"    # com.dts.freefiremax  (versionName real lido do device — confirmado 2026-06-24)
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then

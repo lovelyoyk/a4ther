@@ -27,9 +27,9 @@ set -uo pipefail
 # ---------- Cores ----------
 if [ -t 1 ]; then
   RED=$'\033[1;31m'; GRN=$'\033[1;32m'; YLW=$'\033[1;33m'
-  CYN=$'\033[1;36m'; BLD=$'\033[1m'; DIM=$'\033[2m'; NC=$'\033[0m'
+  CYN=$'\033[1;36m'; PUR=$'\033[1;38;5;54m'; BLD=$'\033[1m'; DIM=$'\033[2m'; NC=$'\033[0m'
 else
-  RED=''; GRN=''; YLW=''; CYN=''; BLD=''; DIM=''; NC=''
+  RED=''; GRN=''; YLW=''; CYN=''; PUR=''; BLD=''; DIM=''; NC=''
 fi
 
 hr()    { printf '%s\n' "${DIM}────────────────────────────────────────────────────────${NC}"; }
@@ -60,7 +60,7 @@ critical() {
 
 banner() {
   clear 2>/dev/null || true
-  printf '%s\n' "${CYN}${BLD}"
+  printf '%s\n' "${PUR}"   # v4.4.98: banner 'a4ther' em roxo escuro (256-color 54), saiu do ciano
   cat <<'EOF'
     ___    __ __  __  __
    / _ |  / // / / /_/ /  ___ ____
