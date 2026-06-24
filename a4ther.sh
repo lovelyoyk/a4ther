@@ -103,6 +103,10 @@ alert()  { emit "  ${CR}●  ALERTA  ${CN}$*"; printf '%s\n' "$*" | strip_color 
 warn()   { emit "  ${CY}●  AVISO   ${CN}$*"; printf '%s\n' "$*" | strip_color >> "$A4_WARN_FILE" 2>/dev/null; WARNINGS=$((WARNINGS+1)); }
 ok()     { emit "  ${CG}●  OK      ${CN}$*"; CLEAN=$((CLEAN+1));       }
 info()   { emit "  ${CC}○  info    ${CN}$*"; }
+# v4.4.98: contagem do acumulador crit+warn (arquivo) — usada p/ a "linha-limpo" por-seção
+# ser HONESTA mesmo quando o alert/warn roda em subshell (|while), onde o contador local
+# se perdia e a seção imprimia "limpo" tendo alertado. Snapshot no início × fim da seção.
+_hits_count() { cat "$A4_CRIT_FILE" "$A4_WARN_FILE" 2>/dev/null | wc -l | tr -d ' '; }
 header() {
     emit ""
     emit "${CB}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${CN}"
@@ -1915,7 +1919,7 @@ fi
 # ============================================================
 header "FREE FIRE - DADOS INTERNOS"
 
-FFDATA_HITS=0
+_FFDATA_H0=$(_hits_count)   # v4.4.98: baseline p/ linha-limpo honesta (alerts em subshell)
 for PKG in $FF_PKGS; do
     PREFS="/data/data/$PKG/shared_prefs"
     CACHE="/data/data/$PKG/cache"
@@ -1976,7 +1980,7 @@ for PKG in $FF_PKGS; do
         fi
     done
 done
-[ "$FFDATA_HITS" = "0" ] && ok "Dados internos FF sem indícios"
+[ "$(_hits_count)" = "$_FFDATA_H0" ] && ok "Dados internos FF sem indícios"
 
 # ============================================================
 #  9.5 HOLOGRAMA — IOCs do cheat real (v4.4.56)
@@ -3493,7 +3497,7 @@ fi
 # ============================================================
 header "ARQUIVOS OCULTOS / SYMLINKS"
 
-HIDDEN_HITS=0
+_HIDDEN_H0=$(_hits_count)   # v4.4.98: baseline p/ linha-limpo honesta (alert em find|while)
 if have find; then
     HIDDEN=$(find /sdcard 2>/dev/null -maxdepth 3 -name '.*' -type f 2>/dev/null | head -n 30)
     [ -n "$HIDDEN" ] && echo "$HIDDEN" | while IFS= read -r H; do
@@ -3519,7 +3523,7 @@ if have find; then
         warn "Symlink: $S -> $TARGET"
     done
 fi
-[ "$HIDDEN_HITS" = "0" ] && ok "Sem ocultos suspeitos"
+[ "$(_hits_count)" = "$_HIDDEN_H0" ] && ok "Sem ocultos suspeitos"
 
 # ============================================================
 #  27. REDE (hosts / VPN / interfaces / portas)
@@ -3748,7 +3752,7 @@ done
 # ============================================================
 header "PROCESSOS"
 
-PROC_HITS=0
+_PROC_H0=$(_hits_count)   # v4.4.98: baseline p/ linha-limpo honesta (alert roda em subshell)
 if have ps; then
     # v4.4.32: usa clean_procs pra remover o próprio scanner do output. Antes
     # o ps capturava a string "scarlet" do argv do script e reportava como
@@ -3766,14 +3770,14 @@ if have ps; then
         done
     done
 fi
-[ "$PROC_HITS" = "0" ] && ok "Nenhum processo suspeito"
+[ "$(_hits_count)" = "$_PROC_H0" ] && ok "Nenhum processo suspeito"
 
 # ============================================================
 #  29. LOGCAT (rastros nos logs)
 # ============================================================
 header "LOGCAT"
 
-LOG_HITS=0
+_LOG_H0=$(_hits_count)   # v4.4.98: baseline p/ linha-limpo honesta (alert em subshell)
 if have logcat; then
     if have timeout; then
         LOG_OUT=$(timeout 5 logcat -d 2>/dev/null | tail -n 2000)
@@ -3793,7 +3797,7 @@ if have logcat; then
                 [ -n "$L" ] && alert "Logcat [$PAT]: $(echo "$L" | head -c 160)"
             done
         done
-        [ "$LOG_HITS" = "0" ] && ok "Logcat limpo (últimas 2000 linhas)"
+        [ "$(_hits_count)" = "$_LOG_H0" ] && ok "Logcat limpo (últimas 2000 linhas)"
     fi
 else
     info "logcat não disponível"
@@ -5662,7 +5666,7 @@ info "HWID:    ${HASH:-(indisponível)}"
 # ============================================================
 header "iOS - CRASHES (Free Fire + Câmera + Fotos)"
 
-IOS_CRASH_HITS=0
+_IOS_CRASH_H0=$(_hits_count)   # v4.4.98: baseline p/ linha-limpo honesta (tudo em subshell)
 FF_IOS_BUNDLES_LOCAL="$FF_IOS_BUNDLES"
 CAM_IOS_BUNDLES="com.apple.camera com.apple.CameraKit"
 GAL_IOS_BUNDLES="com.apple.mobileslideshow com.apple.Photos"
@@ -5732,7 +5736,7 @@ for CDIR in $CRASH_DIRS; do
     done
 done
 
-if [ "$IOS_CRASH_HITS" = "0" ]; then
+if [ "$(_hits_count)" = "$_IOS_CRASH_H0" ]; then
     ok "Sem crashes de FF/Câmera/Fotos encontrados nos paths analisáveis"
     info "Pra extrair logs sem JB use bugreport sysdiagnose:"
     info "  iPhone: pressionar Vol+ Vol- Side ~1s. Diagnóstico vai pra Privacidade → Analytics"
