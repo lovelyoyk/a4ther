@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.97 | LS Aluguel
+#  A4ther Systems v4.4.98 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,15 +13,15 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.97"
+VERSION="4.4.98"
 
 # ── Versões ESPERADAS do Free Fire (ajuste manual a cada nova OB) ──────────────
 # v4.4.89 comparava EXATO; v4.4.91 faz match por OB (major.minor via ${VER%.*},
 # ignora o patch — a Garena solta hotfix de patch e o exato quebrava a cada release).
 # Pode manter o patch aqui (ex. .1): ele é ignorado. Atualize quando a OB (o número
 # do meio) virar; o patch não importa mais.
-EXPECTED_FF_VER="1.123.1"       # com.dts.freefireth   (versionName real lido do device — confirmado 2026-06-14)
-EXPECTED_FFMAX_VER="2.124.1"    # com.dts.freefiremax  (versionName real lido do device — confirmado 2026-06-14)
+EXPECTED_FF_VER="1.126.2"       # com.dts.freefireth   (versionName real lido do device — confirmado 2026-06-24)
+EXPECTED_FFMAX_VER="2.126.2"    # com.dts.freefiremax  (versionName real lido do device — confirmado 2026-06-24)
 
 # ---------- Cores (NÃO usar R G Y B C W N como vars de loop!) ----------
 if [ -t 1 ]; then
@@ -1104,8 +1104,17 @@ fi
 header "DFIR DEEP — Process / Memory / Sockets / Crashes"
 
 DFIR_HITS=0
-FF_PID=$(pidof com.dts.freefireth 2>/dev/null)
-[ -z "$FF_PID" ] && FF_PID=$(pidof com.dts.freefiremax 2>/dev/null)
+FF_PID=$(pidof com.dts.freefireth 2>/dev/null);  FF_PKG_OPEN="com.dts.freefireth (normal)"
+[ -z "$FF_PID" ] && { FF_PID=$(pidof com.dts.freefiremax 2>/dev/null); FF_PKG_OPEN="com.dts.freefiremax (MAX)"; }
+# v4.4.98: status CLARO de Free Fire aberto/fechado — cobre normal (com.dts.freefireth)
+# E max (com.dts.freefiremax). As varreduras em MEMÓRIA (maps/mountinfo/attr/status/net
+# do PID) só valem com o jogo ABERTO; as de disco rodam de qualquer jeito. Contrato: se
+# fechado, AVISA pra abrir — nunca dá "limpo" por não ter inspecionado a memória.
+if [ -n "$FF_PID" ]; then
+    ok "Free Fire ABERTO: $FF_PKG_OPEN — PID $FF_PID (varredura em memória habilitada)"
+else
+    warn "Free Fire FECHADO — ABRA o jogo (normal OU MAX) para a varredura em memória (maps/mountinfo/attr/status); os checks de disco seguem normalmente"
+fi
 
 # v4.4.94: Free Fire sob ptrace (debugger/Frida anexado ao processo do jogo).
 if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/status" ]; then
