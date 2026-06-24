@@ -500,18 +500,26 @@ AVB=$(gp ro.boot.avb_version)
 [ -n "$AVB" ] && info "AVB version: $AVB"
 
 # ── dm-verity + cross-check prop×cmdline (v4.4.95) ────────────────────────
-# COMO O ATACANTE USA: desligar dm-verity (veritymode=disabled/eio/logging)
-# libera montar /system,/vendor adulterados (patch systemless de libs do FF).
-# E 'resetprop' falsifica ro.boot.* p/ esconder bootloader liberado/verity off.
-# POR QUE DETECTA: (1) ro.boot.veritymode≠enforcing = verity off; ANTES essa
-# prop só ia no relatório, nunca virava veredito. (2) a prop resolvida divergir
+# COMO O ATACANTE USA: desligar dm-verity (veritymode=disabled) libera montar
+# /system,/vendor adulterados (patch systemless de libs do FF). E 'resetprop'
+# falsifica ro.boot.* p/ esconder bootloader liberado/verity off.
+# POR QUE DETECTA: (1) veritymode — por AOSP, só 'disabled' = verity OFF (ALERTA).
+# 'enforcing'/'eio'/'restart_on_corruption' MANTÊM verity ATIVO e protetor (só muda
+# a ação no erro: eio retorna I/O error); 'logging' verifica mas PERMITE a corrupção
+# (só registra) → estado FRACO = warn, não verity-off. (2) a prop resolvida divergir
 # do /proc/cmdline REAL do kernel = spoof de prop (cmdline não é reescrito por
 # resetprop). HONESTIDADE: cmdline sem o campo → sem cross-check (não inocenta).
-# Fonte: docs/MAGISK_DETECTION_GAPS.md §4.4/§4.5 (Duck kernelcheck).
-case "$(gp ro.boot.veritymode)" in
-    enforcing|"") : ;;
-    *) alert "dm-verity NÃO enforcing (veritymode=$(gp ro.boot.veritymode)) — /system adulterável"
-       KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+# v4.4.97: corrigido FP — antes 'eio'/'logging' (verity ATIVO) viravam ALERTA crítico
+# → SUSPEITO falso em device limpo. Fonte: AOSP dm-verity; MAGISK_DETECTION_GAPS §4.4/§4.5.
+A4_VMODE=$(gp ro.boot.veritymode)
+case "$A4_VMODE" in
+    enforcing|eio|restart_on_corruption|"") : ;;
+    disabled) alert "dm-verity DESLIGADO (veritymode=disabled) — /system adulterável"
+              KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+    logging)  warn "dm-verity em modo 'logging' (verifica mas PERMITE corrupção — só registra) — revisar"
+              KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+    *)        warn "dm-verity veritymode='$A4_VMODE' (não-enforcing desconhecido) — revisar"
+              KERNEL_HITS=$((KERNEL_HITS+1)) ;;
 esac
 A4_CMDLINE=$(cat /proc/cmdline 2>/dev/null)
 case "$A4_CMDLINE" in
