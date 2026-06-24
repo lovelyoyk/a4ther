@@ -1,6 +1,6 @@
 {
   "name": "a4ther-ffscanner-build",
-  "version": "4.4.91",
+  "version": "4.4.97",
   "private": true,
   "description": "Secure build infrastructure for A4ther FFScanner (obfuscation, encryption, minification, packaging).",
   "type": "commonjs",
