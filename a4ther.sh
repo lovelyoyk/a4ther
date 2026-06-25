@@ -1026,7 +1026,10 @@ if [ -d "$MIUI_BACKUP" ] 2>/dev/null; then
         echo "$SUS_BIN" | while IFS= read -r LN; do alert "  $LN"; done
     }
     # Nomes suspeitos no backup
-    SUS_NAMES=$(find "$MIUI_BACKUP" -type f 2>/dev/null | grep -iE 'cheat|mod|menu|hack|inject|gg|esp|aimbot|ffh4x|panel|holograma|hologram' | head -5)
+    # v4.4.98: tokens curtos genéricos (gg/mod/menu/esp/panel) casavam logging/.ogg/model/
+    #   main_menu/settings_panel/response em backup LIMPO → SUSPEITO falso em todo MIUI.
+    #   Mantidos só os inequívocos + idioma 'mod menu' e 'esp' ancorado (classe do #17/#18).
+    SUS_NAMES=$(find "$MIUI_BACKUP" -type f 2>/dev/null | grep -iE 'cheat|hack|inject|aimbot|ffh4x|holograma|hologram|gameguardian|mod[_ -]?menu|modmenu|(^|[^a-z])esp([^a-z]|$)' | head -5)
     [ -n "$SUS_NAMES" ] && {
         alert "Arquivos com nome suspeito em MIUI Backup:"
         echo "$SUS_NAMES" | while IFS= read -r LN; do alert "  $LN"; done
@@ -1930,7 +1933,11 @@ for PKG in $FF_PKGS; do
             case "$F" in
                 # v4.4.54: + *holograma* / *hologram* / *holo* — cheat 'Holograma'
                 # solta arquivos com esse prefix dentro da pasta do FF (data/obb).
-                *cheat*|*mod*|*hack*|*menu*|*esp*|*aim*|*holograma*|*hologram*|*holo*)
+                # v4.4.98: tirados os globs genéricos *mod*/*menu*/*esp*/*aim*/*holo* — casavam
+                # claim_rewards/game_mode/login_response/main_menu/modules: prefs LEGÍTIMOS do FF
+                # → SUSPEITO falso. Os nomes EXATOS de cheat (esp.cfg/mod.cfg/aim.cfg) seguem pegos
+                # no find logo abaixo. Mantidos os idiomas inequívocos (modmenu/aimbot/ffh4x/etc).
+                *cheat*|*hack*|*holograma*|*hologram*|*aimbot*|*aimlock*|*modmenu*|*mod_menu*|*ffh4x*|*wallhack*|*killaura*)
                     alert "prefs suspeito: $PREFS/$F" ;;
                 *) info "  $PREFS/$F" ;;
             esac
