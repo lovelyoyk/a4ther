@@ -302,19 +302,19 @@ step_connect_manual() {
   Deixe essa janela ABERTA e preencha abaixo — um dado por vez.${NC}"
 
   local ip ppair pcode pconn det
-  # v4.4.98: self-scan — detecta o IP DESTE aparelho (wlan via ifconfig); ENTER aceita.
-  # Remoto (outro aparelho) ou detecção falha → cai no input normal, como antes
-  # (prompt SEM "ENTER usa o detectado" — só aparece quando realmente detectou).
+  # v4.4.98: self-scan — detecta o IP DESTE aparelho (wlan via ifconfig) e USA direto,
+  # SEM perguntar (some 1 input; era redundante mostrar E pedir ENTER). Só pergunta o
+  # IP se a detecção falhar (ex.: Wi-Fi off, ou auditando um aparelho REMOTO).
   det=$(discover_ip)
   if [ -n "$det" ]; then
-    ok "IP deste aparelho detectado: ${det}  ${DIM}(ENTER aceita; ou digite o IP de OUTRO aparelho)${NC}"
-    read_ip "1. Endereço IP do aparelho (ENTER usa o detectado):" "$det"
+    ip="$det"
+    ok "Aparelho detectado: ${BLD}${ip}${NC}${GRN} — IP automático, não precisa digitar."
   else
-    read_ip "1. Digite apenas o Endereço IP (ex: 192.168.0.10):"
+    warn "Não detectei o IP deste aparelho — digite o da janela de pareamento."
+    read_ip "Endereço IP do aparelho (ex: 192.168.0.10):"; ip="$REPLY_FIELD"
   fi
-  ip="$REPLY_FIELD"
-  read_port "2. Digite os 5 números da PORTA (os números depois dos ':' na janela de pareamento):" "de pareamento"; ppair="$REPLY_FIELD"
-  read_code "3. Digite o Código de Pareamento de 6 dígitos:";                                              pcode="$REPLY_FIELD"
+  read_port "1. PORTA de pareamento (os 5 números depois do ':' na janela de pareamento):" "de pareamento"; ppair="$REPLY_FIELD"
+  read_code "2. Código de pareamento (6 dígitos):";                                              pcode="$REPLY_FIELD"
 
   # Junta IP:Porta em segundo plano — o usuário não precisa saber a sintaxe
   info "Pareando ${ip}:${ppair} …"
@@ -324,17 +324,19 @@ step_connect_manual() {
     warn "Pareamento não confirmado. Confira IP/Porta/Código e se a janela de pareamento ainda está aberta. Vou tentar conectar mesmo assim…"
   fi
 
-  # No Android 11+ a porta de CONEXÃO é DIFERENTE da de pareamento. Tenta achar
-  # automaticamente via mDNS; se não der, pede ao usuário com instrução clara.
-  info "Procurando a porta de conexão do aparelho…"
-  pconn=$(adb mdns services 2>/dev/null | grep -i '_adb-tls-connect' | grep -oE "${ip}:[0-9]+" | head -1 | cut -d: -f2)
-  if [ -n "$pconn" ]; then
-    ok "Porta de conexão encontrada automaticamente: ${pconn}"
-  else
-    printf '%s\n' "${DIM}  Quase lá! Agora FECHE a janela de pareamento e fique na tela
-  'Depuração sem fio'. No alto dela aparece outro  IP : PORTA
-  — essa porta de CONEXÃO é diferente da de pareamento.${NC}"
-    read_port "4. Digite os números da PORTA de conexão (a da tela 'Depuração sem fio'):" "de conexão"; pconn="$REPLY_FIELD"
+  # No Android 11+ a porta de CONEXÃO é DIFERENTE da de pareamento e SÓ é
+  # auto-descobrível via mDNS — que este build do adb não tem (ver mdns_supported).
+  # Sem root o Android não expõe essa porta a apps comuns, então pedimos (1x). Se o
+  # aparelho JÁ estava pareado, esta é a ÚNICA coisa a digitar.
+  pconn=""
+  if mdns_supported; then
+    pconn=$(adb mdns services 2>/dev/null | grep -i '_adb-tls-connect' | grep -oE "${ip}:[0-9]+" | head -1 | cut -d: -f2)
+    [ -n "$pconn" ] && ok "Porta de conexão encontrada automaticamente (mDNS): ${pconn}"
+  fi
+  if [ -z "$pconn" ]; then
+    printf '%s\n' "${DIM}  Agora FECHE a janela de pareamento e fique na tela 'Depuração sem fio'.
+  No alto dela aparece outro  IP : PORTA — essa porta de CONEXÃO é diferente da de pareamento.${NC}"
+    read_port "3. PORTA de conexão (a da tela 'Depuração sem fio'):" "de conexão"; pconn="$REPLY_FIELD"
   fi
 
   # Connect com retry
