@@ -142,11 +142,13 @@ ensure_adb() {
 # prompt junto com o valor). O usuário só preenche um campo simples por vez.
 
 # 1) Endereço IP — só números e pontos, 4 octetos de 0 a 255
-read_ip() {  # $1 = texto do prompt
-  local v prompt="$1"
+read_ip() {  # $1 = texto do prompt · $2 = default opcional (ENTER aceita)
+  local v prompt="$1" def="${2:-}"
   while :; do
-    printf '%s' "${BLD}❯ ${prompt}${NC} "; read -r v
+    if [ -n "$def" ]; then printf '%s' "${BLD}❯ ${prompt}${NC} ${DIM}[ENTER = ${def}]${NC} "; else printf '%s' "${BLD}❯ ${prompt}${NC} "; fi
+    read -r v
     v=$(printf '%s' "$v" | tr -d '[:space:]')
+    if [ -z "$v" ] && [ -n "$def" ]; then REPLY_FIELD="$def"; return 0; fi
     if [ -z "$v" ]; then warn "Campo vazio. Digite o Endereço IP (ex: 192.168.0.10)."; continue; fi
     case "$v" in
       *[!0-9.]*) warn "O IP tem só NÚMEROS e PONTOS — você digitou outro caractere. Tente de novo (ex: 192.168.0.10)."; continue ;;
@@ -184,6 +186,19 @@ read_code() {  # $1 = prompt
     if [ "${#v}" -ne 6 ]; then warn "O código precisa ter EXATAMENTE 6 dígitos — você digitou ${#v}. Tente de novo."; continue; fi
     REPLY_FIELD="$v"; return 0
   done
+}
+
+# Detecta o IP Wi-Fi DESTE aparelho (self-scan: o Termux roda no próprio device).
+# Vazio = não achou → cai no input manual. Vários métodos por robustez (Termux/OEM):
+# rota default (src) > inet da wlan0 (ip/ifconfig) > getprop legado. Loopback é ignorado.
+discover_ip() {
+  local ip=""
+  ip=$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9][0-9.]*\).*/\1/p' | head -1)
+  [ -z "$ip" ] && ip=$(ip -4 addr show wlan0 2>/dev/null | sed -n 's/.*inet \([0-9][0-9.]*\).*/\1/p' | head -1)
+  [ -z "$ip" ] && ip=$(ifconfig wlan0 2>/dev/null | sed -n 's/.*inet[ :]\([0-9][0-9.]*\).*/\1/p' | head -1)
+  [ -z "$ip" ] && ip=$(getprop dhcp.wlan0.ipaddress 2>/dev/null | tr -d '\r')
+  case "$ip" in 127.*|"") return 1 ;; esac
+  printf '%s' "$ip"
 }
 
 # ---------- 1. Conexão ADB Wi-Fi (AUTOMÁTICA via mDNS, estilo Brevent) ----------
@@ -275,8 +290,12 @@ step_connect_manual() {
   Vai abrir uma janela com  IP : PORTA  e um  CÓDIGO  de 6 dígitos.
   Deixe essa janela ABERTA e preencha abaixo — um dado por vez.${NC}"
 
-  local ip ppair pcode pconn
-  read_ip   "1. Digite apenas o Endereço IP (ex: 192.168.0.10):";                                          ip="$REPLY_FIELD"
+  local ip ppair pcode pconn det
+  # v4.4.98: self-scan — detecta o IP DESTE aparelho; ENTER aceita (some 1 input).
+  # Remoto (outro aparelho) ou detecção falha → é só digitar o IP, como antes.
+  det=$(discover_ip)
+  [ -n "$det" ] && ok "IP deste aparelho detectado: ${det}  ${DIM}(ENTER aceita; ou digite o IP de OUTRO aparelho)${NC}"
+  read_ip   "1. Endereço IP do aparelho (ENTER usa o detectado):" "$det";  ip="$REPLY_FIELD"
   read_port "2. Digite os 5 números da PORTA (os números depois dos ':' na janela de pareamento):" "de pareamento"; ppair="$REPLY_FIELD"
   read_code "3. Digite o Código de Pareamento de 6 dígitos:";                                              pcode="$REPLY_FIELD"
 
