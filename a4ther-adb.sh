@@ -399,6 +399,29 @@ step_origin() {
   esac
 }
 
+# ---------- Status Free Fire ABERTO/FECHADO (pré-scan) ----------
+# PID do pacote escolhido NO DEVICE (via adb). Vazio = app fechado.
+ff_pid_remote() { adb -s "$ADB_TARGET" shell "pidof $PKG 2>/dev/null" 2>/dev/null | tr -d '\r' | awk '{print $1}'; }
+# v4.4.98: o a4ther.sh já reporta FF aberto/fechado DENTRO do .txt, mas com o FF
+# ABERTO isso é uma linha `ok` — e o show_resumo só pesca ●ALERTA/●AVISO, então o
+# analista não via o "ABERTO" na tela. Aqui o driver mostra o status via adb ANTES
+# do scan. As varreduras em MEMÓRIA do engine (maps/mountinfo/attr/status/net do
+# PID do FF) só valem com o jogo ABERTO; as de DISCO rodam de qualquer jeito.
+check_ff_open() {
+  local pid; pid="$(ff_pid_remote)"
+  if [ -z "$pid" ] && [ -t 0 ]; then
+    warn "${PKG_LABEL} está FECHADO — a varredura em MEMÓRIA (maps/mountinfo/status do PID) seria PULADA."
+    info "Abra o ${PKG_LABEL} no aparelho AGORA e tecle ENTER para varrer a memória — ou só tecle ENTER para seguir apenas com os checks de DISCO."
+    read -r _
+    pid="$(ff_pid_remote)"
+  fi
+  if [ -n "$pid" ]; then
+    ok "${PKG_LABEL} ABERTO — PID ${pid} (varredura em MEMÓRIA habilitada)."
+  else
+    warn "${PKG_LABEL} FECHADO — seguindo só com os checks de DISCO (memória do FF não inspecionada)."
+  fi
+}
+
 # ---------- 4. Scan COMPLETO device + FF + RESUMO na tela ----------
 # Roda o a4ther.sh como uid 2000 (shell): destrava serial/HWID/dumpsys +
 # análise completa do FF. A saída aparece AO VIVO na tela; depois montamos
@@ -406,6 +429,7 @@ step_origin() {
 step_scan() {
   require_connected
   hr; info "ETAPA 4/4 — Scan completo do device + Free Fire (via adb shell)"
+  check_ff_open        # v4.4.98: status FF aberto/fechado NA TELA antes do scan
   # FIX "Transport endpoint is not connected": pasta de TRABALHO em armazenamento
   # INTERNO do Termux (ext4 real) — NÃO no /storage/emulated/0 (FUSE). Em scan pesado
   # (ex.: device se auditando via ADB) o daemon de storage emulado do Android é morto
