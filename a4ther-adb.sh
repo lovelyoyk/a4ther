@@ -250,9 +250,40 @@ show_model() {
   adb -s "$ADB_TARGET" shell getprop ro.product.model 2>/dev/null | tr -d '\r' | sed 's/^/   Modelo: /' || true
 }
 
+# Fixa a porta do adb em 5555 (adb tcpip) p/ o PRÓXIMO run reconectar sem digitar
+# nada (Tier 0 do step_connect). Chamado no FIM (após scan+finalize) DE PROPÓSITO:
+# 'adb tcpip' DERRUBA a conexão atual, então só fazemos com o trabalho já concluído.
+# Best-effort: se o aparelho/rede não deixar, não muda nada. Reseta no reboot do
+# aparelho e deixa o adb ouvindo em 5555 na rede (trade-off de conveniência aceito).
+pin_tcpip() {
+  case "$ADB_TARGET" in *:5555) return 0 ;; esac    # já em 5555, nada a fazer
+  [ -n "$ADB_TARGET" ] || return 0
+  local ip="${ADB_TARGET%%:*}"
+  info "Fixando a porta (adb tcpip 5555) p/ reconectar sem digitar nada na próxima vez…"
+  if adb -s "$ADB_TARGET" tcpip 5555 >/dev/null 2>&1; then
+    sleep 2
+    if try_connect "${ip}:5555"; then
+      ok "Porta fixada em 5555 — re-auditorias DESTE aparelho (até reiniciar) serão automáticas."
+    else
+      warn "Fixei a porta mas não confirmei o reconnect em 5555 — sem problema, o scan já terminou."
+    fi
+  else
+    info "Não deu pra fixar a porta (ok — o próximo run usa o fluxo normal)."
+  fi
+}
+
 step_connect() {
   hr; info "ETAPA 1/4 — Conexão ADB Wi-Fi"
   printf '%s\n' "${DIM}  No CELULAR: Configurações → Opções do Desenvolvedor → Depuração sem fio → LIGAR.${NC}"
+
+  # Tier 0 (v4.4.98): porta FIXA de um run anterior (adb tcpip 5555 — ver pin_tcpip,
+  # chamado no fim). Se este aparelho foi auditado desde o último boot, reconecta
+  # SOZINHO, 0 digitação. discover_ip() pega o IP do próprio aparelho (self-scan).
+  local _sip; _sip=$(discover_ip)
+  if [ -n "$_sip" ] && try_connect "${_sip}:5555"; then
+    ok "Reconectado na porta fixa: ${ADB_TARGET} ${DIM}(0 digitação — fixada num scan anterior)${NC}"
+    show_model; return 0
+  fi
 
   # A descoberta automática (mDNS) só funciona se o build do adb tiver o serviço
   # mDNS embutido — muitos builds do Termux NÃO têm. Sonda 1x: se não tiver, nem
@@ -788,6 +819,7 @@ main() {
   step_origin
   step_scan
   finalize
+  pin_tcpip          # v4.4.98: fixa 5555 p/ a PRÓXIMA auditoria deste aparelho ser 0-digitação
   hr; ok "Concluído."
   local d; d="$(ask 'Desconectar o adb agora? [s/N]')"
   case "$d" in s|S) adb disconnect "$ADB_TARGET" >/dev/null 2>&1 && ok "Desconectado." ;; esac
