@@ -193,9 +193,20 @@ read_code() {  # $1 = prompt
 # rota default (src) > inet da wlan0 (ip/ifconfig) > getprop legado. Loopback é ignorado.
 discover_ip() {
   local ip=""
-  ip=$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9][0-9.]*\).*/\1/p' | head -1)
-  [ -z "$ip" ] && ip=$(ip -4 addr show wlan0 2>/dev/null | sed -n 's/.*inet \([0-9][0-9.]*\).*/\1/p' | head -1)
-  [ -z "$ip" ] && ip=$(ifconfig wlan0 2>/dev/null | sed -n 's/.*inet[ :]\([0-9][0-9.]*\).*/\1/p' | head -1)
+  # Principal: ifconfig (toybox, sempre presente no Termux). 'ifconfig wlan0' pode
+  # falhar por permissão (/proc/net/dev), então usamos 'ifconfig' (lista tudo) e
+  # pegamos o inet do bloco wlan* — NUNCA o rmnet (dados móveis) nem o lo. Casa os
+  # formatos 'inet 1.2.3.4' e 'inet addr:1.2.3.4'.
+  ip=$(ifconfig 2>/dev/null | sed -n '/^wlan[0-9]/,/^[^ ]/p' \
+       | grep -oE 'inet[: ]+(addr:)?([0-9]{1,3}\.){3}[0-9]{1,3}' \
+       | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | grep -vE '^127\.' | head -1)
+  # Fallback: iproute2 (só se 'ip' estiver instalado) — rota default (src) e wlan.
+  if [ -z "$ip" ] && command -v ip >/dev/null 2>&1; then
+    ip=$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9][0-9.]*\).*/\1/p' | head -1)
+    [ -z "$ip" ] && ip=$(ip -o -4 addr show 2>/dev/null | grep -E 'wlan[0-9]' \
+                         | grep -oE 'inet ([0-9]{1,3}\.){3}[0-9]{1,3}' | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -1)
+  fi
+  # Fallback legado (Android antigo).
   [ -z "$ip" ] && ip=$(getprop dhcp.wlan0.ipaddress 2>/dev/null | tr -d '\r')
   case "$ip" in 127.*|"") return 1 ;; esac
   printf '%s' "$ip"
@@ -291,11 +302,17 @@ step_connect_manual() {
   Deixe essa janela ABERTA e preencha abaixo — um dado por vez.${NC}"
 
   local ip ppair pcode pconn det
-  # v4.4.98: self-scan — detecta o IP DESTE aparelho; ENTER aceita (some 1 input).
-  # Remoto (outro aparelho) ou detecção falha → é só digitar o IP, como antes.
+  # v4.4.98: self-scan — detecta o IP DESTE aparelho (wlan via ifconfig); ENTER aceita.
+  # Remoto (outro aparelho) ou detecção falha → cai no input normal, como antes
+  # (prompt SEM "ENTER usa o detectado" — só aparece quando realmente detectou).
   det=$(discover_ip)
-  [ -n "$det" ] && ok "IP deste aparelho detectado: ${det}  ${DIM}(ENTER aceita; ou digite o IP de OUTRO aparelho)${NC}"
-  read_ip   "1. Endereço IP do aparelho (ENTER usa o detectado):" "$det";  ip="$REPLY_FIELD"
+  if [ -n "$det" ]; then
+    ok "IP deste aparelho detectado: ${det}  ${DIM}(ENTER aceita; ou digite o IP de OUTRO aparelho)${NC}"
+    read_ip "1. Endereço IP do aparelho (ENTER usa o detectado):" "$det"
+  else
+    read_ip "1. Digite apenas o Endereço IP (ex: 192.168.0.10):"
+  fi
+  ip="$REPLY_FIELD"
   read_port "2. Digite os 5 números da PORTA (os números depois dos ':' na janela de pareamento):" "de pareamento"; ppair="$REPLY_FIELD"
   read_code "3. Digite o Código de Pareamento de 6 dígitos:";                                              pcode="$REPLY_FIELD"
 
