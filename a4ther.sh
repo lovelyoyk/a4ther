@@ -1316,7 +1316,13 @@ if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/maps" ]; then
     # Fonte: docs/MAGISK_DETECTION_GAPS.md §12.1.
     IL2=$(awk '/libil2cpp\.so$/{print $6}' "/proc/$FF_PID/maps" 2>/dev/null | sort -u)
     if [ -z "$IL2" ]; then
-        warn "FF sem libil2cpp.so mapeada — runtime Unity ainda carregando OU adulterado (INCONCLUSIVO)"
+        # FP real-device: só vira AVISO se o FF estiver de fato carregado como Unity (libunity
+        # mapeada) mas SEM il2cpp = anomalia real; senão é só timing (FF abrindo) → info silencioso.
+        if grep -qE 'libunity\.so' "/proc/$FF_PID/maps" 2>/dev/null; then
+            warn "FF com libunity.so mas SEM libil2cpp.so — runtime Unity possivelmente adulterado"
+        else
+            info "FF sem libil2cpp.so mapeada (jogo ainda carregando ou não em primeiro plano)"
+        fi
     else
         echo "$IL2" | grep -vqE '/data/app/.*com\.dts\.freefire' \
             && { alert "libil2cpp.so de path ANÔMALO no FF: $(echo $IL2)"; DFIR_HITS=$((DFIR_HITS+1)); }
@@ -1351,6 +1357,12 @@ for P in /proc/[0-9]*; do
     CMD=$(cat "$P/cmdline" 2>/dev/null | tr '\0' ' ' | awk '{print $1}')
     [ -z "$COMM" ] || [ -z "$CMD" ] && continue
     CMD_BIN=$(basename "$CMD" 2>/dev/null)
+    # FP real-device: comm benignos do Android — zygote/app_process usam comm 'main';
+    # serviços de sistema (statsd/netd/…) renomeiam o líder p/ 'binder:PID_N'/'HwBinder:…'.
+    # Sem isto, zygote/zygote64/statsd/netd caíam como "spoof" em TODO scan limpo.
+    case "$COMM" in
+        main|Binder:[0-9]*|binder:[0-9]*|HwBinder:[0-9]*|hwbinder:[0-9]*) continue ;;
+    esac
     # Mismatch: comm não é prefixo de cmdline binname
     case "$CMD_BIN" in
         "$COMM"*|kworker*|kthread*|init|swapper*|systemd*) ;;
@@ -2781,12 +2793,18 @@ io.github.ggmouse
 
 MACRO_HITS=0
 if [ -n "$ALL_PKGS" ]; then
+    # FP real-device: dedup — pacote que JÁ casou a lista exata (MACRO_PKGS) NÃO deve sair de
+    # novo pelo heurístico (HEUR). Antes, o autoclicker conhecido saía 2× ("Macro/keymap" +
+    # "Pkg padrão macro"). MACRO_SEEN registra os já-flagados; o HEUR pula esses.
+    MACRO_SEEN=""
     for PKG in $MACRO_PKGS; do
-        echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { warn "Macro/keymap (não-crítico): $PKG"; MACRO_HITS=$((MACRO_HITS+1)); }
+        echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { warn "Macro/keymap (não-crítico): $PKG"; MACRO_HITS=$((MACRO_HITS+1)); MACRO_SEEN="$MACRO_SEEN $PKG"; }
     done
     HEUR=$(echo "$ALL_PKGS" | grep -Ei 'package:.*(autoclick|autotap|macro|touchsim|repetitouch|autotouch|gamepad|keymap)' | sed 's/^package://')
     [ -n "$HEUR" ] && echo "$HEUR" | while IFS= read -r L; do
-        [ -n "$L" ] && warn "Pkg padrão macro: $L"
+        [ -z "$L" ] && continue
+        case " $MACRO_SEEN " in *" $L "*) continue ;; esac
+        warn "Pkg padrão macro: $L"
     done
 fi
 [ "$MACRO_HITS" = "0" ] && ok "Sem macro/keymapper"
@@ -3288,7 +3306,9 @@ for TMPDIR in /data/local/tmp /sdcard/tmp; do
         DATA_HITS=$((DATA_HITS+1))
     fi
     # Atividade recente (< 20min) — DG7 SS heuristic
-    RECENT_TMP=$(find "$TMPDIR" -type f -mmin -20 2>/dev/null | head -5)
+    # FP real-device: exclui os PRÓPRIOS acumuladores do scanner (.a4_crit_$$/.a4_warn_$$,
+    # l.83-84) — senão o a4ther se auto-detecta como "atividade tmp recente" em todo scan.
+    RECENT_TMP=$(find "$TMPDIR" -type f -mmin -20 ! -name '.a4_*' 2>/dev/null | head -5)
     if [ -n "$RECENT_TMP" ]; then
         echo "$RECENT_TMP" | while IFS= read -r F; do
             [ -n "$F" ] && alert "TMP atividade recente (<20min): $F"
@@ -3436,7 +3456,11 @@ done
 
 # 3) Logcat: eventos de delete
 if have logcat; then
-    DEL_EVENTS=$(logcat -d 2>/dev/null | grep -iE 'deletePackage|deleteFile|MediaStore.*delete|Filesystem.*delete|content.*deleted|removed.*\.apk|file_remove' | head -n 20)
+    # FP real-device (MIUI): 'content.*deleted' casava 'contentValues=…deleted_from_mars_auto'
+    # do FASProvider — auto-gerência de apps da MIUI (MARS/FAS), benigna. Ancorado a
+    # content:// + exclui FASProvider/mars (não é deleção de evidência de cheat).
+    DEL_EVENTS=$(logcat -d 2>/dev/null | grep -iE 'deletePackage|deleteFile|MediaStore.*delete|Filesystem.*delete|content://[^ ]*delet|removed.*\.apk|file_remove' \
+        | grep -viE 'FASProvider|deleted_from_mars|mars_auto' | head -n 20)
     if [ -n "$DEL_EVENTS" ]; then
         # filtrar só eventos com nome suspeito
         SUSPECT_DEL=$(echo "$DEL_EVENTS" | grep -iE 'cheat|hack|mod|ffh4x|aimbot|esp\.|menu|injector|wallhack|magisk|frida|freefire|\.apk|\.lua|\.so|\.dex')
@@ -3632,9 +3656,13 @@ for MODROOT in /data/adb/modules /data/adb/modules_update /sbin/.magisk/modules;
 done
 
 # 0e) Apps de captura/proxy/VPN local instalados (interceptam o tráfego do FF)
+# FP real-device: o token solto 'clash' casava 'com.supercell.clashROYALE' (jogo!). Trocado
+# por variantes ancoradas do Clash-proxy (clashforandroid/clashmeta/metacubex; kr328 já cobre
+# o app principal) + exclusão dos jogos Supercell 'clash*'.
 if have pm; then
     NETAPPS=$(pm list packages 2>/dev/null | sed 's/^package://' \
-        | grep -iE 'httpcanary|packagecapture|http\.injector|netcapture|networkcapture|mitmproxy|charles|burp|clash|kr328|v2ray|napsternet|drony|postern|proxydroid|com\.evozi|sniffer|tcpdump' | head -10)
+        | grep -iE 'httpcanary|packagecapture|http\.injector|netcapture|networkcapture|mitmproxy|charles|burp|clashforandroid|clashmeta|metacubex|kr328|v2ray|napsternet|drony|postern|proxydroid|com\.evozi|sniffer|tcpdump' \
+        | grep -viE 'supercell|clashroyale|clashofclans|clashmini' | head -10)
     for A in $NETAPPS; do
         alert "  APP de captura/proxy/VPN: ${A} (intercepta o tráfego do jogo)"
         PROXY_NET_HITS=$((PROXY_NET_HITS+1))
@@ -3647,11 +3675,22 @@ if have pidof; then
         FF_PID=$(pidof "$PKG" 2>/dev/null | awk '{print $1}')
         [ -z "$FF_PID" ] && continue
         info "FF rodando ($PKG, PID $FF_PID)"
+        # FP real-device (atribuição por INODE): /proc/<pid>/net/tcp é por-netns (=GLOBAL no
+        # Android) → sem isto, TODA conexão do device (adbd:5037, serviços locais…) era
+        # mis-atribuída a "FF→". Coletamos os inodes dos sockets que o FF REALMENTE possui
+        # (/proc/<pid>/fd → 'socket:[inode]') e só contamos esses. Degrada honesto: fd ilegível
+        # (hidepid/SELinux) → INCONCLUSIVO, nunca 'limpo'. (Se o maps do FF é legível, o fd também.)
+        FF_INOS=$(ls -l /proc/$FF_PID/fd 2>/dev/null | grep -oE 'socket:\[[0-9]+\]' | grep -oE '[0-9]+' | sort -u)
+        if [ -z "$FF_INOS" ]; then
+            info "Conexões do FF não atribuíveis (/proc/$FF_PID/fd ilegível) — análise de socket INCONCLUSIVA, não 'limpo'"
+            continue
+        fi
+        FF_INO_SET=" $(echo $FF_INOS) "
         for NTCP in /proc/$FF_PID/net/tcp /proc/$FF_PID/net/tcp6; do
             [ -r "$NTCP" ] || continue
-            # v4.4.75: sort -u dedupa o MESMO endpoint repetido (antes o FF→LOCALHOST
-            # 127.0.0.1:porta saía dezenas de vezes — 1 linha por socket). Agora 1×/endpoint.
-            CONNS=$(awk 'NR>1 && $4=="01" {print $3}' "$NTCP" 2>/dev/null | sort -u | head -n 30)
+            # v4.4.75: sort -u dedupa o MESMO endpoint repetido. Filtro por inode (col 10): só
+            # endpoints ESTABELECIDOS ($4==01) cujo socket é REALMENTE do FF (não do netns global).
+            CONNS=$(awk -v ino="$FF_INO_SET" 'NR>1 && $4=="01" && index(ino," " $10 " ") {print $3}' "$NTCP" 2>/dev/null | sort -u | head -n 30)
             [ -z "$CONNS" ] && continue
             echo "$CONNS" | while IFS= read -r RHEX; do
                 [ -z "$RHEX" ] && continue
@@ -3667,6 +3706,9 @@ if have pidof; then
                     IP="$B1.$B2.$B3.$B4"
                     case "$IP" in
                         127.*)
+                            # Agora atribuído por inode (acima): se chega aqui é socket REAL do FF
+                            # ligando em localhost = proxy/MITM/cheat-client local. adbd:5037/5555
+                            # não é inode do FF → já filtrado, sem paliativo de porta.
                             alert "  FF→LOCALHOST $IP:$PORT (PROXY LOCAL = MITM ou cheat client)" ;;
                         10.*|192.168.*|172.16.*|172.17.*|172.18.*|172.19.*|172.20.*|172.21.*|172.22.*|172.23.*|172.24.*|172.25.*|172.26.*|172.27.*|172.28.*|172.29.*|172.30.*|172.31.*)
                             warn "  FF→IP privado $IP:$PORT (VPN/LAN proxy)" ;;
@@ -3909,7 +3951,10 @@ for LOGDIR in /data/log /sdcard/log /sdcard/MIUI/debug_log \
             BN=$(basename "$F")
             info "  $F"
             if [ -r "$F" ]; then
-                HIT=$(grep -iE 'freefire|frida|magisk|xposed|cheat|injector|libsubstrate|frida-server|frida-gadget' "$F" 2>/dev/null | head -n 2)
+                # FP real-device: removido o token 'freefire' — o NOME do jogo aparece em logs
+                # benignos (foreground/Firebase JobScheduler/batterystats) e NÃO é evidência de
+                # cheat. Mantém só indicadores reais de injeção/root.
+                HIT=$(grep -iE 'frida|magisk|xposed|cheat|injector|libsubstrate|frida-server|frida-gadget' "$F" 2>/dev/null | head -n 2)
                 [ -n "$HIT" ] && echo "$HIT" | while IFS= read -r L; do
                     [ -n "$L" ] && alert "    contém: $(echo "$L" | head -c 140)"
                 done
