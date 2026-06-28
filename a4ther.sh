@@ -601,6 +601,30 @@ for P in /proc/sys/fs/susfs /sys/kernel/security/susfs /data/adb/susfs; do
     exists "$P" && { alert "suSFS detectado: $P (Magisk Hide moderno)"; KERNEL_HITS=$((KERNEL_HITS+1)); }
 done
 
+# v4.4.99: adbd em modo ROOT via Trade-In Mode (adb-root SEM destravar bootloader).
+# COMO O ATACANTE USA: o cheat "ProxyFree/PROXY ANDROID" (com.proxy.free) embute um cliente
+# ADB (libadb-android/SPAKE2), pareia em LOOPBACK com a Depuração sem fio (uid 2000) e dispara
+# o EXPLOIT Trade-In Mode → o adbd reinicia dando shells em ROOT:
+#   adbd --root_seclabel=u:r:su:s0 --tim_seclabel=u:r:adbd_tradeinmode:s0
+# Com root, injeta aimbot/ESP no FF. VALIDADO em device real (rodin/MTK): o usuário só fez
+# 'adb connect' (uid 2000, device SEM root) e mesmo assim surgiu esse adbd-root → é o CHEAT.
+# POR QUE DETECTA: lê o cmdline do adbd (uid 2000 alcança) + o contexto SELinux dos processos.
+# HONESTIDADE/FP: Termux/scanner/depuração-wifi NORMAL rodam adbd uid 2000 SEM esses args; o
+# a4ther-adb.sh faz só 'adb tcpip 5555' (porta), NUNCA 'adb root' → sem auto-FP. Num device sem
+# root, NENHUM processo deveria estar em u:r:su:s0.
+for _d in /proc/[0-9]*; do
+    _c=$(tr '\0' ' ' < "$_d/cmdline" 2>/dev/null)
+    case "$_c" in
+        *adbd*tradeinmode*)
+            alert "adbd em modo ROOT via Trade-In EXPLOIT (adb rootado sem bootloader — vetor do cheat ProxyFree) PID ${_d##*/}"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+        *adbd*root_seclabel=u:r:su:s0*)
+            alert "adbd em modo ROOT (adb root ATIVO) PID ${_d##*/}"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+    esac
+    case "$(cat "$_d/attr/current" 2>/dev/null)" in
+        u:r:su:s0*) alert "Processo em domínio ROOT u:r:su:s0 (root via adb/exploit) PID ${_d##*/}"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+    esac
+done
+
 # v4.4.95: APatch kpatch + su_path configurável (§12.4 do doc / APTest/hiapatch).
 # COMO O ATACANTE USA: APatch (root via patch de kernel) instala o binário 'kpatch'
 # e guarda o caminho do su num arquivo /data/adb/ap/su_path — o usuário RENOMEIA o
@@ -2615,6 +2639,7 @@ fi
 header "PACOTES DE CHEAT / VIRTUALIZADORES"
 
 CHEAT_PKGS="
+com.proxy.free
 com.holograma.ff
 com.hologramff.app
 com.hologram.ff
