@@ -1603,10 +1603,23 @@ pkg_installed eu.sisik.hackendebug && { alert "Hack & Debug: eu.sisik.hackendebu
 # Pode ser shell root persistente disfarçado. REVISAR (não confirma cheat). Triagem
 # manual: binário em /proc/<pid>/exe e o init .rc que define o serviço
 # (grep -rn shelld /system/etc/init /vendor/etc/init /odm/etc/init /system_ext/etc/init).
+# FP real-device (v4.4.99): em Xiaomi/MIUI 'shelld' é daemon de SISTEMA (gestão de shell/power),
+# com binário em partição de sistema E declarado por um init .rc OEM → benigno (dava AVISO falso
+# em todo Xiaomi). uid 2000 NÃO lê /proc/<root>/exe, então resolvemos o caminho por cmdline e,
+# como rede de segurança, vemos se algum init .rc de sistema declara o serviço. Só alerta se o
+# binário estiver FORA das partições do sistema (ex.: /data/local/tmp = shell root disfarçado).
 SHELLD_PIDS=$(ps -A 2>/dev/null | awk '$1=="root" && $NF=="shelld"{print $2}')
 [ -z "$SHELLD_PIDS" ] && SHELLD_PIDS=$(ps 2>/dev/null | awk '$1=="root" && $NF=="shelld"{print $2}')
+SHELLD_RC=$(grep -rl shelld /system/etc/init /system_ext/etc/init /vendor/etc/init /odm/etc/init /product/etc/init 2>/dev/null | head -1)
 for SP in $SHELLD_PIDS; do
-    warn "Daemon root 'shelld' (PID $SP) — daemon de shell nao-padrao; revisar /proc/$SP/exe e o init .rc que o define"
+    SP_PATH=$(readlink "/proc/$SP/exe" 2>/dev/null)
+    [ -z "$SP_PATH" ] && { SP_PATH=$(tr '\0' ' ' < "/proc/$SP/cmdline" 2>/dev/null); SP_PATH=${SP_PATH%% *}; }
+    case "$SP_PATH" in
+        /system/*|/system_ext/*|/vendor/*|/odm/*|/product/*|/apex/*) continue ;;  # binário de sistema = OEM benigno
+        /data/*|/sdcard/*|/storage/*) ;;                                          # fora do sistema = sempre alerta
+        *) [ -n "$SHELLD_RC" ] && continue ;;                                      # caminho indeterminado: init .rc de sistema declara → benigno
+    esac
+    warn "Daemon root 'shelld' (PID $SP) — daemon de shell nao-padrao FORA de partição de sistema; revisar /proc/$SP/exe e o init .rc que o define"
     PRIV_HITS=$((PRIV_HITS+1))
 done
 
