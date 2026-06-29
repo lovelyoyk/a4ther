@@ -1387,9 +1387,15 @@ for P in /proc/[0-9]*; do
     case "$COMM" in
         main|Binder:[0-9]*|binder:[0-9]*|HwBinder:[0-9]*|hwbinder:[0-9]*) continue ;;
     esac
-    # Mismatch: comm não é prefixo de cmdline binname
+    # Mismatch: comm não é SUBSTRING do cmdline binname.
+    # FP real-device (v4.4.99): o kernel limita comm a 15 chars (TASK_COMM_LEN) e o Android
+    # costuma deixar os ÚLTIMOS 15 do nome do pacote — ex.: cmd=com.instagram.android →
+    # comm=stagram.android; com.anydesk.anydeskandroid → .anydeskandroid; com.android.htmlviewer:remote
+    # → mlviewer:remote. Como comm vira SUFIXO (não prefixo) do cmdline, o antigo "$COMM"* não
+    # casava → falso "spoof". Agora comm é benigno se for SUBSTRING do cmdline (prefixo/sufixo/meio
+    # = só truncamento). Spoof real tem comm que NÃO aparece no cmdline (continua flagrado).
     case "$CMD_BIN" in
-        "$COMM"*|kworker*|kthread*|init|swapper*|systemd*) ;;
+        *"$COMM"*|kworker*|kthread*|init|swapper*|systemd*) ;;
         *) [ "${#COMM}" -gt 3 ] && [ "${#CMD_BIN}" -gt 3 ] && \
            SPOOF_PROCS="$SPOOF_PROCS
 pid=$(basename $P) comm=$COMM cmd=$CMD_BIN" ;;
@@ -1408,7 +1414,18 @@ if [ -n "$ADB_PROCS" ]; then
     echo "$ADB_PROCS" | while IFS= read -r CGFILE; do
         PID=$(echo "$CGFILE" | sed 's|/proc/||;s|/cgroup||')
         CMD=$(cat "/proc/$PID/cmdline" 2>/dev/null | tr '\0' ' ' | head -c 120)
-        [ -n "$CMD" ] && warn "Process em uid_2000 (ADB shell forked): pid=$PID cmd=$CMD"
+        [ -z "$CMD" ] && continue
+        # FP real-device (v4.4.99): daemons de SISTEMA rodam em uid_2000 por design (MTK/Xiaomi:
+        # connsyslogger/emdlogger/lbs_dbg_ext/netdiag em /system_ext/bin), e o PRÓPRIO scanner/
+        # adb-shell roda 'sh' em uid_2000. Antes flagrava todos → falso positivo em massa. Agora
+        # só flagra binário FORA das partições do sistema e que não seja shell/scanner — ex.:
+        # cheat dropado em /data/local/tmp e executado como shell uid 2000.
+        CMD0=${CMD%% *}
+        case "$CMD0" in
+            /system/*|/system_ext/*|/vendor/*|/apex/*|/product/*|/odm/*|/oem/*) continue ;;
+            sh|*/sh|mksh|*/mksh|toybox|*/toybox|toolbox|*/toolbox|*a4ther*) continue ;;
+        esac
+        warn "Process em uid_2000 (ADB shell forked): pid=$PID cmd=$CMD"
     done
 fi
 
@@ -1842,6 +1859,17 @@ if have pm; then
         APP=$(echo "$LINE"  | sed -n 's/^package:\([^ ]*\).*/\1/p')
         INST=$(echo "$LINE" | sed -n 's/.*installer=\([^ ]*\).*/\1/p')
         [ -z "$APP" ] && continue
+        # FP real-device (v4.4.99): installer=null é o NORMAL de app PRÉ-INSTALADO — na MIUI
+        # apps como com.miui.calculator / com.android.deskclock aparecem no -3 mas vivem em
+        # /product|/system_ext. Só tratamos null como suspeito se o APK estiver em /data/app
+        # (instalação manual/adb real); em partição de sistema = preinstalado → ignora. Installer
+        # EXPLÍCITO (packageinstaller/browser/adb) segue flagrado pelo _sl_classify (sideload real).
+        if [ -z "$INST" ] || [ "$INST" = "null" ]; then
+            APATH=$(pm path "$APP" 2>/dev/null | head -1 | sed 's/^package://')
+            case "$APATH" in
+                /system/*|/system_ext/*|/product/*|/vendor/*|/apex/*|/odm/*|/oem/*) continue ;;
+            esac
+        fi
         _sl_classify "$APP" "$INST"
     done | sort -u)
     if [ -n "$SIDELOADED" ]; then
@@ -2355,16 +2383,15 @@ for PKG in $FF_PKGS; do
                 EXEC_REPLAY)   alert "Replay com permissão de EXECUÇÃO: $FNAME (perms=$GID) — arquivo alterado/injetado" ;;
             esac
         done
-        # === DG7 SS: replay antes do boot do sistema = replay copiado ===
+        # === DG7 SS: replay antes do boot — ALERTA REMOVIDO (FP real-device, v4.4.99) ===
+        # "mtime do replay < btime do boot" sozinho NÃO é evidência de passador: QUALQUER replay
+        # gravado antes do último reboot satisfaz isso (caso normal — o jogador só não gravou
+        # replay desde que ligou o aparelho) → dava CRÍTICO falso. O sinal real de replay copiado/
+        # passado é a ORIGEM EXTERNA (group 1015/9997 = EXTERN_REPLAY) e a permissão de EXECUÇÃO
+        # (EXEC_REPLAY), ambas ACIMA e seguem como ALERTA. As atribuições abaixo são mantidas
+        # porque LATEST_BIN/LATEST_JSON alimentam o bloco NANOSECOND FORENSICS logo adiante.
         LATEST_BIN=$(ls -t "$RDIR"/*.bin 2>/dev/null | head -1)
         LATEST_JSON=$(ls -t "$RDIR"/*.json 2>/dev/null | head -1)
-        if [ -n "$LATEST_BIN" ]; then
-            REPLAY_TS=$(stat -c '%Y' "$LATEST_BIN" 2>/dev/null)
-            BOOT_TS=$(grep btime /proc/stat 2>/dev/null | awk '{print $2}')
-            if [ -n "$REPLAY_TS" ] && [ -n "$BOOT_TS" ] && [ "$REPLAY_TS" -lt "$BOOT_TS" ] 2>/dev/null; then
-                alert "Replay mais recente é ANTERIOR ao boot do sistema — possível passador de replay"
-            fi
-        fi
 
         # === NANOSECOND FORENSICS ===
         # v4.4.32: TODO o bloco roda só se o fs do replay suporta nanos.
