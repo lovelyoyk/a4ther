@@ -601,27 +601,30 @@ for P in /proc/sys/fs/susfs /sys/kernel/security/susfs /data/adb/susfs; do
     exists "$P" && { alert "suSFS detectado: $P (Magisk Hide moderno)"; KERNEL_HITS=$((KERNEL_HITS+1)); }
 done
 
-# v4.4.99: adbd em modo ROOT via Trade-In Mode (adb-root SEM destravar bootloader).
-# COMO O ATACANTE USA: o cheat "ProxyFree/PROXY ANDROID" (com.proxy.free) embute um cliente
-# ADB (libadb-android/SPAKE2), pareia em LOOPBACK com a Depuração sem fio (uid 2000) e dispara
-# o EXPLOIT Trade-In Mode → o adbd reinicia dando shells em ROOT:
+# v4.4.99: adbd em modo ROOT via Trade-In Mode — 2a sessao adb-root INDEPENDENTE.
+# COMO O ATACANTE USA: cheat (ex. ProxyFree/com.proxy.free) embute cliente ADB
+# (libadb-android/SPAKE2) e ganha shell ROOT via exploit Trade-In Mode:
 #   adbd --root_seclabel=u:r:su:s0 --tim_seclabel=u:r:adbd_tradeinmode:s0
-# Com root, injeta aimbot/ESP no FF. VALIDADO em device real (rodin/MTK): o usuário só fez
-# 'adb connect' (uid 2000, device SEM root) e mesmo assim surgiu esse adbd-root → é o CHEAT.
-# POR QUE DETECTA: lê o cmdline do adbd (uid 2000 alcança) + o contexto SELinux dos processos.
-# HONESTIDADE/FP: Termux/scanner/depuração-wifi NORMAL rodam adbd uid 2000 SEM esses args; o
-# a4ther-adb.sh faz só 'adb tcpip 5555' (porta), NUNCA 'adb root' → sem auto-FP. Num device sem
-# root, NENHUM processo deveria estar em u:r:su:s0.
+# CALIBRACAO (corrige FP de device real, v4.4.99): em device LOCKED Xiaomi/MTK o PROPRIO acesso
+# adb do operador/scanner pode passar por adbd em modo Trade-In — esse e' o adbd que SERVE a
+# nossa sessao (ANCESTRAL do scan), NAO o cheat. Cheat e scanner compartilham o mesmo adbd, entao
+# o cmdline do adbd NAO diferencia: antes dava CRITICO falso em todo device acessado via adb-root.
+# Agora AUTO-EXCLUI a nossa arvore de processos (o adbd ancestral) e so flagra um adbd-root que
+# esteja FORA dela (uma 2a sessao adb-root independente). O sinal PRIMARIO do cheat segue sendo o
+# PACOTE (com.proxy.free no CHEAT_PKGS). uid 2000 le o cmdline do adbd.
+_ANC=" $$ "; _ap=$$
+while [ "$_ap" -gt 1 ] 2>/dev/null; do
+    _app=$(awk '{print $4}' "/proc/$_ap/stat" 2>/dev/null)
+    { [ -z "$_app" ] || [ "$_app" = "$_ap" ]; } && break
+    case "$_ANC" in *" $_app "*) break ;; esac
+    _ANC="$_ANC$_app "; _ap=$_app
+done
 for _d in /proc/[0-9]*; do
-    _c=$(tr '\0' ' ' < "$_d/cmdline" 2>/dev/null)
-    case "$_c" in
-        *adbd*tradeinmode*)
-            alert "adbd em modo ROOT via Trade-In EXPLOIT (adb rootado sem bootloader — vetor do cheat ProxyFree) PID ${_d##*/}"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
-        *adbd*root_seclabel=u:r:su:s0*)
-            alert "adbd em modo ROOT (adb root ATIVO) PID ${_d##*/}"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
-    esac
-    case "$(cat "$_d/attr/current" 2>/dev/null)" in
-        u:r:su:s0*) alert "Processo em domínio ROOT u:r:su:s0 (root via adb/exploit) PID ${_d##*/}"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
+    _pid=${_d##*/}
+    case "$_ANC" in *" $_pid "*) continue ;; esac   # pula a PROPRIA arvore (incl. nosso adbd)
+    case "$(tr '\0' ' ' < "$_d/cmdline" 2>/dev/null)" in
+        *adbd*tradeinmode*|*adbd*root_seclabel=u:r:su:s0*)
+            alert "adbd em modo ROOT/Trade-In FORA da sessao do scanner (2a sessao adb-root independente — possivel cheat) PID $_pid"; KERNEL_HITS=$((KERNEL_HITS+1)) ;;
     esac
 done
 
