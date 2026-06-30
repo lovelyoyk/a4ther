@@ -1448,7 +1448,7 @@ fi
 
 # logcat ring buffer crash (window curto mas alta confidence)
 if have logcat; then
-    LOGCAT_CHEAT=$(logcat -d -b crash 2>/dev/null | grep -iE '(libfrida|libsubstrate|libdobby|libxhook|gum-js|FATAL.*com\.dts\.freefire|injector\.so|tweak\.so)' | head -5)
+    LOGCAT_CHEAT=$(timeout 5 logcat -d -b crash 2>/dev/null | grep -iE '(libfrida|libsubstrate|libdobby|libxhook|gum-js|FATAL.*com\.dts\.freefire|injector\.so|tweak\.so)' | head -5)
     if [ -n "$LOGCAT_CHEAT" ]; then
         echo "$LOGCAT_CHEAT" | while IFS= read -r L; do alert "logcat crash: $(echo "$L" | head -c 150)"; done
         DFIR_HITS=$((DFIR_HITS+1))
@@ -1972,7 +1972,7 @@ fi
 if have logcat; then
     # v4.4.75: sort -u dedupa eventos idênticos repetidos no buffer (o logcat events
     # repete a mesma linha de pkg/job em loop) — antes floodava a saída.
-    PKG_EVENTS=$(logcat -b events -d 2>/dev/null | grep -iE 'pkg_install|pkg_uninstall|package_added|package_removed|installer' | sort -u | head -n 30)
+    PKG_EVENTS=$(timeout 5 logcat -b events -d 2>/dev/null | grep -iE 'pkg_install|pkg_uninstall|package_added|package_removed|installer' | sort -u | head -n 30)
     if [ -n "$PKG_EVENTS" ]; then
         # filtrar FF e cheats
         FF_LOGEV=$(echo "$PKG_EVENTS" | grep -iE 'freefire|dts\.freefire|garena|cheat|hack|mod|aimbot|esp|frida|magisk|holograma|hologram' | sort -u)
@@ -2963,7 +2963,7 @@ fi
 
 # Eventos am_resume_activity de file managers no logcat
 if have logcat; then
-    RES_EVENTS=$(logcat -b events -d 2>/dev/null | grep -iE 'am_activity_resume|am_resume_activity' | grep -iE 'filemanager|fileexplorer|zarchiver|myfiles|documentsui|estrongs|xplore|amaze|solidexplorer|astro' | tail -n 15)
+    RES_EVENTS=$(timeout 5 logcat -b events -d 2>/dev/null | grep -iE 'am_activity_resume|am_resume_activity' | grep -iE 'filemanager|fileexplorer|zarchiver|myfiles|documentsui|estrongs|xplore|amaze|solidexplorer|astro' | tail -n 15)
     if [ -n "$RES_EVENTS" ]; then
         info "Eventos de file manager no logcat (am_resume_activity):"
         echo "$RES_EVENTS" | while IFS= read -r L; do
@@ -3527,7 +3527,7 @@ if have logcat; then
     # FP real-device (MIUI): 'content.*deleted' casava 'contentValues=…deleted_from_mars_auto'
     # do FASProvider — auto-gerência de apps da MIUI (MARS/FAS), benigna. Ancorado a
     # content:// + exclui FASProvider/mars (não é deleção de evidência de cheat).
-    DEL_EVENTS=$(logcat -d 2>/dev/null | grep -iE 'deletePackage|deleteFile|MediaStore.*delete|Filesystem.*delete|content://[^ ]*delet|removed.*\.apk|file_remove' \
+    DEL_EVENTS=$(timeout 5 logcat -d 2>/dev/null | grep -iE 'deletePackage|deleteFile|MediaStore.*delete|Filesystem.*delete|content://[^ ]*delet|removed.*\.apk|file_remove' \
         | grep -viE 'FASProvider|deleted_from_mars|mars_auto' | head -n 20)
     if [ -n "$DEL_EVENTS" ]; then
         # filtrar só eventos com nome suspeito
@@ -4496,7 +4496,7 @@ for CATEGORY in "FF:$FF_BUNDLES_LOCAL" "CAMERA:$CAM_BUNDLES" "GALERIA:$GAL_BUNDL
         fi
         # 3) Logcat crash buffer
         if have logcat; then
-            LC_HIT=$(logcat -d -b crash 2>/dev/null | grep -iE "FATAL.*$PKG|tombstone.*$PKG" | head -3)
+            LC_HIT=$(timeout 5 logcat -d -b crash 2>/dev/null | grep -iE "FATAL.*$PKG|tombstone.*$PKG" | head -3)
             if [ -n "$LC_HIT" ]; then
                 echo "$LC_HIT" | while IFS= read -r L; do
                     [ -n "$L" ] && alert "[$CAT_NAME] logcat crash de $PKG: $(echo "$L" | head -c 150)"
