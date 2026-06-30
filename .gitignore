@@ -16,3 +16,6 @@ obfuscated-scanner.zip
 engine-key.enc
 engine-signing-ed25519.pem
 *.pem
+
+# chave PUBLICA do engine (NAO e segredo) — versionada de proposito p/ o guard
+!keys/engine-pub.pem
