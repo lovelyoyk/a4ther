@@ -122,6 +122,98 @@ exists() { [ -e "$1" ]; }
 pkg_installed() {
     have pm && pm path "$1" 2>/dev/null | grep -q '^package:'
 }
+# ── v4.4.99: NOME (label) do app + PRELOAD OEM (anti-FP de sideload) ──────────
+# Objetivo forense: (a) mostrar o NOME de biblioteca ao lado do pacote no relatório
+# — "com.dts.freefireth (Free Fire)" — dispensando um "lib checker" externo; (b) ZERAR
+# o falso-positivo de sideload em apps de FÁBRICA (Samsung/Xiaomi/Redmi/Oppo/Realme/
+# Vivo/Moto/Honor/etc.) SEM abrir brecha p/ cheat disfarçado — a liberação usa SÓ sinais
+# de sistema NÃO-FORJÁVEIS (partição de sistema / pkgFlags SYSTEM / lista `pm -s`), nunca o
+# namespace ou o installerPackageName (ambos forjáveis por app de usuário). O namespace OEM
+# SEM lastro de sistema é tratado como DISFARCE (detecção), não liberação. Ver [[forense.md]].
+
+# namespace de vendor OEM conhecido — usado p/ DETECTAR disfarce (app com nome de fábrica mas
+# SEM lastro de sistema), NUNCA p/ liberar. Ver o loop SIDELOAD GLOBAL.
+is_oem_ns() {
+    case "$1" in
+        com.samsung.*|com.sec.*|com.miui.*|com.xiaomi.*|com.mi.*|com.redmi.*|com.oplus.*|\
+        com.oppo.*|com.coloros.*|com.realme.*|com.heytap.*|com.oneplus.*|com.vivo.*|\
+        com.bbk.*|com.iqoo.*|com.motorola.*|com.moto.*|com.lenovo.*|com.zui.*|com.huawei.*|\
+        com.hihonor.*|com.honor.*|com.transsion.*|com.infinix.*|com.tecno.*|com.itel.*|\
+        com.asus.*|com.sonymobile.*|com.sony.*|com.lge.*|com.tcl.*|com.nothing.*|com.fih.*) return 0 ;;
+    esac
+    return 1
+}
+# is_oem_preload $pkg $installer $apath → 0 (benigno = preload de fábrica) / 1 (sideload real).
+# v4.4.99 (hardening pós-review adversarial): SÓ libera com sinais NÃO-FORJÁVEIS por app de
+# usuário sem root. NÃO usa namespace nem installerPackageName como âncora — ambos são forjáveis
+# (`adb install -i <loja>` seta qualquer installer; renomear o pacote p/ com.samsung.* é trivial).
+# O namespace OEM sem lastro vira DETECÇÃO (disfarce), não liberação — ver o loop SIDELOAD GLOBAL.
+is_oem_preload() {
+    _p="$1"; _ap="$3"
+    # (1) APK em partição de sistema/OEM = preload de fábrica (sem root não se escreve lá)
+    case "$_ap" in
+        /system/*|/system_ext/*|/product/*|/vendor/*|/apex/*|/odm/*|/oem/*|/oob/*|\
+        /prism/*|/optics/*|/preload/*|/cust/*|/my_*/*|/product_h/*|/region/*|/carrier/*) return 0 ;;
+    esac
+    # (2) FLAG SYSTEM/UPDATED_SYSTEM_APP no dumpsys = system app MESMO já atualizado p/ /data/app
+    #     (só a imagem de sistema seta; app de usuário não forja). Pega o Samsung Tips atualizado.
+    if have dumpsys; then
+        case "$(dumpsys package "$_p" 2>/dev/null | grep -m1 'pkgFlags=')" in
+            *SYSTEM*) return 0 ;;
+        esac
+    fi
+    # (3) classificação SYSTEM do próprio PackageManager (`pm list packages -s`, pré-computada em
+    #     $_SYS_PKGS) — inclui updated-system-apps realocados p/ /data/app. Match de LINHA EXATA
+    #     (grep -qxF) p/ não casar prefixo de outro pacote do mesmo vendor. Não-forjável sem root.
+    printf '%s\n' "$_SYS_PKGS" | grep -qxF "package:$_p" && return 0
+    return 1
+}
+# pkg_label $pkg → NOME humano (mapa curado → aapt real → vazio). pkg_show → "pkg (Nome)".
+pkg_label() {
+    case "$1" in
+        com.dts.freefireth) echo "Free Fire"; return ;;
+        com.dts.freefiremax) echo "Free Fire MAX"; return ;;
+        com.garena.game.kgvn|com.garena.game.kgid|com.garena.game.kgtw|com.garena.game.kgth) echo "Free Fire (Garena regional)"; return ;;
+        com.proxy.free) echo "ProxyFree — CHEAT root Trade-In"; return ;;
+        com.ffh4x*) echo "FFH4X — mod menu/cheat FF"; return ;;
+        com.panelff.app) echo "Panel FF — painel de cheat"; return ;;
+        com.op999.injector) echo "OP999 Injector — cheat FF"; return ;;
+        com.teambot.injector) echo "TeamBot Injector — cheat FF"; return ;;
+        com.tb71.injector) echo "TB71 Injector — cheat FF"; return ;;
+        com.ng.injector) echo "NG Injector — cheat FF"; return ;;
+        com.novaesp) echo "Nova ESP — wallhack FF"; return ;;
+        tn.loukious.fakerunlocker) echo "Fake Run Locker — cheat FF"; return ;;
+        com.ff.injector) echo "FF Injector — painel de cheat FF"; return ;;
+        com.anydesk.anydeskandroid) echo "AnyDesk — controle remoto"; return ;;
+        com.carriez.flutter_hbb) echo "RustDesk — controle remoto"; return ;;
+        com.koushikdutta.vysor) echo "Vysor — espelhamento/controle"; return ;;
+        com.teamviewer.quicksupport.market|com.teamviewer.teamviewer.market.mobile) echo "TeamViewer — controle remoto"; return ;;
+        com.sand.airdroid|com.sand.airmirror) echo "AirDroid/AirMirror — controle remoto"; return ;;
+        com.apowersoft.mirror) echo "ApowerMirror — espelhamento"; return ;;
+        com.splashtop.remote.pad.v2) echo "Splashtop — controle remoto"; return ;;
+        com.lbe.parallel*|com.parallel.space*) echo "Parallel Space — clonador de app"; return ;;
+        com.ludashi.dualspace) echo "Dual Space — clonador de app"; return ;;
+        com.excelliance.dualaid) echo "Dual App — clonador"; return ;;
+        io.virtualapp|com.icecold.gomultiple|com.cloneapp*) echo "VirtualApp — clonador"; return ;;
+        com.topjohnwu.magisk|io.github.huskydg.magisk) echo "Magisk — root/hide"; return ;;
+        org.lsposed.manager|io.github.lsposed.manager) echo "LSPosed — framework de hook"; return ;;
+        moe.shizuku.privileged.api) echo "Shizuku — foothold ADB/shell"; return ;;
+        com.termux) echo "Termux — terminal Linux"; return ;;
+        ru.zdevs.zarchiver) echo "ZArchiver — gerenciador de arquivos"; return ;;
+    esac
+    # aapt/aapt2 do APK real — só quando a ferramenta existe (Termux nativo com `pkg install aapt`)
+    if have aapt2 || have aapt; then
+        _lp=$(pm path "$1" 2>/dev/null | sed -n 's/^package://p' | head -1)
+        if [ -n "$_lp" ] && [ -r "$_lp" ]; then
+            _bd=$(aapt2 dump badging "$_lp" 2>/dev/null || aapt dump badging "$_lp" 2>/dev/null)
+            _lbl=$(printf '%s\n' "$_bd" | sed -n "s/^application-label:'\(.*\)'.*/\1/p" | head -1)
+            [ -n "$_lbl" ] && { echo "$_lbl"; return; }
+        fi
+    fi
+    echo ""
+}
+pkg_show() { _pl=$(pkg_label "$1"); if [ -n "$_pl" ]; then printf '%s (%s)' "$1" "$_pl"; else printf '%s' "$1"; fi; }
+# ─────────────────────────────────────────────────────────────────────────────
 # v4.4.70: KB → tamanho legível (GB/MB/KB). Usado no cálculo do tamanho REAL do FF
 # (APK + OBB + Data somados).
 human_kb() {
@@ -1448,7 +1540,7 @@ fi
 
 # logcat ring buffer crash (window curto mas alta confidence)
 if have logcat; then
-    LOGCAT_CHEAT=$(logcat -d -b crash 2>/dev/null | grep -iE '(libfrida|libsubstrate|libdobby|libxhook|gum-js|FATAL.*com\.dts\.freefire|injector\.so|tweak\.so)' | head -5)
+    LOGCAT_CHEAT=$(timeout 5 logcat -d -b crash 2>/dev/null | grep -iE '(libfrida|libsubstrate|libdobby|libxhook|gum-js|FATAL.*com\.dts\.freefire|injector\.so|tweak\.so)' | head -5)
     if [ -n "$LOGCAT_CHEAT" ]; then
         echo "$LOGCAT_CHEAT" | while IFS= read -r L; do alert "logcat crash: $(echo "$L" | head -c 150)"; done
         DFIR_HITS=$((DFIR_HITS+1))
@@ -1857,7 +1949,9 @@ _sl_classify() {  # $1=pacote  $2=installer  → ecoa "pacote|installer" se for 
         # ── Allowlist: lojas oficiais (Play + OEMs) = legítimo, ignora ──
         com.android.vending|com.google.android.feedback|com.amazon.venezia|\
         com.sec.android.app.samsungapps|com.huawei.appmarket|com.xiaomi.mipicks|\
-        com.heytap.market|com.oppo.market|com.vivo.appstore|com.bbk.appstore|com.transsion.phoenix) ;;
+        com.heytap.market|com.oppo.market|com.vivo.appstore|com.bbk.appstore|\
+        com.transsion.phoenix|com.hihonor.appmarket|com.honor.global|\
+        com.lenovo.leos.appstore|com.zui.market|com.oneplus.market) ;;
         # ── Sideload EXPLÍCITO: null / instalador manual / browser / file manager
         #    / adb shell / loja de terceiro = SUSPEITO ──
         null|""|com.google.android.packageinstaller|com.android.packageinstaller|\
@@ -1871,29 +1965,49 @@ _sl_classify() {  # $1=pacote  $2=installer  → ecoa "pacote|installer" se for 
 }
 header "SIDELOAD GLOBAL (origem dos apps de terceiros)"
 if have pm; then
+    # v4.4.99: âncora anti-spoof do is_oem_preload — lista SYSTEM (inclui updated-system-apps).
+    _SYS_PKGS=$(pm list packages -s 2>/dev/null)
     SIDELOADED=$(pm list packages -i -3 2>/dev/null | while IFS= read -r LINE; do
         APP=$(echo "$LINE"  | sed -n 's/^package:\([^ ]*\).*/\1/p')
         INST=$(echo "$LINE" | sed -n 's/.*installer=\([^ ]*\).*/\1/p')
         [ -z "$APP" ] && continue
-        # FP real-device (v4.4.99): installer=null é o NORMAL de app PRÉ-INSTALADO — na MIUI
-        # apps como com.miui.calculator / com.android.deskclock aparecem no -3 mas vivem em
-        # /product|/system_ext. Só tratamos null como suspeito se o APK estiver em /data/app
-        # (instalação manual/adb real); em partição de sistema = preinstalado → ignora. Installer
-        # EXPLÍCITO (packageinstaller/browser/adb) segue flagrado pelo _sl_classify (sideload real).
-        if [ -z "$INST" ] || [ "$INST" = "null" ]; then
+        # v4.4.99 (hardening pós-review Fable 5): a DECISÃO de origem usa só sinal NÃO-FORJÁVEL.
+        # (1) DISFARCE primeiro — app de 3rd-party vestindo NAMESPACE de fábrica (com.samsung.*/
+        # com.miui.*/…). Só é benigno se tiver LASTRO de sistema (is_oem_preload: partição /
+        # pkgFlags SYSTEM / lista `pm -s`). Sem lastro = masquerade, INDEPENDENTE do installer —
+        # roda ANTES do _sl_classify p/ fechar o vetor "rename com.samsung.* + adb install -i
+        # <installer inventado>" (que o _sl_classify descartaria como installer desconhecido).
+        # Namespace OEM é controlado (Play barra publicar em domínio alheio) → FP ~nulo; e OEM
+        # REAL nunca cai aqui (tem lastro → suprimido). O install pega o app OEM ATUALIZADO p/
+        # /data/app (ex.: Samsung Tips) via pkgFlags/`pm -s`, que o check de partição só perdia.
+        if is_oem_ns "$APP"; then
             APATH=$(pm path "$APP" 2>/dev/null | head -1 | sed 's/^package://')
-            case "$APATH" in
-                /system/*|/system_ext/*|/product/*|/vendor/*|/apex/*|/odm/*|/oem/*) continue ;;
-            esac
+            is_oem_preload "$APP" "$INST" "$APATH" && continue
+            echo "D|$APP|${INST:-null}"
+            continue
         fi
-        _sl_classify "$APP" "$INST"
+        # (2) Sideload comum — origem explícita fora de loja (via _sl_classify). Installer
+        # desconhecido NÃO acusa (design v4.4.88 anti-FP-em-massa). Candidato ainda passa pela
+        # supressão de preload OEM por sinal não-forjável (~1 dumpsys por candidato, no máx.).
+        CAND=$(_sl_classify "$APP" "$INST")
+        [ -z "$CAND" ] && continue
+        APATH=$(pm path "$APP" 2>/dev/null | head -1 | sed 's/^package://')
+        is_oem_preload "$APP" "$INST" "$APATH" && continue
+        echo "S|$CAND"
     done | sort -u)
     if [ -n "$SIDELOADED" ]; then
-        printf '%s\n' "$SIDELOADED" | while IFS='|' read -r APP INST; do
-            [ -n "$APP" ] && warn "[SUSPEITO] App instalado via Sideload (Fora da Loja): $APP (installer: $INST)"
+        printf '%s\n' "$SIDELOADED" | while IFS='|' read -r KIND APP INST; do
+            [ -z "$APP" ] && continue
+            # v4.4.99: mostra o NOME do app da biblioteca junto do pacote (dispensa lib checker).
+            _NM=$(pkg_label "$APP"); [ -z "$_NM" ] && _NM="nome não resolvido — ver na biblioteca de apps"
+            case "$KIND" in
+                # DISFARCE: namespace de fábrica sem lastro de sistema — sinal mais forte.
+                D) warn "[SUSPEITO] Namespace de FÁBRICA sem lastro de sistema (possível DISFARCE de preload OEM): $APP  →  \"$_NM\"  (installer: ${INST:-null})" ;;
+                *) warn "[SUSPEITO] App via Sideload (fora de loja/OEM): $APP  →  \"$_NM\"  (installer: ${INST:-null})" ;;
+            esac
         done
     else
-        ok "Nenhum app de terceiro com origem suspeita (todos via loja oficial)"
+        ok "Nenhum app de terceiro com origem suspeita (todos via loja oficial/OEM)"
     fi
 else
     info "pm indisponível — sideload global não verificado"
@@ -1972,7 +2086,7 @@ fi
 if have logcat; then
     # v4.4.75: sort -u dedupa eventos idênticos repetidos no buffer (o logcat events
     # repete a mesma linha de pkg/job em loop) — antes floodava a saída.
-    PKG_EVENTS=$(logcat -b events -d 2>/dev/null | grep -iE 'pkg_install|pkg_uninstall|package_added|package_removed|installer' | sort -u | head -n 30)
+    PKG_EVENTS=$(timeout 5 logcat -b events -d 2>/dev/null | grep -iE 'pkg_install|pkg_uninstall|package_added|package_removed|installer' | sort -u | head -n 30)
     if [ -n "$PKG_EVENTS" ]; then
         # filtrar FF e cheats
         FF_LOGEV=$(echo "$PKG_EVENTS" | grep -iE 'freefire|dts\.freefire|garena|cheat|hack|mod|aimbot|esp|frida|magisk|holograma|hologram' | sort -u)
@@ -2799,7 +2913,7 @@ MEM_PKGS="com.gameguardian com.gg.intersec gg.intersec catch_.me_.if_.you_.can_ 
 # Virtual sandboxes (permitem GG sem root — vetor stealth 2026)
 VSPACE_PKGS="io.virtualapp com.lbe.parallel.intl com.parallel.space.lite com.excelliance.dualaid com.ludashi.dualspace com.icecold.gomultiple me.weishu.exp"
 for PKG in $VSPACE_PKGS; do
-    [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Virtual sandbox (permite GG sem root): $PKG"; MEM_HITS=$((MEM_HITS+1)); }
+    [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Virtual sandbox (permite GG sem root): $(pkg_show "$PKG")"; MEM_HITS=$((MEM_HITS+1)); }
 done
 # FFH4X family + injectors Android FF 2026
 # v4.4.89: keymappers/mapeamento de tela (mantis gamepad/mouse) SAÍRAM daqui — não são
@@ -2807,7 +2921,7 @@ done
 # Aqui ficam SÓ injetores/painéis reais.
 FFCHEAT_PKGS="com.ffh4x com.ff.injector com.op999.injector com.teambot.injector com.tb71.injector com.ng.injector com.panelff.app com.novaesp tn.loukious.fakerunlocker"
 for PKG in $FFCHEAT_PKGS; do
-    [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Cheat injector/painel FF: $PKG"; MEM_HITS=$((MEM_HITS+1)); }
+    [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && { alert "Cheat injector/painel FF: $(pkg_show "$PKG")"; MEM_HITS=$((MEM_HITS+1)); }
 done
 MEM_HITS=0
 if [ -n "$ALL_PKGS" ]; then
@@ -2963,7 +3077,7 @@ fi
 
 # Eventos am_resume_activity de file managers no logcat
 if have logcat; then
-    RES_EVENTS=$(logcat -b events -d 2>/dev/null | grep -iE 'am_activity_resume|am_resume_activity' | grep -iE 'filemanager|fileexplorer|zarchiver|myfiles|documentsui|estrongs|xplore|amaze|solidexplorer|astro' | tail -n 15)
+    RES_EVENTS=$(timeout 5 logcat -b events -d 2>/dev/null | grep -iE 'am_activity_resume|am_resume_activity' | grep -iE 'filemanager|fileexplorer|zarchiver|myfiles|documentsui|estrongs|xplore|amaze|solidexplorer|astro' | tail -n 15)
     if [ -n "$RES_EVENTS" ]; then
         info "Eventos de file manager no logcat (am_resume_activity):"
         echo "$RES_EVENTS" | while IFS= read -r L; do
@@ -3237,7 +3351,7 @@ for PKG in com.anydesk.anydeskandroid com.carriez.flutter_hbb \
            com.sand.airdroid com.sand.airmirror \
            com.apowersoft.mirror com.splashtop.remote.pad.v2; do
     echo "$ALL_PKGS" | grep -q "^package:${PKG}$" && {
-        alert "App de controle remoto/espelhamento: $PKG"; REMOTE_HITS=$((REMOTE_HITS+1)); }
+        alert "App de controle remoto/espelhamento: $(pkg_show "$PKG")"; REMOTE_HITS=$((REMOTE_HITS+1)); }
 done
 for ENTRY in \
     "/storage/emulated/0/anydesk|AnyDesk (controle remoto)" \
@@ -3527,7 +3641,7 @@ if have logcat; then
     # FP real-device (MIUI): 'content.*deleted' casava 'contentValues=…deleted_from_mars_auto'
     # do FASProvider — auto-gerência de apps da MIUI (MARS/FAS), benigna. Ancorado a
     # content:// + exclui FASProvider/mars (não é deleção de evidência de cheat).
-    DEL_EVENTS=$(logcat -d 2>/dev/null | grep -iE 'deletePackage|deleteFile|MediaStore.*delete|Filesystem.*delete|content://[^ ]*delet|removed.*\.apk|file_remove' \
+    DEL_EVENTS=$(timeout 5 logcat -d 2>/dev/null | grep -iE 'deletePackage|deleteFile|MediaStore.*delete|Filesystem.*delete|content://[^ ]*delet|removed.*\.apk|file_remove' \
         | grep -viE 'FASProvider|deleted_from_mars|mars_auto' | head -n 20)
     if [ -n "$DEL_EVENTS" ]; then
         # filtrar só eventos com nome suspeito
@@ -4496,7 +4610,7 @@ for CATEGORY in "FF:$FF_BUNDLES_LOCAL" "CAMERA:$CAM_BUNDLES" "GALERIA:$GAL_BUNDL
         fi
         # 3) Logcat crash buffer
         if have logcat; then
-            LC_HIT=$(logcat -d -b crash 2>/dev/null | grep -iE "FATAL.*$PKG|tombstone.*$PKG" | head -3)
+            LC_HIT=$(timeout 5 logcat -d -b crash 2>/dev/null | grep -iE "FATAL.*$PKG|tombstone.*$PKG" | head -3)
             if [ -n "$LC_HIT" ]; then
                 echo "$LC_HIT" | while IFS= read -r L; do
                     [ -n "$L" ] && alert "[$CAT_NAME] logcat crash de $PKG: $(echo "$L" | head -c 150)"
