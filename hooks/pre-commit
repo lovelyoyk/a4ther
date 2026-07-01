@@ -1,0 +1,23 @@
+#!/bin/sh
+# pre-commit (VERIFY-ONLY) — o "porteiro".
+# Bloqueia o commit se a a4ther.sh staged NAO bater com o a4ther.sh.sig staged.
+# So CONFERE (chave PUBLICA em keys/engine-pub.pem) — NUNCA toca na chave privada.
+# Esqueceu de re-assinar? rode ./sign.sh e commite de novo.
+git diff --cached --name-only | grep -qx 'a4ther.sh' || exit 0
+ROOT=$(git rev-parse --show-toplevel)
+PUB="$ROOT/keys/engine-pub.pem"
+TS=$(mktemp); TG=$(mktemp)
+git show :a4ther.sh > "$TS" 2>/dev/null
+git show :a4ther.sh.sig > "$TG" 2>/dev/null || {
+  echo "pre-commit: a4ther.sh mudou mas a4ther.sh.sig NAO esta staged. -> rode ./sign.sh"
+  rm -f "$TS" "$TG"; exit 1
+}
+if openssl pkeyutl -verify -pubin -inkey "$PUB" -rawin -in "$TS" -sigfile "$TG" >/dev/null 2>&1; then
+  rm -f "$TS" "$TG"
+  echo "pre-commit: lacre da a4ther.sh OK."
+  exit 0
+fi
+rm -f "$TS" "$TG"
+echo "pre-commit: BLOQUEADO — o .sig NAO bate com a a4ther.sh."
+echo "  Voce editou a engine e esqueceu de re-assinar. -> rode:  ./sign.sh   e commite de novo."
+exit 1

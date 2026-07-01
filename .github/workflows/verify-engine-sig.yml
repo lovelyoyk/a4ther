@@ -1,0 +1,17 @@
+name: verify-engine-sig
+# O "fiscal": falha o push/PR se a a4ther.sh nao bater com o a4ther.sh.sig.
+# So usa a chave PUBLICA (keys/engine-pub.pem) — NENHUM segredo no CI.
+on:
+  push:
+    paths: [a4ther.sh, a4ther.sh.sig, keys/engine-pub.pem]
+  pull_request:
+    paths: [a4ther.sh, a4ther.sh.sig, keys/engine-pub.pem]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verifica o lacre Ed25519 da engine (sem segredo)
+        run: |
+          openssl pkeyutl -verify -pubin -inkey keys/engine-pub.pem \
+            -rawin -in a4ther.sh -sigfile a4ther.sh.sig
