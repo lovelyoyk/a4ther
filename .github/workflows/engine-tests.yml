@@ -1,0 +1,28 @@
+name: engine-tests
+# Harness de regressão das funções de detecção do a4ther.sh (sh + dash) + sintaxe/LF puro.
+# Objetivo: um FALSO-POSITIVO numa função de detecção vira FALHA de CI (ver tests/README.md).
+# Sem segredo — roda tudo em ubuntu, sem device.
+on:
+  push:
+    paths: [a4ther.sh, 'tests/**', '.github/workflows/engine-tests.yml']
+  pull_request:
+    paths: [a4ther.sh, 'tests/**', '.github/workflows/engine-tests.yml']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: instala dash
+        run: sudo apt-get update && sudo apt-get install -y dash
+      - name: sintaxe (sh -n + dash -n)
+        run: |
+          sh -n a4ther.sh
+          dash -n a4ther.sh
+      - name: LF puro (0 bytes CR)
+        run: |
+          n=$(tr -cd '\r' < a4ther.sh | wc -c)
+          [ "$n" = 0 ] || { echo "a4ther.sh tem $n bytes CR (esperado 0 — o .sig quebra com CRLF)"; exit 1; }
+      - name: harness de regressão (sh)
+        run: sh tests/run.sh
+      - name: harness de regressão (dash)
+        run: dash tests/run.sh
