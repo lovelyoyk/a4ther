@@ -1,7 +1,7 @@
 # RELEASING — como editar e subir o engine (deploy seguro)
 
 > Guia pro time (sócio) editar o `a4ther.sh`, re-criptografar/ofuscar e subir o deploy
-> **sem quebrar a assinatura nem a integridade**. Atualizado em 2026-06-23.
+> **sem quebrar a assinatura nem a integridade**. Atualizado em 2026-07-01.
 
 ## ⛔ Regra 0 — sempre `git pull` antes de trabalhar
 Antes de tocar em qualquer arquivo: `git pull`. E `git pull` de novo antes do `push`.
@@ -21,7 +21,7 @@ A `.sig`, o `.enc` e o bundle dependem dos **bytes EXATOS** do `a4ther.sh`. Mudo
 
 ## 🔑 Pré-requisitos (segredos — nunca no repo)
 1. **`.env.local`** com `FF_PASSPHRASE=...` (passphrase de produção do `.enc`). Já gitignored.
-2. **Chave de assinatura Ed25519** (`engine-signing-ed25519.pem`). Você recebe do Kaio
+2. **Chave de assinatura Ed25519** (`engine-signing-ed25519.pem`). Você recebe do **custodiante da chave**
    **cifrada** (`engine-key.enc`) + a senha por canal separado:
    ```sh
    openssl enc -d -aes-256-cbc -pbkdf2 -iter 100000 -in engine-key.enc -out engine-signing-ed25519.pem
@@ -58,7 +58,13 @@ tr -cd '\r' < a4ther.sh | wc -c     # tem que dar 0 (LF puro)
 # idem pra a4ther-adb.sh.enc se mexer no a4ther-adb.sh
 ```
 
-### 5. Re-assinar (Ed25519 `.sig`)
+### 5. Re-assinar (Ed25519 `.sig`) — use o `sign.sh` (re-sign em 1 comando)
+
+> O `main` já tem o **guard anti-`.sig`-stale** (commit `168313c`): `hooks/pre-commit` e o CI
+> `verify-engine-sig.yml` são **verify-only** (bloqueiam `.sig` desalinhado, mas **NÃO** auto-assinam),
+> e `keys/engine-pub.pem` é a pública versionada. O caminho normal é rodar `A4_ENGINE_KEY=<sua chave> ./sign.sh`
+> (assina + já verifica). **A chave privada vive só na máquina do custodiante** — assine lá, nunca numa máquina de dev genérica.
+> O passo manual via `openssl` abaixo é fallback:
 ```sh
 openssl pkeyutl -sign -inkey engine-signing-ed25519.pem -rawin -in a4ther.sh -out a4ther.sh.sig
 wc -c a4ther.sh.sig    # = 64
@@ -95,9 +101,9 @@ direto no `main`. Branch → PR → revisa → merge. O **merge no `main` É o d
 - `.enc` e `.sig` são dos **bytes EXATOS** do `a4ther.sh` — mudou? refaz 4, 5 e 6.
 - `.gitattributes` garante `eol=lf` no `a4ther.sh` e `binary` no `.sig` — sem isso, um
   checkout Windows muda os bytes e a assinatura quebra.
-- Se desconfiar de vazamento da chave privada → **rotaciona** (Kaio gera par novo, troca a
+- Se desconfiar de vazamento da chave privada → **rotaciona** (o custodiante gera par novo, troca a
   pubkey no APK, reassina).
 
 ## Versão
 Fonte da verdade = `const VERSION` no `index.html` (o `build.sh` lê dali). Hoje o
-`index.html` está **4.4.96** e o `a4ther.sh` **4.4.95** — **alinhar** antes do próximo release.
+`a4ther.sh` no `main` está **4.4.98** (com feature marcada `# v4.4.99`) — mantenha o `VERSION`/banner e os literais de versão do ecossistema **alinhados** a cada bump.
