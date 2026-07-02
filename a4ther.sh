@@ -1587,19 +1587,25 @@ if have dumpsys; then
     if [ -n "$APPOPS_STORAGE" ]; then
         echo "$APPOPS_STORAGE" | while IFS= read -r PKG; do
             [ -z "$PKG" ] && continue
+            # v4.4.101: file managers/editores 3rd-party LEGÍTIMOS (não-system) por NOME EXATO.
             case "$PKG" in
-                # Whitelist: apps system + file managers reais + IDEs
-                com.android.*|com.google.android.*|com.miui.*|com.samsung.android.*|\
-                com.sec.android.*|com.huawei.*|com.oppo.*|com.coloros.*|com.realme.*|\
                 com.mi.android.globalFileexplorer|com.alphainventor.filemanager|\
                 com.amaze.filemanager|com.simplemobiletools.filemanager|com.android.documentsui|\
                 com.termux|org.lsposed.manager|me.zhanghai.android.files|\
                 org.jellyfin.mobile|org.videolan.vlc|com.estrongs.android.pop|\
-                com.lonelycatgames.Xplore|com.solidexplorer2) ;;
-                # Cheat-related KNOWN: alert imediato
+                com.lonelycatgames.Xplore|com.solidexplorer2) continue ;;
+            esac
+            # v4.4.101: a whitelist de NAMESPACE OEM crua (com.miui.*/com.samsung.android.*...) era
+            # FORJÁVEL e SOMBREAVA o alerta de cheat conhecido (com.miui.hologram era liberado ANTES
+            # do *hologram*). Agora: preload de sistema REAL (is_oem_preload) libera — rodando ANTES
+            # dos tokens de cheat, protege app de sistema legítimo do *panel*/*hologram*; disfarce
+            # em namespace de fábrica (/data, sem lastro) cai no alerta/warn abaixo.
+            is_oem_preload "$PKG" "" "$(pm path "$PKG" 2>/dev/null | head -1 | sed 's/^package://')" && continue
+            case "$PKG" in
+                # Cheat-related KNOWN: alert imediato (não mais sombreado pela whitelist OEM)
                 *holograma*|*hologram*|*ffh4x*|*aimbot*|*cheat*|*injector*|*modbibi*|*xyzapk*|*modcombo*|*panel*)
                     alert "App SUSPEITO com MANAGE_EXTERNAL_STORAGE (edita /Android/data do FF): $PKG" ;;
-                # Outros 3rd party: warn (pode ser legítimo, mas atípico)
+                # Outros 3rd party não-system: warn (pode ser legítimo, mas atípico)
                 *)
                     warn "App não-system com MANAGE_EXTERNAL_STORAGE: $PKG (verifica se edita pasta do FF)" ;;
             esac
@@ -3256,20 +3262,36 @@ DA_HITS=0
 if have dumpsys; then
     DA_INFO=$(dumpsys device_policy 2>/dev/null)
     if [ -n "$DA_INFO" ]; then
-        ACTIVE=$(echo "$DA_INFO" | grep -E 'Active admin|ComponentName=' | head -n 15)
+        ACTIVE=$(echo "$DA_INFO" | grep -E 'Active admin|ComponentName=|ComponentInfo\{' | head -n 15)
         if [ -n "$ACTIVE" ]; then
             echo "$ACTIVE" | while IFS= read -r L; do
                 [ -z "$L" ] && continue
-                # filtrar admins legítimos (Google/Android/Samsung Find My Mobile etc.)
-                case "$L" in
-                    *com.google.android.apps.work*|*com.google.android.gms*|\
-                    *com.samsung.android.lool*|*com.samsung.android.knox*|\
-                    *com.android.*|*com.miui.securitycenter*)
-                        info "  admin: $(echo "$L" | head -c 140)" ;;
-                    *)
-                        warn "  admin de 3rd party: $(echo "$L" | head -c 140)"
-                        DA_HITS=$((DA_HITS+1)) ;;
-                esac
+                # v4.4.101: era whitelist por SUBSTRING DA LINHA (`*com.android.*`) — 2 bugs: (a)
+                # FORJÁVEL (rename p/ com.miui.securitycenter escapava); (b) FN REAL: um admin
+                # malicioso cuja CLASSE contém com.android. (ex.: com.evil.app/com.android.Admin)
+                # casava `*com.android.*` e virava `info`. Agora extrai o PACOTE do ComponentName
+                # (pkg/cls) e decide por is_oem_preload (device-admin = vetor de persistência).
+                # v4.4.101 (fix Fable 5): a CLASSE pode vir RELATIVA (flattenToShortString abrevia
+                # p/ `pkg/.Cls` quando a classe é do próprio pacote = o DEFAULT, escolha do atacante)
+                # → regex aceita classe começando com `.`. Se a linha tem `/` mas não parseou =
+                # FAIL-CLOSED (warn), nunca info (o info era fail-open p/ admin malicioso).
+                DA_PKG=$(echo "$L" | grep -oE '[a-zA-Z][a-zA-Z0-9_.]+/[.a-zA-Z][a-zA-Z0-9_.$]*' | head -1 | cut -d/ -f1)
+                if [ -z "$DA_PKG" ]; then
+                    case "$L" in
+                        */*) warn "  admin device-policy não-parseável (revisar): $(echo "$L" | head -c 140)"; DA_HITS=$((DA_HITS+1)) ;;
+                        *)   info "  admin: $(echo "$L" | head -c 140)" ;;   # header/linha sem componente
+                    esac
+                    continue
+                fi
+                # v4.4.101 (fix Fable 5): NÃO liberar por nome forjável. Os admins OEM genuínos
+                # (Find My Device/Device Care/Security Center) são SYSTEM → caem no is_oem_preload
+                # abaixo (não-forjável). Único mantido por nome = clouddpc (MDM corporativo, é o
+                # único legítimo NÃO-preload) — residual estreito; ancorar por cert num follow-up.
+                [ "$DA_PKG" = "com.google.android.apps.work.clouddpc" ] && { info "  admin: $DA_PKG (Android Device Policy/MDM)"; continue; }
+                is_oem_preload "$DA_PKG" "" "$(pm path "$DA_PKG" 2>/dev/null | head -1 | sed 's/^package://')" \
+                    && { info "  admin (sistema): $DA_PKG"; continue; }
+                warn "  admin de 3rd party (device-admin — vetor de persistência de RAT/cheat): $DA_PKG"
+                DA_HITS=$((DA_HITS+1))
             done
         fi
     fi
