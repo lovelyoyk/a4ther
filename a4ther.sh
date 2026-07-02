@@ -343,6 +343,10 @@ show ""
 # Pre-cache: lista de pacotes (usado por várias seções)
 ALL_PKGS=""
 have pm && ALL_PKGS=$(pm list packages 2>/dev/null)
+# v4.4.100: lista SYSTEM computada UMA vez (âncora NÃO-FORJÁVEL do is_oem_preload) — reusada no
+# SIDELOAD e nos portões de overlay/accessibility. Inclui updated-system-apps realocados p/ /data/app.
+_SYS_PKGS=""
+have pm && _SYS_PKGS=$(pm list packages -s 2>/dev/null)
 
 FF_PKGS="com.dts.freefireth com.dts.freefiremax com.garena.game.kgvn com.garena.game.kgid com.garena.game.kgtw com.garena.game.kgth"
 
@@ -1561,10 +1565,15 @@ if have dumpsys; then
         PKGS_WITH_OVERLAY=$(dumpsys appops 2>/dev/null | grep -B100 'SYSTEM_ALERT_WINDOW: allow' | grep -E '^[a-zA-Z0-9_\.]+\s*:\s*\(uid=' 2>/dev/null | awk '{print $1}' | sort -u | head -10)
         echo "$PKGS_WITH_OVERLAY" | while IFS= read -r PKG; do
             [ -z "$PKG" ] && continue
+            # v4.4.100: era whitelist de NAMESPACE cru (com.miui.*/com.samsung.*...), FORJÁVEL —
+            # cheat renomeado p/ com.miui.overlay casava e escapava (mesma classe do fix Fable-5/
+            # sideload). Agora libera só preload de sistema NÃO-FORJÁVEL (is_oem_preload: partição /
+            # pkgFlags SYSTEM / `pm -s`); OEM real segue benigno, disfarce cai no warn.
             case "$PKG" in
-                # Whitelist apps system + FF
-                com.android.*|com.google.*|com.miui.*|com.samsung.*|com.dts.freefiremax|com.dts.freefireth) ;;
-                *) warn "App com permissão SYSTEM_ALERT_WINDOW (overlay): $PKG" ;;
+                com.dts.freefiremax|com.dts.freefireth|android) ;;   # FF + framework
+                *)
+                    is_oem_preload "$PKG" "" "$(pm path "$PKG" 2>/dev/null | head -1 | sed 's/^package://')" \
+                        || warn "App com permissão SYSTEM_ALERT_WINDOW (overlay): $PKG" ;;
             esac
         done
     fi
@@ -1965,8 +1974,8 @@ _sl_classify() {  # $1=pacote  $2=installer  → ecoa "pacote|installer" se for 
 }
 header "SIDELOAD GLOBAL (origem dos apps de terceiros)"
 if have pm; then
-    # v4.4.99: âncora anti-spoof do is_oem_preload — lista SYSTEM (inclui updated-system-apps).
-    _SYS_PKGS=$(pm list packages -s 2>/dev/null)
+    # v4.4.100: _SYS_PKGS agora é GLOBAL (computado 1x no topo, ~l.348) — reusado aqui e nos
+    # portões de overlay/accessibility, evitando recomputar `pm list packages -s`.
     SIDELOADED=$(pm list packages -i -3 2>/dev/null | while IFS= read -r LINE; do
         APP=$(echo "$LINE"  | sed -n 's/^package:\([^ ]*\).*/\1/p')
         INST=$(echo "$LINE" | sed -n 's/.*installer=\([^ ]*\).*/\1/p')
@@ -3415,11 +3424,18 @@ if have dumpsys; then
     OVL=$(dumpsys window 2>/dev/null | grep -E 'TYPE_APPLICATION_OVERLAY|mOverlayLayer' | grep -oE 'com\.[a-zA-Z0-9._]+' | sort -u | head -n 30)
     [ -n "$OVL" ] && echo "$OVL" | while IFS= read -r PP; do
         [ -z "$PP" ] && continue
+        # v4.4.100: mantém os 3rd-party de overlay LEGÍTIMO explícitos (bolha/chat-head — NÃO são
+        # system, então is_oem_preload não os cobriria); o resto: a whitelist de namespace OEM crua
+        # era FORJÁVEL (com.miui.espdraw escapava) → troca por is_oem_preload (preload de sistema
+        # real). Disfarce em namespace de fábrica cai no warn.
         case "$PP" in
-            com.android.*|com.google.*|com.facebook.katana|com.whatsapp|\
-            com.instagram.*|com.miui.*|com.samsung.*|com.huawei.*|\
-            com.oppo.*|com.oneplus.*|com.coloros.*|com.realme.*|com.xiaomi.*) ;;
-            *) warn "Overlay ativo: $PP" ;;
+            # NOMES EXATOS (nunca glob de namespace — glob é forjável, a classe que este patch cura):
+            com.facebook.katana|com.facebook.orca|com.facebook.lite|com.whatsapp|com.whatsapp.w4b|\
+            com.instagram.android|com.instagram.lite|com.instagram.barcelona|com.truecaller|\
+            com.viber.voip|com.skype.raider) ;;
+            *)
+                is_oem_preload "$PP" "" "$(pm path "$PP" 2>/dev/null | head -1 | sed 's/^package://')" \
+                    || warn "Overlay ativo: $PP" ;;
         esac
     done
 fi
@@ -3445,10 +3461,13 @@ if have dumpsys && have settings; then
     if [ -n "$_OVL_PKGS" ] && [ -n "$_ACC_PKGS" ]; then
         printf '%s\n' "$_OVL_PKGS" | while IFS= read -r P; do
             [ -z "$P" ] && continue
-            case "$P" in
-                com.android.*|com.google.android.*|android|com.samsung.*|com.sec.*|com.miui.*|com.xiaomi.*|\
-                com.coloros.*|com.oppo.*|com.oneplus.*|com.realme.*|com.vivo.*|com.heytap.*|com.huawei.*) continue ;;
-            esac
+            # v4.4.100: era whitelist de NAMESPACE cru (FORJÁVEL) — um cheat renomeado p/
+            # com.miui.aimpanel casava e o `continue` matava o alerta ANTES do cross-check com
+            # _ACC_PKGS (o exato erro Fable-5/sideload). Agora só preload de sistema REAL
+            # (is_oem_preload) é liberado; app de fábrica-sem-lastro com overlay+accessibility
+            # cai no warn de painel.
+            [ "$P" = "android" ] && continue                       # framework pseudo-pkg
+            is_oem_preload "$P" "" "$(pm path "$P" 2>/dev/null | head -1 | sed 's/^package://')" && continue
             printf '%s\n' "$_ACC_PKGS" | grep -qxF "$P" && \
                 warn "[SUSPEITO] App com perfil de PAINEL (overlay + accessibility): $P — comportamento de cheat-panel; revisar mesmo sem nome conhecido"
         done
