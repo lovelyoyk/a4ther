@@ -6,11 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A4ther Systems — **scanner anti-cheat para Free Fire (Garena)**, multiplataforma. NÃO é
 o APK Android: este é o repo do **engine + web + backend** (`lovelyoyk/a4ther`). O APK
-nativo é um repo **SEPARADO** (`ssonato/a4ther-scanner-apk`) que apenas **dirige o
-`a4ther.sh` via ADB Wi-Fi** — ver a seção "APK (repo separado)" no fim.
+nativo é um repo **SEPARADO e privado** que é um **COLETOR HÍBRIDO**: coleta o
+grosso em Kotlin nativo (pacote `collector/`) e roda o `a4ther.sh` via ADB Wi-Fi só nas seções
+deep/forenses (fase 2) — ver a seção "APK (repo separado)" no fim.
 
-Versão atual: **4.4.95** (fonte da verdade = `const VERSION` no `index.html`, lido pelo
-`build.sh`; o `a4ther.sh` carrega seu próprio `VERSION="4.4.95"`).
+Versão atual: **4.4.98** (fonte da verdade = `const VERSION` no `index.html`, lido pelo
+`build.sh`; o `a4ther.sh` carrega seu próprio `VERSION="4.4.98"`, com features recentes marcadas até `# v4.4.100` — o `VERSION=` **não** acompanhou o bump (pendência no engine).
 
 Alvos suportados (todos rodam a MESMA lógica de detecção, exceto o iOS-web):
 
@@ -24,8 +25,9 @@ Alvos suportados (todos rodam a MESMA lógica de detecção, exceto o iOS-web):
   (`.ndjson`) dentro do app Scriptable. É o ÚNICO alvo com lógica separada.
 - **Web PWA** — `index.html` (+ `service-worker.js`, `manifest.webmanifest`, ícones): a
   interface web/instalável onde o usuário sobe o `.txt` do scan ou roda o fluxo iOS-web.
-- **Backend** — `backend/` (PHP) e `backend-workers/`: blacklist, ingestão de scan-report
-  e telemetria do ecossistema (consumido pelo APK e pelo site).
+- **Backend (split pós-pivô)** — a **a4zll** (`PANEL_BASE`) serve login vendável +
+  ingestão de scan-report (autenticado por Bearer); a **lspainel** (`API_BASE`) serve a blacklist;
+  o `ENGINE_URL` é o raw `main/a4ther.sh`. Runtimes PHP (`backend/`) + Worker (`backend-workers/`).
 
 > **Fonte única das seções shell:** o `a4ther.sh` é o engine ÚNICO de todos os alvos que
 > rodam shell — Termux, APK (via ADB) e iOS-SSH. NÃO duplique detecção shell em outro lugar.
@@ -133,21 +135,23 @@ os dois fluxos: COMPATÍVEL (serve o `.sh` legível por raw URL) × PROTEGIDO (s
 - **tmpdir Android**: `/data/local/tmp` (NUNCA `/tmp`); prefira variáveis/pipes a arquivos
   temporários soltos. Comentários, logs e mensagens em **pt-BR**.
 - **Versão**: `VERSION=` + banner (linha 3). Marque comentários de features novas com a
-  versão atual (`v4.4.95`); NÃO bumpe os `# v4.4.xx:` históricos (descrevem versões passadas).
+  versão atual (`v4.4.100`); NÃO bumpe os `# v4.4.xx:` históricos (descrevem versões passadas).
 
 ## Backend (`backend/`)
 
-Endpoints PHP do ecossistema (blacklist por serial/HWID, ingestão do scan-report do APK,
-telemetria). É consumido pelo APK (repo separado) e pelo site. Confirmar o **roteamento real
-do host** (`.htaccess`) antes de fixar URLs nos clientes.
+Backend **dividido no pivô**: a **a4zll** (`PANEL_BASE`) faz login vendável + ingestão do
+scan-report (autenticado por **Bearer**; o bug do Apache comendo o header `Authorization` já foi
+corrigido); a **lspainel** (`API_BASE`) faz a blacklist por serial/HWID. É consumido pelo APK (repo
+separado) e pelo site. Confirmar o **roteamento real do host** (`.htaccess`) antes de fixar URLs nos clientes.
 
 ## APK (repo SEPARADO — não está aqui)
 
-O `ssonato/a4ther-scanner-apk` (Kotlin/Compose, package `com.a4ther.scanner`) é um projeto
-à parte. Ele NÃO reimplementa detecção: pareia via ADB Wi-Fi (loopback SPAKE2), roda o
-`a4ther.sh` como uid 2000 e sobe um JSON pro painel. **Não edite o APK a partir deste repo**
-— a única dependência é o **contrato** acima (formato `●  ALERTA`/`●  AVISO`, `$FF_PID`,
-banner de veredito) e o `ENGINE_URL` que serve o `a4ther.sh` deste repo.
+O APK (repo separado e privado; Kotlin/Compose, package `com.a4ther.scanner`) é um projeto
+à parte. Ele coleta o grosso em **Kotlin nativo** (pacote `collector/`: SystemCollector/KernelCollector/
+StorageCollector/FreeFireCollector/NativeCollector/ScanOrchestrator) e usa o `a4ther.sh` via ADB Wi-Fi
+(loopback SPAKE2, uid 2000) só nas **seções deep/forenses (fase 2)**, subindo um JSON pro painel. **Não edite o APK a partir deste repo** — a dependência é o **contrato** da fase-2 shell (formato
+`●  ALERTA`/`●  AVISO`, `$FF_PID`, banner de veredito) e o `ENGINE_URL` que serve o `a4ther.sh` deste
+repo; o grosso da coleta é **nativo Kotlin** no repo do APK.
 
 ## Convenções
 

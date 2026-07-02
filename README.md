@@ -204,11 +204,11 @@ Desenvolvido por LS Aluguel.
 
 ## Limitações honestas
 
-- Cheats em **kernel** (KernelSU + Shamiko + susfs bem configurado) podem ficar invisíveis
+- Nenhum scanner userspace é infalível: técnicas de ocultação em **nível de kernel**, bem configuradas, podem não deixar rastro visível via shell — trate LIMPO como forte indício, não certeza absoluta
 - Cheats por **hardware externo** (mouse/teclado convertor, máquina espelhando tela) não detectáveis via shell
 - iOS sem jailbreak não roda bash — precisa de scanner JavaScript no Safari (fora do escopo)
 - Sem root, alguns checks (logcat, /data/tombstones, /proc/kallsyms) ficam limitados
 
 ---
 
-A4ther Systems v3.3.0 | LS Aluguel
+A4ther Systems v4.4.98 | LS Aluguel
