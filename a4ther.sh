@@ -143,6 +143,24 @@ is_oem_ns() {
     esac
     return 1
 }
+# v4.4.104: is_oem_store $installer → 0 se for LOJA/UPDATER OEM de 1ª parte (origem LEGÍTIMA).
+# Um app instalado/ATUALIZADO pela loja do próprio fabricante (Galaxy Store / GetApps / Update
+# Center / …) é legítimo MESMO morando em /data, sem FLAG_SYSTEM, ou com `dumpsys package`
+# restrito (Termux comum sem uid 2000) — o caso que marcava app Samsung de fábrica como "DISFARCE"
+# em massa (AR Zone/Calendar/Clock/Calculadora). Semi-forjável (`adb install -i <loja>`), mas NÃO
+# confiar = FP em todo device OEM; a forja é narrow e cai nos detectores comportamentais.
+is_oem_store() {
+    case "$1" in
+        com.android.vending|com.google.android.feedback|com.amazon.venezia) return 0 ;;                                       # Play / Amazon
+        com.sec.android.app.samsungapps|com.samsung.android.app.updatecenter|com.samsung.android.themestore) return 0 ;;      # Samsung
+        com.xiaomi.mipicks|com.xiaomi.market|com.miui.supermarket) return 0 ;;                                                # Xiaomi/Redmi/POCO (GetApps)
+        com.heytap.market|com.oppo.market|com.oplus.market|com.coloros.market|com.oneplus.market) return 0 ;;                 # Oppo/OnePlus/ColorOS/Realme (via heytap)
+        com.vivo.appstore|com.bbk.appstore) return 0 ;;                                                                       # Vivo/iQOO
+        com.huawei.appmarket|com.hihonor.appmarket|com.honor.global) return 0 ;;                                              # Huawei/Honor
+        com.transsnet.store|com.lenovo.leos.appstore|com.zui.market) return 0 ;;                                             # Transsion(Palm Store)/Lenovo/ZUI
+    esac
+    return 1
+}
 # is_oem_preload $pkg $installer $apath → 0 (benigno = preload de fábrica) / 1 (sideload real).
 # v4.4.99 (hardening pós-review adversarial): SÓ libera com sinais NÃO-FORJÁVEIS por app de
 # usuário sem root. NÃO usa namespace nem installerPackageName como âncora — ambos são forjáveis
@@ -1972,13 +1990,10 @@ _sl_classify() {  # $1=pacote  $2=installer  → ecoa "pacote|installer" se for 
     # um pacote OEM próprio (não-Play) → falso positivo em massa. Agora só acusa
     # origem EXPLICITAMENTE de sideload (null / installer manual / browser / file
     # manager / adb / loja de terceiros). Installer OEM desconhecido = NÃO acusa.
+    # v4.4.104: loja/updater OEM de 1ª parte = legítimo → não acusa (fonte única is_oem_store,
+    # que inclui Galaxy Store, Update Center, GetApps, etc.). Substitui a allowlist antiga inline.
+    is_oem_store "$2" && return
     case "$2" in
-        # ── Allowlist: lojas oficiais (Play + OEMs) = legítimo, ignora ──
-        com.android.vending|com.google.android.feedback|com.amazon.venezia|\
-        com.sec.android.app.samsungapps|com.huawei.appmarket|com.xiaomi.mipicks|\
-        com.heytap.market|com.oppo.market|com.vivo.appstore|com.bbk.appstore|\
-        com.transsion.phoenix|com.hihonor.appmarket|com.honor.global|\
-        com.lenovo.leos.appstore|com.zui.market|com.oneplus.market) ;;
         # ── Sideload EXPLÍCITO: null / instalador manual / browser / file manager
         #    / adb shell / loja de terceiro = SUSPEITO ──
         null|""|com.google.android.packageinstaller|com.android.packageinstaller|\
@@ -1998,16 +2013,18 @@ if have pm; then
         APP=$(echo "$LINE"  | sed -n 's/^package:\([^ ]*\).*/\1/p')
         INST=$(echo "$LINE" | sed -n 's/.*installer=\([^ ]*\).*/\1/p')
         [ -z "$APP" ] && continue
-        # v4.4.99 (hardening pós-review Fable 5): a DECISÃO de origem usa só sinal NÃO-FORJÁVEL.
-        # (1) DISFARCE primeiro — app de 3rd-party vestindo NAMESPACE de fábrica (com.samsung.*/
-        # com.miui.*/…). Só é benigno se tiver LASTRO de sistema (is_oem_preload: partição /
-        # pkgFlags SYSTEM / lista `pm -s`). Sem lastro = masquerade, INDEPENDENTE do installer —
-        # roda ANTES do _sl_classify p/ fechar o vetor "rename com.samsung.* + adb install -i
-        # <installer inventado>" (que o _sl_classify descartaria como installer desconhecido).
-        # Namespace OEM é controlado (Play barra publicar em domínio alheio) → FP ~nulo; e OEM
-        # REAL nunca cai aqui (tem lastro → suprimido). O install pega o app OEM ATUALIZADO p/
-        # /data/app (ex.: Samsung Tips) via pkgFlags/`pm -s`, que o check de partição só perdia.
+        # v4.4.99/104: app de 3rd-party vestindo NAMESPACE de fábrica (com.samsung.*/com.miui.*/…).
+        # É benigno (continua) se QUALQUER um valer; senão = DISFARCE:
+        #  (a) v4.4.104: instalado por LOJA/UPDATER OEM de 1ª parte (Galaxy Store/GetApps/Update
+        #      Center) — SEM isto, todo app Samsung atualizado via Galaxy Store (AR Zone/Calendar/
+        #      Clock/Calculadora) caía como DISFARCE: mora em /data, sem FLAG_SYSTEM, e o `dumpsys
+        #      package` fica RESTRITO no Termux comum (sem uid 2000) → is_oem_preload não via lastro.
+        #  (b) LASTRO de sistema não-forjável (is_oem_preload: partição / pkgFlags SYSTEM / `pm -s`).
+        # Roda ANTES do _sl_classify p/ pegar "rename com.samsung.* + adb install -i <browser/null/
+        # inventado>". Residual honesto: forjar `-i <loja OEM exata>` escapa (narrow; os detectores
+        # comportamentais — overlay/ESP/accessibility/adb-root/FFCHEAT — são o backstop).
         if is_oem_ns "$APP"; then
+            is_oem_store "$INST" && continue
             APATH=$(pm path "$APP" 2>/dev/null | head -1 | sed 's/^package://')
             is_oem_preload "$APP" "$INST" "$APATH" && continue
             echo "D|$APP|${INST:-null}"

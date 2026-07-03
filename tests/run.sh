@@ -21,6 +21,7 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 # ── extrai as funções puras (assinatura em coluna 0; corpo indentado; fecha em ^}) ──
 {
   sed -n '/^is_oem_ns() {/,/^}/p'      "$ENGINE"
+  sed -n '/^is_oem_store() {/,/^}/p'   "$ENGINE"
   sed -n '/^is_oem_preload() {/,/^}/p' "$ENGINE"
   sed -n '/^pkg_label() {/,/^}/p'      "$ENGINE"
   sed -n '/^pkg_show() /p'             "$ENGINE"
@@ -30,7 +31,7 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 . "$TMP/fns.sh"
 
 # self-guard: se uma função foi renomeada/reformatada, a extração falha — pare LOUD.
-for _fn in is_oem_ns is_oem_preload pkg_label pkg_show tok_grep _sl_classify; do
+for _fn in is_oem_ns is_oem_store is_oem_preload pkg_label pkg_show tok_grep _sl_classify; do
   command -v "$_fn" >/dev/null 2>&1 || { echo "ERRO: função '$_fn' não foi extraída (renomeada/reformatada no engine?)"; exit 2; }
 done
 
@@ -44,6 +45,7 @@ _SYS_PKGS=""
 pass=0; fail=0
 ck(){ if [ "$2" = "$3" ]; then pass=$((pass+1)); else fail=$((fail+1)); printf '  FAIL: %s\n        esperado=[%s]  obtido=[%s]\n' "$1" "$2" "$3"; fi; }
 rc(){ "$@" >/dev/null 2>&1; echo $?; }   # captura o exit-code (0/1) de uma função
+sck(){ if grep -qF "$2" "$ENGINE"; then pass=$((pass+1)); else fail=$((fail+1)); printf '  FAIL (estrutural): %s\n        gate ausente do engine: [%s]\n' "$1" "$2"; fi; }
 
 echo "# is_oem_ns — namespace de vendor OEM (detecta disfarce; NUNCA libera sozinho)"
 ck "samsung é OEM"        0 "$(rc is_oem_ns com.samsung.foo)"
@@ -64,6 +66,32 @@ ck "spoof com.samsung.evil via adb-null" 1 "$(_SYS_PKGS='package:com.miui.home';
 ck "grep -qxF: prefixo NÃO casa -s"      1 "$(_SYS_PKGS='package:com.samsung.android.app.tips'; rc is_oem_preload com.samsung.android.app.tip null /data/app/x.apk)"
 ck "cheat ffh4x via packageinstaller"    1 "$(rc is_oem_preload com.ffh4x com.google.android.packageinstaller /data/app/x.apk)"
 DUMPSYS_OUT="pkgFlags=[ HAS_CODE ]"; _SYS_PKGS=""
+
+echo "# is_oem_store — loja/updater OEM de 1a parte (origem legitima; corrige o FP Samsung)"
+ck "Galaxy Store => loja"           0 "$(rc is_oem_store com.sec.android.app.samsungapps)"
+ck "Samsung Update Center => loja"  0 "$(rc is_oem_store com.samsung.android.app.updatecenter)"
+ck "Xiaomi GetApps => loja"         0 "$(rc is_oem_store com.xiaomi.mipicks)"
+ck "chrome NAO e loja"              1 "$(rc is_oem_store com.android.chrome)"
+ck "packageinstaller NAO e loja"    1 "$(rc is_oem_store com.google.android.packageinstaller)"
+ck "installer inventado NAO e loja" 1 "$(rc is_oem_store com.fake.store)"
+ck "Phoenix BROWSER NAO e loja (M1)" 1 "$(rc is_oem_store com.transsion.phoenix)"
+ck "Palm Store (Transsion) => loja"  0 "$(rc is_oem_store com.transsnet.store)"
+
+echo "# decisao de DISFARCE do loop SIDELOAD (app de namespace OEM)"
+decide_oem(){ is_oem_ns "$1" || { echo NOT_OEM_NS; return; }; is_oem_store "$2" && return; is_oem_preload "$1" "$2" "$3" && return; echo D; }
+HAVE_DUMPSYS=1; DUMPSYS_OUT="pkgFlags=[ HAS_CODE ]"; _SYS_PKGS=""
+ck "FP FIX Samsung: arzone via Galaxy Store => limpo"        "" "$(decide_oem com.samsung.android.arzone com.sec.android.app.samsungapps /data/app/x/base.apk)"
+ck "FP FIX Samsung: clock via Update Center => limpo"        "" "$(decide_oem com.sec.android.app.clockpackage com.samsung.android.app.updatecenter /data/app/x/base.apk)"
+ck "DISFARCE: samsung.evil via chrome => D"                  "D" "$(decide_oem com.samsung.evil com.android.chrome /data/app/x/base.apk)"
+ck "DISFARCE: samsung.evil via installer inventado => D"     "D" "$(decide_oem com.samsung.evil com.fake.store /data/app/x/base.apk)"
+ck "residual doc: samsung.evil via -i Galaxy Store => limpo" "" "$(decide_oem com.samsung.evil com.sec.android.app.samsungapps /data/app/x/base.apk)"
+_SYS_PKGS="package:com.miui.weather2"
+ck "OEM real em -s via chrome => limpo (is_oem_preload)"     "" "$(decide_oem com.miui.weather2 com.android.chrome /data/app/x/base.apk)"
+_SYS_PKGS=""
+
+echo "# asserção ESTRUTURAL — decide_oem testa a LÓGICA; estas provam que o GATE segue no engine (pega remoção/reorder)"
+sck "gate is_oem_store no loop SIDELOAD (branch disfarce)" 'is_oem_store "$INST" && continue'
+sck "is_oem_store no topo de _sl_classify"                 'is_oem_store "$2" && return'
 
 echo "# pkg_label / pkg_show — nome do app no relatório (dispensa lib checker)"
 ck "label Free Fire"     "Free Fire"                        "$(pkg_label com.dts.freefireth)"
