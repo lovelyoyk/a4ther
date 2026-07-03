@@ -1215,14 +1215,22 @@ fi
 
 if have netstat; then
     FPORT=$(netstat -an 2>/dev/null | grep -E ':27042|:27043|:27044|:27045')
-    [ -n "$FPORT" ] && alert "Porta Frida em LISTEN"
+    [ -n "$FPORT" ] && { alert "Porta Frida em LISTEN"; HOOK_HITS=$((HOOK_HITS+1)); }
 fi
 
 # Porta Frida via /proc/net/tcp (não precisa netstat)
 if [ -r /proc/net/tcp ]; then
-    # 27042 = 0xA992, 27043 = 0xA993
-    FRIDA_HEX=$(awk '{print $2}' /proc/net/tcp 2>/dev/null | grep -E ':A99[2345]$' | head -n 1)
-    [ -n "$FRIDA_HEX" ] && alert "Porta Frida em LISTEN (via /proc/net/tcp)"
+    # v4.4.105: hex CORRIGIDO — 27042=0x69A2 … 27045=0x69A5 (%04X da porta). O antigo
+    # ':A99[2345]'=43410-43413 nunca casava Frida E caía no range efêmero → FP crítico.
+    FRIDA_HEX=$(awk '$4=="0A"{print $2}' /proc/net/tcp 2>/dev/null | grep -E ':69A[2345]$' | head -n 1)
+    [ -n "$FRIDA_HEX" ] && { alert "Porta Frida em LISTEN (via /proc/net/tcp)"; HOOK_HITS=$((HOOK_HITS+1)); }
+fi
+
+# v4.4.105: paridade IPv6 — frida-server pode bindar em ::1 (loopback v6); o hex-parse acima
+# só lê /proc/net/tcp (IPv4). Mesmo fallback tcp6 que o ADB-WiFi já faz (~l.494). $4=="0A"=LISTEN.
+if [ -r /proc/net/tcp6 ]; then
+    FRIDA_HEX6=$(awk '$4=="0A"{print $2}' /proc/net/tcp6 2>/dev/null | grep -E ':69A[2345]$' | head -n 1)
+    [ -n "$FRIDA_HEX6" ] && { alert "Porta Frida em LISTEN (via /proc/net/tcp6)"; HOOK_HITS=$((HOOK_HITS+1)); }
 fi
 
 for PKG in de.robv.android.xposed.installer org.lsposed.manager \
@@ -3469,11 +3477,15 @@ ESP_HITS=0
 if have settings; then
     ACC=$(setting_get secure enabled_accessibility_services)
     if [ -n "$ACC" ] && [ "$ACC" != "null" ]; then
-        case "$ACC" in
-            *esp*|*aimbot*|*menu*|*hack*|*cheat*|*ffh*|*ESP*|*Aim*|*Menu*|*Hack*|*Cheat*|*injector*|*bot*)
-                alert "Accessibility suspeito: $ACC"; ESP_HITS=$((ESP_HITS+1)) ;;
-            *) info "Accessibility: $ACC" ;;
-        esac
+        # v4.4.105: era `case *bot*|*menu*|*hack*|…` — substring CRU sem âncora: `*bot*` casava
+        # TalkBack/robot (FP) e `*menu*` casava serviço legítimo; e evasão trivial. Trocado por
+        # tok_grep (âncora de fronteira + idiomas de cheat), a doutrina que o helper existe pra
+        # cumprir. Nome NEUTRO → detector por CAPACIDADE (canRetrieveWindowContent) fica no #A3.
+        if printf '%s' "$ACC" | tok_grep 'esp|aimbot|aimlock|aimkill|wallhack|modmenu|killaura|ffh|magicbullet|gameguardian|cheat|hack|injector' >/dev/null 2>&1; then
+            alert "Accessibility suspeito (idioma de cheat): $ACC"; ESP_HITS=$((ESP_HITS+1))
+        else
+            info "Accessibility: $ACC"
+        fi
     fi
 fi
 if have dumpsys; then
@@ -4490,10 +4502,13 @@ br_parse() {
         info "  Accessibility services:"
         echo "$_ACC" | while IFS= read -r L; do
             [ -n "$L" ] && info "    $(echo "$L" | head -c 180)"
-            case "$L" in
-                *esp*|*aimbot*|*menu*|*hack*|*cheat*|*ffh*|*macro*|*injector*)
-                    alert "    Accessibility SUSPEITO: $(echo "$L" | head -c 160)" ;;
-            esac
+            # v4.4.105: era `case *esp*|*aimbot*|*menu*|*hack*|*cheat*|*ffh*|*macro*|*injector*`
+            # — mesmo defeito de substring-cru da Edição 2 (sítio ao vivo), agora no parser de
+            # bugreport OFFLINE. Ancorado via tok_grep; mesmo set de tokens + 'macro' (o único
+            # globo extra que o original tinha aqui).
+            if printf '%s' "$L" | tok_grep 'esp|aimbot|aimlock|aimkill|wallhack|modmenu|killaura|ffh|magicbullet|gameguardian|cheat|hack|injector|macro' >/dev/null 2>&1; then
+                alert "    Accessibility SUSPEITO: $(echo "$L" | head -c 160)"
+            fi
         done
     fi
 
