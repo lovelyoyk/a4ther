@@ -213,6 +213,13 @@ pkg_label() {
     echo ""
 }
 pkg_show() { _pl=$(pkg_label "$1"); if [ -n "$_pl" ]; then printf '%s (%s)' "$1" "$_pl"; else printf '%s' "$1"; fi; }
+# v4.4.102: tok_grep — grep -i ANCORADO por fronteira: o token só casa no INÍCIO de uma "palavra"
+# (início de linha OU precedido por não-[a-zA-Z0-9_]), com o prefixo `lib` de biblioteca OPCIONAL,
+# NUNCA no meio de outra palavra. Mata a CLASSE de FP-por-substring que queimou o projeto:
+# `xposed`↔`system_e[xposed]_libraries` (libs ArcSoft = crítico falso), `ksu`↔`journal_che[cksu]m`
+# (root-hide falso em todo ext4), `gadget`↔HAL MTK — SEM perder os casos legítimos `lib<token>`
+# (libsubstrate, libxposed) nem variantes de cheat (xposedmod). Uso: echo "$TXT" | tok_grep "$TOK"
+tok_grep() { grep -iE "(^|[^a-zA-Z0-9_])(lib)?(${1})"; }
 # ─────────────────────────────────────────────────────────────────────────────
 # v4.4.70: KB → tamanho legível (GB/MB/KB). Usado no cálculo do tamanho REAL do FF
 # (APK + OBB + Data somados).
@@ -1397,7 +1404,8 @@ fi
 
 # /proc/<FF>/maps — libs injetadas (Frida gadget, Substrate, Dobby, xhook, sandhook)
 if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/maps" ]; then
-    INJECTED=$(grep -iE '(frida|gadget|substrate|libdobby|libxhook|libgum|libwhale|libsandhook|libepic|libDexposed|libsubstitute|libellekit|libhooker|cydia|tweak)' "/proc/$FF_PID/maps" 2>/dev/null | awk '{print $6}' | sort -u | head -10)
+    # v4.4.102: `gadget` cru casava a HAL USB do MediaTek (Frida falso) → `frida-gadget`.
+    INJECTED=$(grep -iE '(frida|frida-gadget|substrate|libdobby|libxhook|libgum|libwhale|libsandhook|libepic|libDexposed|libsubstitute|libellekit|libhooker)' "/proc/$FF_PID/maps" 2>/dev/null | awk '{print $6}' | sort -u | head -10)
     if [ -n "$INJECTED" ]; then
         alert "Libs INJETADAS no processo FF (PID $FF_PID):"
         echo "$INJECTED" | while IFS= read -r L; do [ -n "$L" ] && alert "  → $L"; done
@@ -2408,7 +2416,8 @@ for PKG in $FF_PKGS; do
                 case "$SH_ANANO" in
                     000000000) alert "Shader nanos ZERADOS em FS com suporte a nanos — bypass de timestamp" ;;
                 esac
-                echo "$SH_ANANO" | grep -qE '[0-9]999[0-9]' && alert "Shader nanos pattern '999' (manipulação): $SH_ANANO"
+                # v4.4.102: heurística `999` removida — FP puro (nanos legítimo é aleatório;
+                # timestomp real ZERA os nanos, já coberto acima). Não tem base forense.
             else
                 info "Shader em FS sem nanos (vfat/sdcardfs) — checks de nanossegundo skipados"
             fi
@@ -2562,10 +2571,9 @@ for PKG in $FF_PKGS; do
             elif [ "$ZERO_COUNT" -gt 0 ] 2>/dev/null; then
                 info "Replay nanos: $ZERO_COUNT/6 zerados (provável fs limitation)"
             fi
-            # Pattern 999 em qualquer nano = manipulação (sinal forte)
-            for N in "$ABIN" "$MBIN" "$CBIN" "$AJSON" "$MJSON" "$CJSON"; do
-                echo "$N" | grep -qE '[0-9]999[0-9]' && alert "Replay nanos com pattern '999' (manipulação): $N"
-            done
+            # v4.4.102: heurística `999` removida (era FP puro contado 1×/campo = até 6× o MESMO
+            # valor → inflava o veredito). Nanos legítimo é aleatório; timestomp real ZERA os nanos
+            # (coberto pelo ZERO_COUNT acima). Sem base forense.
             # BIN: Modify != Change só conta se o delta de nanos é grande
             if [ -n "$MBIN" ] && [ -n "$CBIN" ] && [ "$MBIN" != "$CBIN" ]; then
                 warn "Replay BIN: Modify != Change (nanos) — possível alteração"
@@ -4036,7 +4044,7 @@ if have ps; then
                cheatengine virtualapp parallel.space dualspace \
                luckypatcher gamekiller autoclicker.click macro.tap \
                brevent.guard shizuku.server hunter.shizuku; do
-        HIT=$(echo "$PROCS" | grep -iE "[^a-zA-Z0-9_]${PAT}|^${PAT}" | grep -v grep)
+        HIT=$(echo "$PROCS" | tok_grep "$PAT" | grep -v grep)
         [ -n "$HIT" ] && echo "$HIT" | head -n 2 | while IFS= read -r L; do
             [ -n "$L" ] && alert "Processo ($PAT): $L"
         done
@@ -4064,7 +4072,7 @@ if have logcat; then
                    "cheat" "injection" "ptrace" "virtualapp" "io.virtualapp" \
                    "esp.cheat" "wallhack" "luckypatcher" "shamiko" "brevent" \
                    "UsageStatsService: Time changed" "hcallSetClipboardTextRpc"; do
-            HIT=$(echo "$LOG_OUT" | grep -i "$PAT" | head -n 2)
+            HIT=$(echo "$LOG_OUT" | tok_grep "$PAT" | head -n 2)   # v4.4.102: ancorado (era grep -i cru → casava system_e[xposed]_libraries)
             [ -n "$HIT" ] && echo "$HIT" | while IFS= read -r L; do
                 [ -n "$L" ] && alert "Logcat [$PAT]: $(echo "$L" | head -c 160)"
             done
@@ -5903,7 +5911,7 @@ if have ps; then
     for PAT in frida-server frida-agent substrated cycript debugserver \
                igamegod gamegem trollstored scarletd \
                cheatengine ffcheat ffmod aimbot.daemon; do
-        HIT=$(echo "$PROCS" | grep -iE "[^a-zA-Z0-9_]${PAT}|^${PAT}" | grep -v grep)
+        HIT=$(echo "$PROCS" | tok_grep "$PAT" | grep -v grep)
         [ -n "$HIT" ] && echo "$HIT" | head -n 2 | while IFS= read -r L; do
             [ -n "$L" ] && alert "Processo ($PAT): $L"
         done

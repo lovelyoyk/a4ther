@@ -24,12 +24,13 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
   sed -n '/^is_oem_preload() {/,/^}/p' "$ENGINE"
   sed -n '/^pkg_label() {/,/^}/p'      "$ENGINE"
   sed -n '/^pkg_show() /p'             "$ENGINE"
+  sed -n '/^tok_grep() /p'             "$ENGINE"
   sed -n '/^_sl_classify() {/,/^}/p'   "$ENGINE"
 } > "$TMP/fns.sh"
 . "$TMP/fns.sh"
 
 # self-guard: se uma função foi renomeada/reformatada, a extração falha — pare LOUD.
-for _fn in is_oem_ns is_oem_preload pkg_label pkg_show _sl_classify; do
+for _fn in is_oem_ns is_oem_preload pkg_label pkg_show tok_grep _sl_classify; do
   command -v "$_fn" >/dev/null 2>&1 || { echo "ERRO: função '$_fn' não foi extraída (renomeada/reformatada no engine?)"; exit 2; }
 done
 
@@ -82,6 +83,17 @@ ck "chrome => candidato"           "com.foo|com.android.chrome" "$(_sl_classify 
 ck "packageinstaller => candidato" "com.foo|com.google.android.packageinstaller" "$(_sl_classify com.foo com.google.android.packageinstaller)"
 ck "null => candidato"             "com.foo|null" "$(_sl_classify com.foo null)"
 ck "installer desconhecido => vazio (design v4.4.88)" "" "$(_sl_classify com.foo com.weird.store)"
+
+echo "# tok_grep — âncora que mata FP-por-substring SEM perder lib<token> nem variantes"
+tg(){ if printf '%s\n' "$1" | tok_grep "$2" >/dev/null 2>&1; then echo M; else echo N; fi; }
+ck "FP MORTO: system_exposed_libraries × xposed => N" N "$(tg 'nativeloader: Extending system_exposed_libraries: libhumantracking.arcsoft.so' xposed)"
+ck "FP MORTO: journal_checksum × ksu => N"            N "$(tg 'ext4 journal_checksum enabled' ksu)"
+ck "libxposed (lib<tok>) × xposed => M"               M "$(tg '/system/lib64/libxposed_art.so' xposed)"
+ck "libsubstrate (lib<tok>) × substrate => M"         M "$(tg 'loaded libsubstrate.so' substrate)"
+ck "de.robv...xposed.installer × xposed => M"         M "$(tg 'de.robv.android.xposed.installer' xposed)"
+ck "LSPosed: (início de palavra) × lsposed => M"      M "$(tg '01-02 03:04 D LSPosed: module carregado' lsposed)"
+ck "variante xposedmod × xposed => M"                 M "$(tg 'daemon xposedmod started' xposed)"
+ck "ksud (início de palavra) × ksu => M"              M "$(tg 'starting ksud service' ksu)"
 
 echo
 if [ "$fail" = 0 ]; then
