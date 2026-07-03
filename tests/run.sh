@@ -95,6 +95,15 @@ ck "LSPosed: (início de palavra) × lsposed => M"      M "$(tg '01-02 03:04 D L
 ck "variante xposedmod × xposed => M"                 M "$(tg 'daemon xposedmod started' xposed)"
 ck "ksud (início de palavra) × ksu => M"              M "$(tg 'starting ksud service' ksu)"
 
+# v4.4.103: FPs de LOG EM DISCO (ANR/bugreport/logcat dump/módulos kernel) — a mesma
+# classe do FP-por-substring acima, encontrada em grep -iE cru dos scanners que lêem
+# arquivo/dump em vez de rodar tok_grep diretamente. Aqui reproduzimos os tokens/termos
+# curados (via tok_grep, que aplica a MESMA âncora usada inline nesses sítios).
+ck "FP MORTO: ExposedDropdownMenuBox (ANR Compose) × xposed => N" N "$(tg 'FATAL EXCEPTION: main ... at androidx.compose.material.ExposedDropdownMenuBox' xposed)"
+ck "FP MORTO: xt_CHECKSUM (módulo netfilter real) × ksu => N"     N "$(tg 'xt_CHECKSUM' ksu)"
+ck "FP MORTO: com.motorola.modservice × modmenu => N"             N "$(tg 'package:com.motorola.modservice' modmenu)"
+ck "positivo: daemon modmenu ativo × modmenu => M"                M "$(tg 'daemon modmenu ativo' modmenu)"
+
 echo
 if [ "$fail" = 0 ]; then
   printf 'HARNESS OK — %d asserções verdes.\n' "$pass"; exit 0

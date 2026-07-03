@@ -903,7 +903,9 @@ done
 
 # Módulos no /sys/module
 if [ -d /sys/module ]; then
-    SUS_MODS=$(ls /sys/module 2>/dev/null | grep -iE 'frida|inject|hide|ksu|apatch|magisk|susfs' | head -n 5)
+    # v4.4.103: 'ksu' ancorado (era grep cru → casava xt_CHECKSUM, módulo netfilter REAL do
+    # alvo iptables/nft CHECKSUM, carregável em qualquer kernel GKI — 'che[cksu]m' sem fronteira).
+    SUS_MODS=$(ls /sys/module 2>/dev/null | grep -iE '(^|[^a-zA-Z0-9_])(lib)?(frida|inject|hide|ksu|apatch|magisk|susfs)' | head -n 5)
     [ -n "$SUS_MODS" ] && echo "$SUS_MODS" | while IFS= read -r M; do
         [ -n "$M" ] && alert "Módulo kernel: /sys/module/$M"
     done
@@ -1563,7 +1565,9 @@ fi
 if have dumpsys; then
     OVERLAYS=$(dumpsys window windows 2>/dev/null | awk '/Window #/,/mOwnerUid/' | grep -E '(mPackage|TYPE_APPLICATION_OVERLAY|TYPE_PHONE)' 2>/dev/null | head -20)
     if [ -n "$OVERLAYS" ]; then
-        SUS_OVR=$(echo "$OVERLAYS" | grep -iE 'panel|injector|ffh4x|mod|cheat|esp|gameguardian|teambot|vipkill|fatality' | head -3)
+        # v4.4.103: 'mod' cru → 'modmenu' (linha traz mPackage=com.pacote.completo; 'mod'
+        # cru casaria com.motorola.mod*/modulemetadata como overlay suspeito).
+        SUS_OVR=$(echo "$OVERLAYS" | grep -iE 'panel|injector|ffh4x|modmenu|cheat|esp|gameguardian|teambot|vipkill|fatality' | head -3)
         [ -n "$SUS_OVR" ] && echo "$SUS_OVR" | while IFS= read -r L; do alert "Overlay SUSPEITO: $L"; done
     fi
     # appops SYSTEM_ALERT_WINDOW granted pra apps random (não-system)
@@ -2054,7 +2058,10 @@ if have dumpsys; then
             done
         fi
         # outros uninstalls suspeitos
-        OTHER_REMOVED=$(echo "$UNINSTALLED" | grep -iE 'cheat|hack|mod|aimbot|esp|ffh4x|menu|injector|frida|magisk|brevent|shizuku|gameguardian|virtualapp|parallel|lulubox|luckypatcher|holograma|hologram')
+        # v4.4.103: token 'mod' cru trocado por 'modmenu' — 'mod' cru casa qualquer package
+        # com essa substring (com.motorola.mod*, *.modulemetadata etc.); ancorar não resolve
+        # porque a fronteira de package (.) já precede 'mod' nesses nomes legítimos.
+        OTHER_REMOVED=$(echo "$UNINSTALLED" | grep -iE 'cheat|hack|modmenu|aimbot|esp|ffh4x|menu|injector|frida|magisk|brevent|shizuku|gameguardian|virtualapp|parallel|lulubox|luckypatcher|holograma|hologram')
         if [ -n "$OTHER_REMOVED" ]; then
             alert "Outros apps suspeitos desinstalados recentemente:"
             echo "$OTHER_REMOVED" | while IFS= read -r L; do
@@ -2112,7 +2119,9 @@ if have logcat; then
     PKG_EVENTS=$(timeout 5 logcat -b events -d 2>/dev/null | grep -iE 'pkg_install|pkg_uninstall|package_added|package_removed|installer' | sort -u | head -n 30)
     if [ -n "$PKG_EVENTS" ]; then
         # filtrar FF e cheats
-        FF_LOGEV=$(echo "$PKG_EVENTS" | grep -iE 'freefire|dts\.freefire|garena|cheat|hack|mod|aimbot|esp|frida|magisk|holograma|hologram' | sort -u)
+        # v4.4.103: 'mod' cru → 'modmenu' (logcat events buffer tem nomes de package
+        # legítimos com 'mod' embutido, ex: com.motorola.mod*/modulemetadata).
+        FF_LOGEV=$(echo "$PKG_EVENTS" | grep -iE 'freefire|dts\.freefire|garena|cheat|hack|modmenu|aimbot|esp|frida|magisk|holograma|hologram' | sort -u)
         if [ -n "$FF_LOGEV" ]; then
             alert "Eventos de pkg no logcat (FF/cheat relacionados):"
             echo "$FF_LOGEV" | head -n 10 | while IFS= read -r L; do
@@ -3694,7 +3703,9 @@ if have logcat; then
         | grep -viE 'FASProvider|deleted_from_mars|mars_auto' | head -n 20)
     if [ -n "$DEL_EVENTS" ]; then
         # filtrar só eventos com nome suspeito
-        SUSPECT_DEL=$(echo "$DEL_EVENTS" | grep -iE 'cheat|hack|mod|ffh4x|aimbot|esp\.|menu|injector|wallhack|magisk|frida|freefire|\.apk|\.lua|\.so|\.dex')
+        # v4.4.103: 'mod' cru → 'modmenu' (mesmo motivo do OTHER_REMOVED acima: substring
+        # crua bate em nomes de package/lib legítimos com 'mod' embutido).
+        SUSPECT_DEL=$(echo "$DEL_EVENTS" | grep -iE 'cheat|hack|modmenu|ffh4x|aimbot|esp\.|menu|injector|wallhack|magisk|frida|freefire|\.apk|\.lua|\.so|\.dex')
         if [ -n "$SUSPECT_DEL" ]; then
             alert "Eventos de delete suspeitos no logcat:"
             echo "$SUSPECT_DEL" | head -n 10 | while IFS= read -r L; do
@@ -3714,7 +3725,8 @@ for H in /data/system/notification_history.xml \
          /data/system/recent-tasks.xml \
          /sdcard/.android/notification_log.txt; do
     [ -r "$H" ] || continue
-    FF_DEL=$(grep -iE 'freefire|cheat|hack|mod|aimbot|esp|frida|magisk|deleted|removed' "$H" 2>/dev/null | head -n 10)
+    # v4.4.103: 'mod' cru → 'modmenu' (mesmo motivo dos sítios acima).
+    FF_DEL=$(grep -iE 'freefire|cheat|hack|modmenu|aimbot|esp|frida|magisk|deleted|removed' "$H" 2>/dev/null | head -n 10)
     [ -n "$FF_DEL" ] && {
         info "Indícios em $H:"
         echo "$FF_DEL" | while IFS= read -r L; do
@@ -4102,7 +4114,9 @@ if [ -d /data/anr ]; then
             MT=$(stat -c '%y' "$FULL" 2>/dev/null)
             info "  $FULL ($MT)"
             if [ -r "$FULL" ]; then
-                CHEAT_HIT=$(grep -iE 'freefire|frida|magisk|xposed|lsposed|cheat|injector|hack|gameguardian|libsubstrate|brevent' "$FULL" 2>/dev/null | head -n 3)
+                # v4.4.103: ancorado (era grep -i cru → ANR de app c/ ExposedDropdownMenuBox no
+                # stack casava 'xposed' dentro de "Exposed" e virava ALERTA falso).
+                CHEAT_HIT=$(grep -iE '(^|[^a-zA-Z0-9_])(lib)?(freefire|frida|magisk|xposed|lsposed|cheat|injector|hack|gameguardian|libsubstrate|brevent)' "$FULL" 2>/dev/null | head -n 3)
                 [ -n "$CHEAT_HIT" ] && echo "$CHEAT_HIT" | while IFS= read -r L; do
                     [ -n "$L" ] && alert "    ANR contém: $(echo "$L" | head -c 140)"
                 done
@@ -4185,7 +4199,10 @@ for LOGDIR in /data/log /sdcard/log /sdcard/MIUI/debug_log \
                 # FP real-device: removido o token 'freefire' — o NOME do jogo aparece em logs
                 # benignos (foreground/Firebase JobScheduler/batterystats) e NÃO é evidência de
                 # cheat. Mantém só indicadores reais de injeção/root.
-                HIT=$(grep -iE 'frida|magisk|xposed|cheat|injector|libsubstrate|frida-server|frida-gadget' "$F" 2>/dev/null | head -n 2)
+                # v4.4.103: ancorado (era grep -i cru → na MIUI/Xiaomi esse arquivo é um DUMP de
+                # logcat, e 'xposed' casava dentro de 'system_exposed_libraries' do nativeloader
+                # — libs de câmera ArcSoft contadas como ALERTA falso).
+                HIT=$(grep -iE '(^|[^a-zA-Z0-9_])(lib)?(frida|magisk|xposed|cheat|injector|libsubstrate|frida-server|frida-gadget)' "$F" 2>/dev/null | head -n 2)
                 [ -n "$HIT" ] && echo "$HIT" | while IFS= read -r L; do
                     [ -n "$L" ] && alert "    contém: $(echo "$L" | head -c 140)"
                 done
@@ -4414,7 +4431,9 @@ br_parse() {
     # ── 7. Package events (install/uninstall/replace) ────────────────
     _PKG=$(grep -iE 'PackageManager:.*(installPackage|uninstallPackage|replaced|deleted)|am_(install|uninstall)|pkg_(install|uninstall)|installer_uid' "$_BRMAIN" 2>/dev/null | head -15)
     if [ -n "$_PKG" ]; then
-        _PKG_SUS=$(echo "$_PKG" | grep -iE 'freefire|cheat|hack|mod|aimbot|esp|frida|magisk|brevent|shizuku|gameguardian|virtualapp|parallel|lulubox|luckypatcher|mantispro|fakerunlocker|holograma|hologram')
+        # v4.4.103: 'mod' cru → 'modmenu' (mesmo motivo dos sítios acima — bugreport tem
+        # nomes de package/lib legítimos com 'mod' embutido, ex: com.motorola.mod*).
+        _PKG_SUS=$(echo "$_PKG" | grep -iE 'freefire|cheat|hack|modmenu|aimbot|esp|frida|magisk|brevent|shizuku|gameguardian|virtualapp|parallel|lulubox|luckypatcher|mantispro|fakerunlocker|holograma|hologram')
         if [ -n "$_PKG_SUS" ]; then
             alert "  Eventos de pkg suspeitos no bugreport:"
             echo "$_PKG_SUS" | while IFS= read -r L; do
@@ -4464,7 +4483,8 @@ br_parse() {
     # ── 11. Overlays ativos (TYPE_APPLICATION_OVERLAY) ───────────────
     _OVL=$(grep -iE 'TYPE_APPLICATION_OVERLAY|TYPE_PHONE|SYSTEM_ALERT_WINDOW: allow' "$_BRMAIN" 2>/dev/null | head -20)
     if [ -n "$_OVL" ]; then
-        _OVL_SUS=$(echo "$_OVL" | grep -iE 'panel|injector|ffh4x|mod|cheat|esp|gameguardian|teambot|vipkill|fatality|aimbot')
+        # v4.4.103: 'mod' cru → 'modmenu' (mesmo motivo dos sítios acima).
+        _OVL_SUS=$(echo "$_OVL" | grep -iE 'panel|injector|ffh4x|modmenu|cheat|esp|gameguardian|teambot|vipkill|fatality|aimbot')
         if [ -n "$_OVL_SUS" ]; then
             alert "  Overlays suspeitos no bugreport:"
             echo "$_OVL_SUS" | head -5 | while IFS= read -r L; do
@@ -4545,7 +4565,8 @@ br_parse() {
     # ── 19. Dropbox events list ─────────────────────────────────────
     _DROP=$(grep -iE 'DropBox.*entry|dropbox.*crash|system_app_(crash|anr)|data_app_crash' "$_BRMAIN" 2>/dev/null | head -15)
     if [ -n "$_DROP" ]; then
-        _DROP_SUS=$(echo "$_DROP" | grep -iE 'freefire|cheat|hack|mod|injector|frida')
+        # v4.4.103: 'mod' cru → 'modmenu' (mesmo motivo dos sítios acima).
+        _DROP_SUS=$(echo "$_DROP" | grep -iE 'freefire|cheat|hack|modmenu|injector|frida')
         if [ -n "$_DROP_SUS" ]; then
             alert "  Dropbox events suspeitos:"
             echo "$_DROP_SUS" | head -5 | while IFS= read -r L; do
@@ -4576,7 +4597,8 @@ br_parse() {
     # ── 22. Batterystats — uninstalls registrados ───────────────────
     _BSTATS_UNI=$(grep -oE 'pkgunin=[0-9]+:"[^"]+"' "$_BRMAIN" 2>/dev/null | sort -u | head -20)
     if [ -n "$_BSTATS_UNI" ]; then
-        _BSTATS_SUS=$(echo "$_BSTATS_UNI" | grep -iE 'freefire|cheat|hack|mod|aimbot|injector|frida|magisk|brevent|shizuku|gameguardian|virtualapp|lulubox|luckypatcher')
+        # v4.4.103: 'mod' cru → 'modmenu' (mesmo motivo dos sítios acima).
+        _BSTATS_SUS=$(echo "$_BSTATS_UNI" | grep -iE 'freefire|cheat|hack|modmenu|aimbot|injector|frida|magisk|brevent|shizuku|gameguardian|virtualapp|lulubox|luckypatcher')
         if [ -n "$_BSTATS_SUS" ]; then
             alert "  Uninstalls suspeitos (batterystats):"
             echo "$_BSTATS_SUS" | while IFS= read -r L; do
@@ -5396,7 +5418,8 @@ for TWKDIR in /Library/MobileSubstrate/DynamicLibraries \
             FILTER_HITS=$((FILTER_HITS+1))
         fi
         # Também flag se .plist menciona qualquer string suspeita
-        SUSP=$(echo "$CONTENT" | grep -iE 'cheat|hack|aimbot|wallhack|esp|menu.*ff|ff.*menu|injection|mod')
+        # v4.4.103: 'mod' cru → 'modmenu' (mesmo motivo dos sítios acima).
+        SUSP=$(echo "$CONTENT" | grep -iE 'cheat|hack|aimbot|wallhack|esp|menu.*ff|ff.*menu|injection|modmenu')
         [ -n "$SUSP" ] && warn "  Tweak $PL com strings suspeitas (cheat/hack/etc)"
     done
 done
@@ -5441,7 +5464,9 @@ done
 
 # launchctl list (serviços ativos no momento)
 if have launchctl; then
-    ACTIVE=$(launchctl list 2>/dev/null | head -n 80 | grep -iE 'cheat|hack|mod|aim|esp|freefire|frida|injector|substrate' | head -n 15)
+    # v4.4.103: 'mod' cru → 'modmenu' (labels de serviço podem ter 'mod' como substring
+    # legítima, ex: com.apple.*.modeswitch; mesmo motivo dos sítios acima).
+    ACTIVE=$(launchctl list 2>/dev/null | head -n 80 | grep -iE 'cheat|hack|modmenu|aim|esp|freefire|frida|injector|substrate' | head -n 15)
     if [ -n "$ACTIVE" ]; then
         echo "$ACTIVE" | while IFS= read -r L; do
             [ -n "$L" ] && alert "Service ativo (launchctl): $(echo "$L" | head -c 160)"
