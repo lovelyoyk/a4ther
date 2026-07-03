@@ -23,6 +23,9 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
   sed -n '/^is_oem_ns() {/,/^}/p'      "$ENGINE"
   sed -n '/^is_oem_store() {/,/^}/p'   "$ENGINE"
   sed -n '/^is_oem_preload() {/,/^}/p' "$ENGINE"
+  sed -n '/^_oem_sig_of() {/,/^}/p'    "$ENGINE"
+  sed -n '/^_oem_sig_build() {/,/^}/p' "$ENGINE"
+  sed -n '/^oem_cert_ok() {/,/^}/p'    "$ENGINE"
   sed -n '/^pkg_label() {/,/^}/p'      "$ENGINE"
   sed -n '/^pkg_show() /p'             "$ENGINE"
   sed -n '/^tok_grep() /p'             "$ENGINE"
@@ -31,7 +34,7 @@ trap 'rm -rf "$TMP"' EXIT INT TERM
 . "$TMP/fns.sh"
 
 # self-guard: se uma função foi renomeada/reformatada, a extração falha — pare LOUD.
-for _fn in is_oem_ns is_oem_store is_oem_preload pkg_label pkg_show tok_grep _sl_classify; do
+for _fn in is_oem_ns is_oem_store is_oem_preload _oem_sig_of _oem_sig_build oem_cert_ok pkg_label pkg_show tok_grep _sl_classify; do
   command -v "$_fn" >/dev/null 2>&1 || { echo "ERRO: função '$_fn' não foi extraída (renomeada/reformatada no engine?)"; exit 2; }
 done
 
@@ -53,6 +56,8 @@ ck "miui é OEM"           0 "$(rc is_oem_ns com.miui.home)"
 ck "motorola é OEM"       0 "$(rc is_oem_ns com.motorola.ctx)"
 ck "Free Fire NÃO é OEM"  1 "$(rc is_oem_ns com.dts.freefireth)"
 ck "app random NÃO é OEM" 1 "$(rc is_oem_ns com.acme.app)"
+ck "com.android.samsung.* é OEM (gap fechado)" 0 "$(rc is_oem_ns com.android.samsung.utilityagent)"
+ck "com.android.chrome (AOSP) NÃO é OEM"       1 "$(rc is_oem_ns com.android.chrome)"
 
 echo "# is_oem_preload — libera SÓ por sinal NÃO-FORJÁVEL (partição / pkgFlags SYSTEM / pm -s)"
 DUMPSYS_OUT="pkgFlags=[ SYSTEM HAS_CODE ]"; _SYS_PKGS=""
@@ -78,7 +83,7 @@ ck "Phoenix BROWSER NAO e loja (M1)" 1 "$(rc is_oem_store com.transsion.phoenix)
 ck "Palm Store (Transsion) => loja"  0 "$(rc is_oem_store com.transsnet.store)"
 
 echo "# decisao de DISFARCE do loop SIDELOAD (app de namespace OEM)"
-decide_oem(){ is_oem_ns "$1" || { echo NOT_OEM_NS; return; }; is_oem_store "$2" && return; is_oem_preload "$1" "$2" "$3" && return; echo D; }
+decide_oem(){ is_oem_ns "$1" || { echo NOT_OEM_NS; return; }; is_oem_store "$2" && return; is_oem_preload "$1" "$2" "$3" && return; oem_cert_ok "$1" && return; echo D; }
 HAVE_DUMPSYS=1; DUMPSYS_OUT="pkgFlags=[ HAS_CODE ]"; _SYS_PKGS=""
 ck "FP FIX Samsung: arzone via Galaxy Store => limpo"        "" "$(decide_oem com.samsung.android.arzone com.sec.android.app.samsungapps /data/app/x/base.apk)"
 ck "FP FIX Samsung: clock via Update Center => limpo"        "" "$(decide_oem com.sec.android.app.clockpackage com.samsung.android.app.updatecenter /data/app/x/base.apk)"
@@ -92,6 +97,35 @@ _SYS_PKGS=""
 echo "# asserção ESTRUTURAL — decide_oem testa a LÓGICA; estas provam que o GATE segue no engine (pega remoção/reorder)"
 sck "gate is_oem_store no loop SIDELOAD (branch disfarce)" 'is_oem_store "$INST" && continue'
 sck "is_oem_store no topo de _sl_classify"                 'is_oem_store "$2" && return'
+
+echo "# _oem_sig_of / oem_cert_ok — cert-pinning por âncora do device (v4.4.105)"
+# _oem_sig_of: pega o 1º signatures:[hex], ignora o obj-hash e o past signatures:[]
+DUMPSYS_OUT="    signatures=PackageSignatures{b776f8b version:2, signatures:[b378e95c], past signatures:[]}"
+ck "_oem_sig_of: 1o grupo, ignora obj-hash e past"  "b378e95c" "$(_oem_sig_of com.sec.x)"
+DUMPSYS_OUT="    signatures=PackageSignatures{x version:3, signatures:[aa11bb22], past signatures:[ccdd3344]}"
+ck "_oem_sig_of: past populado, ainda pega o atual" "aa11bb22" "$(_oem_sig_of com.sec.x)"
+DUMPSYS_OUT="    signatures=PackageSignatures{c version:4, signatures:[], past signatures:[bbbb2222]}"
+ck "_oem_sig_of: corrente vazio + past populado => vazio (fail-closed, NIT-1)" "" "$(_oem_sig_of com.sec.x)"
+DUMPSYS_OUT="pkgFlags=[ HAS_CODE ]"
+ck "_oem_sig_of: sem linha signatures => vazio"     "" "$(_oem_sig_of com.sec.x)"
+# oem_cert_ok: libera se signer ∈ âncora; fail-CLOSED sem âncora / signer ilegível
+_OEM_SIG_SET="b378e95c"; _OEM_SIG_SET_DONE=1
+DUMPSYS_OUT="    signatures=PackageSignatures{b776f8b version:2, signatures:[b378e95c], past signatures:[]}"
+ck "oem_cert_ok: signer NA âncora => libera (0)"    0 "$(rc oem_cert_ok com.sec.android.app.kidshome)"
+DUMPSYS_OUT="    signatures=PackageSignatures{aa version:2, signatures:[deadbeef], past signatures:[]}"
+ck "oem_cert_ok: signer FORA da âncora => flagra (1)" 1 "$(rc oem_cert_ok com.sec.evil)"
+_OEM_SIG_SET=""; _OEM_SIG_SET_DONE=1
+ck "oem_cert_ok: sem âncora => fail-CLOSED (1)"     1 "$(rc oem_cert_ok com.sec.foo)"
+_OEM_SIG_SET="b378e95c"; DUMPSYS_OUT="Unable to find package: com.sec.foo"
+ck "oem_cert_ok: signer ilegível => fail-CLOSED (1)" 1 "$(rc oem_cert_ok com.sec.foo)"
+# decide_oem (com o gate oem_cert_ok) no ramo de disfarce
+_OEM_SIG_SET="b378e95c"; _OEM_SIG_SET_DONE=1; _SYS_PKGS=""
+DUMPSYS_OUT="    signatures=PackageSignatures{b776f8b version:2, signatures:[b378e95c], past signatures:[]}"
+ck "FP FIX: kidshome baixado (installer null) mas Samsung-assinado => limpo" "" "$(decide_oem com.sec.android.app.kidshome null /data/app/x/base.apk)"
+DUMPSYS_OUT="    signatures=PackageSignatures{aa version:2, signatures:[deadbeef], past signatures:[]}"
+ck "DISFARCE: com.sec.evil assinado por chave estranha => D" "D" "$(decide_oem com.sec.evil null /data/app/x/base.apk)"
+_OEM_SIG_SET=""; _OEM_SIG_SET_DONE=""; DUMPSYS_OUT="pkgFlags=[ HAS_CODE ]"; _SYS_PKGS=""
+sck "gate oem_cert_ok no ramo disfarce" 'oem_cert_ok "$APP" && continue'
 
 echo "# pkg_label / pkg_show — nome do app no relatório (dispensa lib checker)"
 ck "label Free Fire"     "Free Fire"                        "$(pkg_label com.dts.freefireth)"

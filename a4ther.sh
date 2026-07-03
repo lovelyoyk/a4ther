@@ -135,7 +135,7 @@ pkg_installed() {
 # SEM lastro de sistema), NUNCA p/ liberar. Ver o loop SIDELOAD GLOBAL.
 is_oem_ns() {
     case "$1" in
-        com.samsung.*|com.sec.*|com.miui.*|com.xiaomi.*|com.mi.*|com.redmi.*|com.oplus.*|\
+        com.samsung.*|com.android.samsung.*|com.sec.*|com.miui.*|com.xiaomi.*|com.mi.*|com.redmi.*|com.oplus.*|\
         com.oppo.*|com.coloros.*|com.realme.*|com.heytap.*|com.oneplus.*|com.vivo.*|\
         com.bbk.*|com.iqoo.*|com.motorola.*|com.moto.*|com.lenovo.*|com.zui.*|com.huawei.*|\
         com.hihonor.*|com.honor.*|com.transsion.*|com.infinix.*|com.tecno.*|com.itel.*|\
@@ -185,6 +185,55 @@ is_oem_preload() {
     #     (grep -qxF) p/ não casar prefixo de outro pacote do mesmo vendor. Não-forjável sem root.
     printf '%s\n' "$_SYS_PKGS" | grep -qxF "package:$_p" && return 0
     return 1
+}
+# v4.4.105: _oem_sig_of $pkg → token (hashCode hex) da assinatura do app, do `dumpsys package`.
+# Extrai SÓ o 1º grupo signatures:[<hex>] (ignora o obj-hash de PackageSignatures{...} e o
+# `past signatures:[]`). Vazio se dumpsys não expõe assinatura (uid baixo/restrito) → fail-CLOSED.
+_oem_sig_of() {
+    dumpsys package "$1" 2>/dev/null \
+      | grep -m1 'signatures=' \
+      | grep -oE 'version:[0-9]+, signatures:\[[0-9a-f]+\]' \
+      | head -n1 \
+      | sed 's/.*\[//; s/\]//'
+}
+# v4.4.105: _oem_sig_build → popula $_OEM_SIG_SET (âncora do device — ver ressalva do token em oem_cert_ok) com os signers distintos de
+# uma AMOSTRA (≤24 dumpsys) de apps de namespace OEM que são SISTEMA neste device ($_SYS_PKGS). São
+# as chaves de plataforma/1ª-parte do fabricante. Memoizado por $_OEM_SIG_SET_DONE (roda UMA vez, e
+# só quando oem_cert_ok é chamado = há app OEM suspeito). Fail-closed: sem âncora → set vazio.
+_oem_sig_build() {
+    _OEM_SIG_SET_DONE=1
+    have dumpsys || return 0
+    [ -n "$_SYS_PKGS" ] || return 0
+    _OEM_SIG_SET=$(
+        _c=0
+        printf '%s\n' "$_SYS_PKGS" | sed 's/^package://' | while IFS= read -r _sp; do
+            [ -n "$_sp" ] || continue
+            is_oem_ns "$_sp" || continue
+            case "$_sp" in *overlay*|*.themes|*.resources) continue ;; esac
+            _c=$((_c+1)); [ "$_c" -gt 24 ] && break
+            _st=$(_oem_sig_of "$_sp")
+            [ -n "$_st" ] && printf '%s\n' "$_st"
+        done | sort -u
+    )
+}
+# v4.4.105: oem_cert_ok $pkg → 0 se o app for assinado por uma chave de plataforma/1ª-parte do
+# fabricante (signer ∈ $_OEM_SIG_SET, âncora dos apps OEM de SISTEMA deste device) → origem LEGÍTIMA
+# mesmo baixado (não-preload): mata o FP de app Samsung/Xiaomi reinstalado via browser/OMC/null.
+# Cheat vestindo com.sec.evil é assinado pela chave DELE → fora do set → segue flagrado. Fail-CLOSED:
+# sem âncora ou signer ilegível → 1 (NÃO libera; cai no warn de disfarce). Ver [[a4ther-pr40-sideload-fp]].
+# ATENÇÃO (NÃO promover este gate): o token do dumpsys é o hashCode de 32 bits da assinatura, NÃO um
+# digest cripto — é FORJÁVEL (dá p/ resolver bytes do DER e casar um hashCode-alvo público de ROM). A
+# segurança aqui NÃO vem da força do token: vem de (a) fail-closed em toda ambiguidade e (b) o atacante
+# racional já tem caminho mais barato e silencioso (nome não-OEM + installer desconhecido passa por
+# design v4.4.88), então forjar disfarce OEM é estritamente dominado. Use oem_cert_ok SÓ para SUPRIMIR
+# FP de disfarce; NUNCA como gate de confiança forte (overlay/accessibility/device-admin), onde a
+# forjabilidade passaria a importar. Versão cripto-forte (SHA-256 do cert via API) = collector Kotlin.
+oem_cert_ok() {
+    [ -n "$_OEM_SIG_SET_DONE" ] || _oem_sig_build
+    [ -n "$_OEM_SIG_SET" ] || return 1
+    _cs=$(_oem_sig_of "$1")
+    [ -n "$_cs" ] || return 1
+    printf '%s\n' "$_OEM_SIG_SET" | grep -qxF "$_cs"
 }
 # pkg_label $pkg → NOME humano (mapa curado → aapt real → vazio). pkg_show → "pkg (Nome)".
 pkg_label() {
@@ -372,6 +421,9 @@ have pm && ALL_PKGS=$(pm list packages 2>/dev/null)
 # SIDELOAD e nos portões de overlay/accessibility. Inclui updated-system-apps realocados p/ /data/app.
 _SYS_PKGS=""
 have pm && _SYS_PKGS=$(pm list packages -s 2>/dev/null)
+# v4.4.105: âncora de assinatura OEM (usada por oem_cert_ok no SIDELOAD) — construída LAZY na 1ª
+# necessidade (só se houver app de namespace OEM suspeito), memoizada por _OEM_SIG_SET_DONE.
+_OEM_SIG_SET=""; _OEM_SIG_SET_DONE=""
 
 FF_PKGS="com.dts.freefireth com.dts.freefiremax com.garena.game.kgvn com.garena.game.kgid com.garena.game.kgtw com.garena.game.kgth"
 
@@ -2035,6 +2087,7 @@ if have pm; then
             is_oem_store "$INST" && continue
             APATH=$(pm path "$APP" 2>/dev/null | head -1 | sed 's/^package://')
             is_oem_preload "$APP" "$INST" "$APATH" && continue
+            oem_cert_ok "$APP" && continue     # v4.4.105: signer ∈ âncora OEM do device => origem legítima (ver ressalva em oem_cert_ok)
             echo "D|$APP|${INST:-null}"
             continue
         fi
