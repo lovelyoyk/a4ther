@@ -132,6 +132,51 @@ ck "FP MORTO: xt_CHECKSUM (módulo netfilter real) × ksu => N"     N "$(tg 'xt_
 ck "FP MORTO: com.motorola.modservice × modmenu => N"             N "$(tg 'package:com.motorola.modservice' modmenu)"
 ck "positivo: daemon modmenu ativo × modmenu => M"                M "$(tg 'daemon modmenu ativo' modmenu)"
 
+# v4.4.105: set de tokens de accessibility (sítio ao vivo l.~3472 + bugreport offline l.~4494) —
+# era `case *bot*|*menu*|*hack*|…` substring CRU (FP: TalkBack/robot, menu legítimo; evasão
+# trivial). Agora ancorado via tok_grep. TOKS reproduz o set exato usado nos dois sítios (sem
+# 'macro', que só existe no sítio de bugreport — testado à parte). Nota v4.4.105/S2: token é
+# 'ffh' (NÃO 'ffh4x') — 'ffh4x' estreitava o '*ffh*' antigo e perdia ffhack/ffhax (FN real).
+TOKS='esp|aimbot|aimlock|aimkill|wallhack|modmenu|killaura|ffh|magicbullet|gameguardian|cheat|hack|injector'
+echo "# accessibility (v4.4.105) — tok_grep mata *bot*/*menu*/*hack* crus sem perder o idioma de cheat"
+ck "MATCH: com.aimbot.ff => M"                    M "$(tg 'com.aimbot.ff' "$TOKS")"
+ck "MATCH: com.x.ffh4x => M"                       M "$(tg 'com.x.ffh4x' "$TOKS")"
+ck "MATCH: com.ffhack.vip (ffh não-ancora-fim) => M" M "$(tg 'com.ffhack.vip' "$TOKS")"
+ck "MATCH: com.evil.modmenu => M"                  M "$(tg 'com.evil.modmenu' "$TOKS")"
+ck "MATCH: com.x.wallhack => M"                     M "$(tg 'com.x.wallhack' "$TOKS")"
+ck "MATCH: com.x.killaura => M"                     M "$(tg 'com.x.killaura' "$TOKS")"
+ck "MATCH: libaimbot.so (lib<tok>) => M"            M "$(tg 'libaimbot.so' "$TOKS")"
+ck "FP MORTO: TalkBack (marvin) × *bot* => N"        N "$(tg 'com.google.android.marvin.talkback' "$TOKS")"
+ck "FP MORTO: com.x.robot × *bot* => N"              N "$(tg 'com.x.robot' "$TOKS")"
+ck "FP MORTO: com.x.offhand (ffh no meio) => N"      N "$(tg 'com.x.offhand' "$TOKS")"
+ck "FP MORTO: menudrawer × *menu* => N"              N "$(tg 'com.company.menudrawer' "$TOKS")"
+ck "FP MORTO: lifehack (hack colado) × *hack* => N"  N "$(tg 'com.lifehack.app' "$TOKS")"
+ck "FP MORTO: honeyboard (Samsung) => N"             N "$(tg 'com.samsung.android.honeyboard' "$TOKS")"
+
+echo "# encoding — hex da porta Frida (%04X); prova o M1 (27042≠0xA992, é 0x69A2)"
+ck "27042 = 0x69a2" "69a2" "$(printf '%x' 27042)"
+
+echo "# asserção ESTRUTURAL — paridade Frida tcp6 (strings ÚNICAS do bloco novo) + hex CORRETO"
+sck "bloco tcp6 novo presente (alert único)"      'Porta Frida em LISTEN (via /proc/net/tcp6)'
+sck "hex CORRETO da porta Frida no engine"        ':69A[2345]$'
+# anti-asserção: o hex ERRADO (:A99[2345]=43410-43413, range efêmero) NÃO pode reaparecer como
+# CÓDIGO — era o M1 crítico. Pina o regex-de-grep completo (`:A99[2345]$'` com fecha-âncora +
+# aspa) que só existe em código; o comentário v4.4.105 do engine cita ':A99[2345]' entre aspas
+# simples (sem o `$'`) pra documentar o "era X", então NÃO colide. Padrão do gate abaixo.
+if grep -qF ":A99[2345]\$'" "$ENGINE"; then
+  fail=$((fail+1)); printf '  FAIL (estrutural): %s\n        hex ERRADO da porta Frida (regex :A99[2345]$) reapareceu como codigo no engine\n' "hex :A99[2345] eliminado"
+else
+  pass=$((pass+1))
+fi
+# nota: busca o glob-cru como CÓDIGO ativo (`case "$ACC/L" in *esp*|...`), não como texto —
+# o comentário v4.4.105 acima cita o padrão antigo entre crases pra documentar o "era X"
+# (convenção já usada em v4.4.100/v4.4.103), o que faria um grep -qF genérico se auto-detectar.
+if grep -qE '(ACC|L)" in$' "$ENGINE" && grep -A1 -E '(ACC|L)" in$' "$ENGINE" | grep -qF '*esp*|*aimbot*|*menu*|*hack*'; then
+  fail=$((fail+1)); printf '  FAIL (estrutural): %s\n        substring-cru de accessibility AINDA presente como CODIGO no engine\n' "case *esp*|*aimbot*|*menu*|*hack* removido"
+else
+  pass=$((pass+1))
+fi
+
 echo
 if [ "$fail" = 0 ]; then
   printf 'HARNESS OK — %d asserções verdes.\n' "$pass"; exit 0
