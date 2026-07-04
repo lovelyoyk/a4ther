@@ -592,8 +592,8 @@ show_resumo() {
   plain="$(sed "s/${ESC}\[[0-9;]*m//g" "$log" 2>/dev/null)"
   alerts="$(printf '%s\n' "$plain" | grep -E '●[[:space:]]+ALERTA' | sed -E 's/.*ALERTA[[:space:]]+//' | sed 's/[[:space:]]*$//')"
   warns="$( printf '%s\n' "$plain" | grep -E '●[[:space:]]+AVISO'  | sed -E 's/.*AVISO[[:space:]]+//'  | sed 's/[[:space:]]*$//')"
-  nA="$(printf '%s\n' "$alerts" | grep -c . 2>/dev/null || echo 0)"
-  nW="$(printf '%s\n' "$warns"  | grep -c . 2>/dev/null || echo 0)"
+  nA="$(printf '%s\n' "$alerts" | grep -c . 2>/dev/null)"
+  nW="$(printf '%s\n' "$warns"  | grep -c . 2>/dev/null)"
 
   printf '\n%s\n' "${CYN}${BLD}╔══════════════════════════════════════════════════════╗${NC}"
   printf '%s\n'   "${CYN}${BLD}║        RESUMO DA ANÁLISE  ·  CRÍTICOS / SUSPEITOS     ║${NC}"
