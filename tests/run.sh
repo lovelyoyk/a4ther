@@ -215,6 +215,61 @@ echo "# asserção ESTRUTURAL — #A1 integridade .text libil2cpp (smaps Private
 sck "gate #A1 (.text sujo da libil2cpp) presente no engine" 'com .text SUJO em RAM'
 sck "#A1 lê Private_Dirty do smaps do FF"                    'Private_Dirty:'
 
+echo "# #A1b — exec anônima ensanduichada no VMA de uma .so (evasão munmap+MAP_ANON do #A1)"
+# ax() = réplica EXATA do awk inline do engine; retorna M se flagra, N se não.
+ax(){ printf '%s\n' "$1" | awk '
+    {
+        perms=$2; path=$6
+        if (perms ~ /^---/) next
+        if (cand) {
+            if (path==candlib) { print candlib; cand=0 }
+            else if (perms ~ /x/ && path=="") { }
+            else { cand=0 }
+        }
+        if (!cand && perms ~ /x/ && path=="" && prevso) { cand=1; candlib=prevpath }
+        if (path != "") { prevpath=path; prevso=(path ~ /\.so$/) }
+    }' | grep -q . && echo M || echo N; }
+MAPS_HOOK='7b40000000-7b40010000 r--p 00000000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so
+7b40010000-7b40020000 r-xp 00000000 00:00 0
+7b40020000-7b40030000 r--p 00020000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so'
+MAPS_CLEAN='7b40000000-7b40010000 r--p 00000000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so
+7b40010000-7b40020000 r-xp 00000000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so
+7b40020000-7b40030000 rw-p 00020000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so'
+MAPS_JIT='7b40000000-7b40010000 r--p 00000000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so
+7b40010000-7b40020000 r-xp 00000000 00:00 0 [anon:dalvik-jit-code-cache]
+7b40020000-7b40030000 r--p 00020000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so'
+MAPS_XLIB='7b40000000-7b40010000 r--p 00000000 fe:09 111 /data/app/x/lib/arm64/libA.so
+7b40010000-7b40020000 r-xp 00000000 00:00 0
+7b40020000-7b40030000 r--p 00020000 fe:09 222 /data/app/x/lib/arm64/libB.so'
+MAPS_BSS='7b40000000-7b40010000 rw-p 00000000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so
+7b40010000-7b40020000 rw-p 00000000 00:00 0'
+# 16KB/linker: guarda ---p entre r--p e o code-seg (o layout REAL de device 16KB — sem
+# transparência do ---p, o hook ingênuo escaparia; regressão apontada pela review Fable).
+MAPS_HOOK16K='7b40000000-7b40004000 r--p 00000000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so
+7b40004000-7b40010000 ---p 00000000 00:00 0
+7b40010000-7b40020000 r-xp 00000000 00:00 0
+7b40020000-7b40024000 ---p 00000000 00:00 0
+7b40024000-7b40030000 r--p 00024000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so'
+# hole exec fatiado em 2 VMAs anônimas (evasão barata: a run tem que ser colapsada).
+MAPS_2VMA='7b40000000-7b40010000 r--p 00000000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so
+7b40010000-7b40018000 r-xp 00000000 00:00 0
+7b40018000-7b40020000 r-xp 00000000 00:00 0
+7b40020000-7b40030000 r--p 00020000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so'
+# lib remapeada com backing deletado dos dois lados (o $6 ignora o sufixo "(deleted)").
+MAPS_DEL='7b40000000-7b40010000 r--p 00000000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so (deleted)
+7b40010000-7b40020000 r-xp 00000000 00:00 0
+7b40020000-7b40030000 r--p 00020000 fe:09 111 /data/app/x/lib/arm64/libil2cpp.so (deleted)'
+ck "#A1b FLAG: anon r-x ensanduichada em libil2cpp"   M "$(ax "$MAPS_HOOK")"
+ck "#A1b FLAG: hook 16KB (guardas ---p transparentes)" M "$(ax "$MAPS_HOOK16K")"
+ck "#A1b FLAG: hole exec em 2 VMAs anônimas"          M "$(ax "$MAPS_2VMA")"
+ck "#A1b FLAG: sanduíche em .so (deleted)"            M "$(ax "$MAPS_DEL")"
+ck "#A1b N: lib normal toda file-backed"              N "$(ax "$MAPS_CLEAN")"
+ck "#A1b N: JIT [anon:dalvik-jit-code-cache] nomeada" N "$(ax "$MAPS_JIT")"
+ck "#A1b N: anon exec entre libs DIFERENTES"          N "$(ax "$MAPS_XLIB")"
+ck "#A1b N: anon rw- (.bss), nao exec"                N "$(ax "$MAPS_BSS")"
+sck "gate #A1b (exec anônima no VMA de lib) no engine" 'Página EXEC anônima dentro do VMA'
+sck "#A1b usa adjacência de .so no maps (prevso)"      'prevso'
+
 echo
 if [ "$fail" = 0 ]; then
   printf 'HARNESS OK — %d asserções verdes.\n' "$pass"; exit 0
