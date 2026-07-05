@@ -211,6 +211,10 @@ else
   pass=$((pass+1))
 fi
 
+echo "# asserção ESTRUTURAL — #A1 integridade .text libil2cpp (smaps Private_Dirty>0 no r-xp)"
+sck "gate #A1 (.text sujo da libil2cpp) presente no engine" 'com .text SUJO em RAM'
+sck "#A1 lê Private_Dirty do smaps do FF"                    'Private_Dirty:'
+
 echo
 if [ "$fail" = 0 ]; then
   printf 'HARNESS OK — %d asserções verdes.\n' "$pass"; exit 0

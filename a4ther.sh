@@ -1539,6 +1539,25 @@ if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/maps" ]; then
             && { alert "libil2cpp.so de path ANÔMALO no FF: $(echo $IL2)"; DFIR_HITS=$((DFIR_HITS+1)); }
         [ "$(echo "$IL2" | grep -c .)" -gt 1 ] \
             && { alert "Múltiplas libil2cpp.so no FF (runtime Unity substituído): $(echo $IL2)"; DFIR_HITS=$((DFIR_HITS+1)); }
+        # v4.4.106 (#A1): patch IN-PLACE do .text da libil2cpp. O bloco acima só pega
+        # SUBSTITUIÇÃO (path anômalo / duplicata). Um inline-hook/trampolim escreve no
+        # CÓDIGO em RAM sem trocar o arquivo nem somar cópia → o kernel faz COW e as
+        # páginas r-xp (só código) viram privadas-SUJAS. libil2cpp.so limpa é r-xp
+        # file-backed, read-only compartilhada → Private_Dirty=0. Private_Dirty>0 num
+        # mapa r-xp da libil2cpp = .text modificado em runtime = hook/patch de cheat
+        # Unity. AVISO (sem baseline de bytes não separa de packer/proteção do próprio
+        # jogo nem de um text-reloc raro). Lê /proc/$FF_PID/smaps (mesmo gate ptrace do
+        # 'maps' que a seção usa, via readproc; MAS smaps é mais pesado e mais sujeito a
+        # negação SELinux — se ilegível sai vazio = SEM achado, não "inconclusivo":
+        # validar em HW (senão vira no-op silencioso). Fonte: auditoria anti-bypass VETOR 1.
+        IL2_DIRTY=$(awk '
+            /^[0-9a-fA-F]+-[0-9a-fA-F]+ / { inseg = ($2 ~ /^r-xp/ && $0 ~ /libil2cpp\.so$/) ? 1 : 0 }
+            inseg && $1 == "Private_Dirty:" && ($2+0) > 0 { print $2" kB sujo" }
+        ' "/proc/$FF_PID/smaps" 2>/dev/null | head -3)
+        if [ -n "$IL2_DIRTY" ]; then
+            warn "libil2cpp.so com .text SUJO em RAM (Private_Dirty>0 no segmento r-xp) — possível inline-hook/patch runtime do Unity, OU packer/proteção do próprio jogo: $(echo $IL2_DIRTY)"
+            DFIR_HITS=$((DFIR_HITS+1))
+        fi
     fi
 fi
 
