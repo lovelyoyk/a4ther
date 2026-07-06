@@ -1559,6 +1559,35 @@ if [ -n "$FF_PID" ] && [ -r "/proc/$FF_PID/maps" ]; then
             DFIR_HITS=$((DFIR_HITS+1))
         fi
     fi
+    # v4.4.106 (#A1b): breadcrumb p/ a evasão do #A1 na forma munmap+MAP_ANON. O cheat
+    # troca o r-xp da lib por mmap(MAP_FIXED|MAP_PRIVATE|MAP_ANON, r-x) recopiando o
+    # código patchado → a página perde o path (anônima) e escapa do #A1 ('libil2cpp.so$')
+    # E dos irmãos (RWX exige 'rwx'+>5; SUS_LIB exige path não-vazio). Sinal: uma RUN de
+    # linhas EXEC de path VAZIO cercada, no maps (ordenado por endereço), por 2 segmentos
+    # da MESMA .so — o code-seg foi trocado mas o r--p antes/depois segue file-backed.
+    # Guardas '---p' (padding de linker 16KB / reservas PROT_NONE) são TRANSPARENTES, e a
+    # run pode ter várias VMAs anônimas. Sem hex (strtonum é gawk-only): usa adjacência.
+    # AVISO: packer que descomprime .text in-place gera sinal parecido. É breadcrumb, NÃO
+    # gate — evasões baratas fora do escopo: nomear a página via PR_SET_VMA_ANON_NAME
+    # (vira '[anon:*]'), código em memfd ('/memfd:* (deleted)'), ou trampolim FORA do
+    # range da lib via GOT/PLT — a cobertura desses fica p/ #A4/futuro.
+    LIB_XHOLE=$(awk '
+        {
+            perms=$2; path=$6
+            if (perms ~ /^---/) next
+            if (cand) {
+                if (path==candlib) { print candlib; cand=0 }
+                else if (perms ~ /x/ && path=="") { }
+                else { cand=0 }
+            }
+            if (!cand && perms ~ /x/ && path=="" && prevso) { cand=1; candlib=prevpath }
+            if (path != "") { prevpath=path; prevso=(path ~ /\.so$/) }
+        }
+    ' "/proc/$FF_PID/maps" 2>/dev/null | sort -u | head -3)
+    if [ -n "$LIB_XHOLE" ]; then
+        warn "Página EXEC anônima dentro do VMA de lib file-backed (r-x sem arquivo, cercada por segmentos da MESMA .so) — possível code-cave/trampolim de hook pós-munmap: $(echo $LIB_XHOLE)"
+        DFIR_HITS=$((DFIR_HITS+1))
+    fi
 fi
 
 # /proc/net/unix — abstract socket @frida (signature estável Frida server)
