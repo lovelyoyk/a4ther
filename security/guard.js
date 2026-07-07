@@ -93,6 +93,16 @@ function __A4G__(cfg) {
     }
   }
 
+  // Soft signal: a LOW-confidence heuristic (timing jitter, viewport-gap) must
+  // NEVER hard-lock a legitimate user. A false positive that blanks + freezes
+  // the page is strictly worse than the (client-side, trivially-bypassed) attack
+  // it guesses at — and real integrity is moving server-side. Reserve the
+  // destructive trip() for HIGH-signal tamper (hooked toString, signature
+  // mismatch). Soft signals only leave a breadcrumb for telemetry.
+  function note(reason) {
+    try { if (G.console && G.console.warn) G.console.warn('A4G:soft:' + reason); } catch (_) {}
+  }
+
   // -------------------------------------------------------------------------
   // 1) CODE-SIGNATURE VERIFICATION
   //    SHA-256 over Function.prototype.toString() of a named global function.
@@ -252,6 +262,19 @@ function __A4G__(cfg) {
     if (!hasDOM) return null;
     try {
       var w = G.window;
+      // Mobile/touch browsers have NO local Web Inspector (it needs a tethered
+      // desktop), and their outer/inner viewport gap is just the browser chrome
+      // (URL bar, tab bar, notch/safe-area) which routinely exceeds any desktop
+      // threshold. That chrome collapsing/expanding on scroll/rotate is what made
+      // this heuristic fire INTERMITTENTLY on iOS Safari and hard-lock real users
+      // (the check has 0% true-positive on mobile anyway). Viewport-gap is a
+      // desktop-only signal — skip it entirely on coarse pointers.
+      var nav = G.navigator || {};
+      var coarse = (nav.maxTouchPoints || 0) > 0 ||
+                   ('ontouchstart' in w) ||
+                   (typeof w.matchMedia === 'function' &&
+                    w.matchMedia('(pointer: coarse)').matches);
+      if (coarse) return null;
       var thresh = 160;
       var wGap = w.outerWidth - w.innerWidth > thresh;
       var hGap = w.outerHeight - w.innerHeight > thresh;
@@ -311,20 +334,19 @@ function __A4G__(cfg) {
     if (tripped) return false;
     var r;
     r = detectHooks();              if (r) { trip(r); return false; }
-    r = timingTrap();               if (r) { trip(r); return false; }
+    r = timingTrap();               if (r) { note(r); }   // soft: never hard-lock
     if (PROFILE === 'web') {
-      // Debounce devtools: must read open twice ~120ms apart.
+      // Debounce devtools: must read open twice ~120ms apart. SOFT signal only
+      // (note, never trip) — a viewport-gap heuristic misfires on mobile chrome
+      // and must never brick a real user. See devtoolsOpen() + note().
       r = devtoolsOpen();
       if (r) {
-        var first = r;
-        // Synchronous re-read after a microtask-ish busy wait is unreliable;
-        // schedule an async confirm instead and only trip on the second hit.
         if (hasDOM) {
           G.setTimeout(function () {
-            if (devtoolsOpen()) trip('devtools');
+            if (devtoolsOpen()) note('devtools');
           }, 120);
-        } else if (first) {
-          trip('devtools');
+        } else {
+          note('devtools');
         }
       }
     }

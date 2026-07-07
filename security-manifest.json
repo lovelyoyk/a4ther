@@ -1,6 +1,6 @@
 {
   "level": "high",
-  "generatedAt": "2026-06-17T20:55:16.662Z",
+  "generatedAt": "2026-07-07T00:14:05.942Z",
   "targets": {
     "index.html": {
       "sigs": {
@@ -9,9 +9,9 @@
         "fetchThreatIntel": "f7c3c9aff2b70a3cd12ee3d5e47c4b2d2ea3bcc760e08a191ef84b43a85a20ec",
         "applyRemoteIntel": "ffc6aa8c9e9e4d523d4bc0b2d8bda9b7263704fde5ad2a4d3b049f051ffc7d41"
       },
-      "guardSha": "08ca2839166a8aebd79b82a32124d1502ac4745658cdb9a0f7768c9eb2ffc191",
-      "hexId": "_0x52f550d2",
-      "bytes": 41737
+      "guardSha": "25dc7199c32541999df6131fb54ec2afadf9f24d58cd36b0cc886b4d8f88f587",
+      "hexId": "_0xb36c3045",
+      "bytes": 53473
     },
     "a4ther-ios.js": {
       "sigs": {
