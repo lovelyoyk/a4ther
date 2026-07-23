@@ -10,8 +10,8 @@ nativo é um repo **SEPARADO e privado** que é um **COLETOR HÍBRIDO**: coleta 
 grosso em Kotlin nativo (pacote `collector/`) e roda o `a4ther.sh` via ADB Wi-Fi só nas seções
 deep/forenses (fase 2) — ver a seção "APK (repo separado)" no fim.
 
-Versão atual: **4.4.98** (fonte da verdade = `const VERSION` no `index.html`, lido pelo
-`build.sh`; o `a4ther.sh` carrega seu próprio `VERSION="4.4.98"`, com features recentes marcadas até `# v4.4.100` — o `VERSION=` **não** acompanhou o bump (pendência no engine).
+Versão atual: **4.4.99** (fonte da verdade = `const VERSION` no `index.html`, lido pelo
+`build.sh`; o `a4ther.sh` carrega seu próprio `VERSION="4.4.99"`. Features recentes marcadas até `# v4.4.100`.
 
 Alvos suportados (todos rodam a MESMA lógica de detecção, exceto o iOS-web):
 
