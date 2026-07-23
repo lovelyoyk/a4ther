@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/env bash
 # ============================================================
 #  a4ther — Auditoria de integridade Free Fire via ADB Wi-Fi
-#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.98
+#  A4ther Systems · Coletor ativo (ADB Wi-Fi) · v4.4.99
 #
 #  Assistente passo a passo para auditoria CONSENTIDA de um
 #  dispositivo Android (o dono precisa habilitar a Depuração
@@ -67,7 +67,7 @@ banner() {
   / __ | / // /_/ __/ _ \/ -_) __/
  /_/ |_|/_//_/(_)__/_//_/\__/_/    AUDIT · ADB Wi-Fi
 EOF
-  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.98${NC}"
+  printf '%s\n' "${NC}${DIM}  Auditoria de integridade · Free Fire · v4.4.99${NC}"
   hr
 }
 
@@ -690,7 +690,7 @@ build_master() {
   {
     echo "============================================================"
     echo " A4THER SYSTEMS — RELATORIO UNICO DE AUDITORIA"
-    echo " Gerado por a4ther v4.4.98 (coletor ADB Wi-Fi)"
+    echo " Gerado por a4ther v4.4.99 (coletor ADB Wi-Fi)"
     echo " >>> Envie SOMENTE este arquivo .txt ao site verificador <<<"
     echo "============================================================"
     echo "data         : $(date '+%Y-%m-%d %H:%M:%S')"
@@ -721,7 +721,7 @@ build_master() {
     else echo "(sem hashes — artefatos inacessiveis)"; fi
     echo ""
     echo "============================================================"
-    echo " FIM DO RELATORIO - A4ther v4.4.98"
+    echo " FIM DO RELATORIO - A4ther v4.4.99"
     echo "============================================================"
   } > "$stage" 2>/dev/null
   # leva pro Download (FUSE/shared). Se falhar (ENOTCONN), re-tenta destravar o storage
@@ -778,7 +778,7 @@ finalize() {
       printf '%s\n' "$SHA_MANIFEST" | awk 'NF>=2{ $1=""; sub(/^[ \t]+/,""); print }' \
         > "${AUDIT_DIR}/_filelist.txt" 2>/dev/null
       {
-        echo "A4ther Audit · v4.4.98"
+        echo "A4ther Audit · v4.4.99"
         echo "data        : $(date '+%Y-%m-%d %H:%M:%S')"
         echo "alvo        : ${PKG_LABEL} (${PKG})"
         echo "device      : ${ADB_TARGET}"

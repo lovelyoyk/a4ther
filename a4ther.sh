@@ -1,6 +1,6 @@
 #!/system/bin/sh
 # ============================================================
-#  A4ther Systems v4.4.98 | LS Aluguel
+#  A4ther Systems v4.4.99 | LS Aluguel
 #  Anti-Cheat Scanner para Free Fire (Android + iOS auto-detect).
 #  Verifica:
 #   - Plataforma (Android via Termux ou iOS via SSH em device jailbroken)
@@ -13,7 +13,7 @@
 #     chmod +x a4ther.sh && sh a4ther.sh
 # ============================================================
 
-VERSION="4.4.98"
+VERSION="4.4.99"
 
 # ── Versões ESPERADAS do Free Fire (ajuste manual a cada nova OB) ──────────────
 # v4.4.89 comparava EXATO; v4.4.91 faz match por OB (major.minor via ${VER%.*},
@@ -242,6 +242,25 @@ pkg_label() {
         com.dts.freefiremax) echo "Free Fire MAX"; return ;;
         com.garena.game.kgvn|com.garena.game.kgid|com.garena.game.kgtw|com.garena.game.kgth) echo "Free Fire (Garena regional)"; return ;;
         com.proxy.free) echo "ProxyFree — CHEAT root Trade-In"; return ;;
+        com.nu.roxinho) echo "Nubank Fake — proxy cheat FF (masquerade)"; return ;;
+        com.netflix.mediaclientxx) echo "Netflix Fake — proxy cheat FF (masquerade)"; return ;;
+        com.dripclient.proxy) echo "Drip Proxy — cheat FF"; return ;;
+        com.spotify.musicx) echo "Spotify Fake — proxy cheat FF (masquerade)"; return ;;
+        com.aincrad.proxy) echo "Aincrad Proxy — cheat FF"; return ;;
+        client.by) echo "Proxy External — cheat FF"; return ;;
+        com.mcdo.mcdonaldss) echo "McDonald's Fake — proxy cheat FF (masquerade)"; return ;;
+        com.lucasqueiroz.fitcal) echo "Fitcal Fake — proxy cheat FF (masquerade)"; return ;;
+        com.sylvaz.app) echo "Caixa Fake — proxy cheat FF (masquerade)"; return ;;
+        com.my.newproject7) echo "PayPal Fake — proxy cheat FF (masquerade)"; return ;;
+        io.gringoxp.proxy.garena.freefire) echo "Gringo XP — proxy cheat FF"; return ;;
+        com.mycompany.myapp) echo "Shopee Fake — proxy cheat FF (masquerade)"; return ;;
+        com.android.system.service.optimizer) echo "Snow Proxy — cheat FF (masquerade sistema)"; return ;;
+        com.pornhub) echo "MthTeam Proxy — cheat FF"; return ;;
+        com.nvt.cc) echo "Minha Claro Fake (MthTeam) — proxy cheat FF (masquerade)"; return ;;
+        com.proxyall) echo "HG Cheats Proxy — cheat FF"; return ;;
+        com.android.sellestw) echo "Google Fake — proxy cheat FF (masquerade sistema)"; return ;;
+        com.c4dev.ofc) echo "Cashxiter Proxy — cheat FF"; return ;;
+        com.facebook.lite) echo "Facebook Lite (LOOKALIKE — só é cheat se installer ≠ Play)"; return ;;
         com.ffh4x*) echo "FFH4X — mod menu/cheat FF"; return ;;
         com.panelff.app) echo "Panel FF — painel de cheat"; return ;;
         com.op999.injector) echo "OP999 Injector — cheat FF"; return ;;
@@ -2955,6 +2974,24 @@ header "PACOTES DE CHEAT / VIRTUALIZADORES"
 
 CHEAT_PKGS="
 com.proxy.free
+com.nu.roxinho
+com.netflix.mediaclientxx
+com.dripclient.proxy
+com.spotify.musicx
+com.aincrad.proxy
+client.by
+com.mcdo.mcdonaldss
+com.lucasqueiroz.fitcal
+com.sylvaz.app
+com.my.newproject7
+io.gringoxp.proxy.garena.freefire
+com.mycompany.myapp
+com.android.system.service.optimizer
+com.pornhub
+com.nvt.cc
+com.proxyall
+com.android.sellestw
+com.c4dev.ofc
 com.holograma.ff
 com.hologramff.app
 com.hologram.ff
@@ -3061,6 +3098,32 @@ if [ -n "$ALL_PKGS" ]; then
     done
 fi
 [ "$CHEAT_HITS" = "0" ] && ok "Sem cheat package conhecido"
+
+# ── v4.4.99: LOOKALIKES (pkg oficial usado como shell de proxy MthTeam & cia) ──
+# Estratégia: pacote OFICIAL (ex.: com.facebook.lite) é usado como "container" pro
+# cheat rodar. Se instalado direto da Play Store → LEGÍTIMO (ok). Se initiating ≠
+# Play (sideload, installer forjado, spoof) → shell de proxy = alerta. Reusa o
+# padrão de check já em uso no §17b (linhas ~1765) — sem ferramenta extra.
+LOOKALIKE_PKGS="com.facebook.lite"
+for PKG in $LOOKALIKE_PKGS; do
+    [ -n "$ALL_PKGS" ] && echo "$ALL_PKGS" | grep -q "^package:${PKG}$" || continue
+    DUMP_INST=$(pm dump "$PKG" 2>/dev/null | grep -E 'installerPackageName|initiatingPackageName')
+    INITIATING=$(echo "$DUMP_INST" | grep initiatingPackageName | sed 's/.*=//')
+    INSTALLER=$(echo "$DUMP_INST"  | grep installerPackageName  | sed 's/.*=//')
+    # Sem info de installer (Android antigo) → warn: não dá pra distinguir legítimo × shell
+    if [ -z "$INITIATING" ] && [ -z "$INSTALLER" ]; then
+        warn "Lookalike $(pkg_show "$PKG"): sem installerPackageName legível — verifique origem manualmente"
+        CHEAT_HITS=$((CHEAT_HITS+1))
+        continue
+    fi
+    case "$INITIATING" in
+        com.android.vending|com.google.market) ok "Lookalike $PKG: initiating = Play Store (legítimo)" ;;
+        *)
+            alert "Lookalike shell de proxy: $(pkg_show "$PKG") — initiating=$INITIATING installer=$INSTALLER (esperado Play Store)"
+            CHEAT_HITS=$((CHEAT_HITS+1))
+            ;;
+    esac
+done
 
 # ============================================================
 #  15. MEMORY EDITORS
